@@ -38,20 +38,16 @@ func PodPortForward(config *rest.Config, namespace, podName string, localPort, r
 	}
 
 	go func() {
-
-		var count int = 1
-		err := retryIfError(3, time.Duration(1*time.Second), func() error {
-			fmt.Printf("Invoking retry for the %d th time.\n", count)
-			count++
+		// Port forwarding can fail due to transient "error upgrading connection: error dialing backend: EOF" issue.
+		// To prevent such issue, we apply retry strategy.
+		// 3 attempts with 1 second fixed wait time are tested sufficient for it.
+		err := retryOnError(3, time.Duration(1*time.Second), func() error {
 			err := fw.ForwardPorts()
-
 			if err != nil {
 				fmt.Printf("Got error %v, retrying.\n", err)
 			}
-
 			return err
 		})
-
 		if err != nil {
 			panic(err)
 		}

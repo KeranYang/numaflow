@@ -196,21 +196,7 @@ func (s *E2ESuite) StartPortForward(podName string, port int) (stopPortForward f
 	}
 	go func() {
 		defer runtimeutil.HandleCrash()
-		var count int = 1
-		err := retryIfError(3, time.Duration(1*time.Second), func() error {
-			s.T().Log("E2ESUITE - Invoking retry for the xth time.", count)
-			fmt.Printf("E2ESUITE - Invoking retry for the %d th time.\n", count)
-			count++
-			err := forwarder.ForwardPorts()
-
-			if err != nil {
-				s.T().Log("E2ESUITE - Got error, retrying...")
-				fmt.Printf("E2ESUITE - Got error %v, retrying.\n", err)
-			}
-
-			return err
-		})
-		if err != nil {
+		if err := forwarder.ForwardPorts(); err != nil {
 			panic(err)
 		}
 	}()
