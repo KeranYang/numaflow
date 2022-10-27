@@ -367,8 +367,10 @@ func podLogContains(ctx context.Context, client kubernetes.Interface, namespace,
 		count++
 		if err == nil {
 			stream = rc
+		} else {
+			fmt.Printf("Got error %v, retrying.\n", err)
 		}
-		fmt.Printf("Got error %v, retrying.\n", err)
+
 		return err
 	})
 

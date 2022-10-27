@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/portforward"
@@ -37,7 +38,21 @@ func PodPortForward(config *rest.Config, namespace, podName string, localPort, r
 	}
 
 	go func() {
-		if err := fw.ForwardPorts(); err != nil {
+
+		var count int = 1
+		err := retryIfError(3, time.Duration(1*time.Second), func() error {
+			fmt.Printf("Invoking retry for the %d th time.\n", count)
+			count++
+			err := fw.ForwardPorts()
+
+			if err != nil {
+				fmt.Printf("Got error %v, retrying.\n", err)
+			}
+
+			return err
+		})
+
+		if err != nil {
 			panic(err)
 		}
 	}()
