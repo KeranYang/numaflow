@@ -314,6 +314,9 @@ func DaemonPodLogContains(ctx context.Context, kubeClient kubernetes.Interface, 
 }
 
 func PodsLogContains(ctx context.Context, kubeClient kubernetes.Interface, namespace, regex string, podList *corev1.PodList, opts ...PodLogCheckOption) bool {
+	fmt.Printf("Entering PodsLogContains, expecting regex %s for %d times.", regex, 3)
+	fmt.Printf("current Timestamp in second is: %d", time.Now().Second())
+	// Default Timeout is 60s.
 	o := defaultPodLogCheckOptions()
 	for _, opt := range opts {
 		if opt != nil {
@@ -339,6 +342,9 @@ func PodsLogContains(ctx context.Context, kubeClient kubernetes.Interface, names
 		select {
 		case <-cctx.Done():
 			fmt.Printf("Pod log check timed out.\n")
+			fmt.Printf("In PodsLogContains, expecting regex %s for %d times.", regex, 3)
+			fmt.Printf("Current Timestamp in second is: %d", time.Now().Second())
+			fmt.Printf("ctx is already closed.")
 			return false // Consider timeout as false
 		case result := <-resultChan:
 			if result {
@@ -346,7 +352,12 @@ func PodsLogContains(ctx context.Context, kubeClient kubernetes.Interface, names
 					return true
 				} else {
 					matchTimes++
+					fmt.Printf("In PodsLogContains, expecting regex %s for %d times.", regex, 3)
+					fmt.Printf("Current Timestamp in second is: %d", time.Now().Second())
+					fmt.Printf("Current match times is %d.", matchTimes)
 					if matchTimes >= o.count {
+						fmt.Printf("Current Timestamp in second is: %d", time.Now().Second())
+						fmt.Printf("Count Matched!")
 						return true
 					}
 				}
@@ -358,6 +369,9 @@ func PodsLogContains(ctx context.Context, kubeClient kubernetes.Interface, names
 }
 
 func podLogContains(ctx context.Context, client kubernetes.Interface, namespace, podName, containerName, regex string, result chan bool) error {
+	fmt.Printf("Entering podLogContains, expecting regex %s for %d times.", regex, 3)
+	fmt.Printf("current Timestamp in second is: %d", time.Now().Second())
+
 	var stream io.ReadCloser
 	var err error
 	// Streaming logs from file could be rotated by container log manager and as consequence, we receive EOF and need to re-initialize the stream.
@@ -394,6 +408,9 @@ func podLogContains(ctx context.Context, client kubernetes.Interface, namespace,
 	for {
 		select {
 		case <-ctx.Done():
+			fmt.Printf("Entering podLogContains, expecting regex %s for %d times.", regex, 3)
+			fmt.Printf("current Timestamp in second is: %d", time.Now().Second())
+			fmt.Printf("ctx is already closed.")
 			return nil
 		default:
 			if !s.Scan() {

@@ -76,6 +76,8 @@ func (t *Expect) VertexPodsRunning() *Expect {
 }
 
 func (t *Expect) VertexPodLogContains(vertexName, regex string, opts ...PodLogCheckOption) *Expect {
+	t.t.Logf("Entering VertexPodLogContains, vertex name: %s, expecting regex %s for %d times.", vertexName, regex, 3)
+	t.t.Logf("current Timestamp in second is: %d", time.Now().Second())
 	t.t.Helper()
 	ctx := context.Background()
 	contains, err := VertexPodLogContains(ctx, t.kubeClient, Namespace, t.pipeline.Name, vertexName, regex, opts...)
@@ -85,6 +87,8 @@ func (t *Expect) VertexPodLogContains(vertexName, regex string, opts ...PodLogCh
 	if !contains {
 		t.t.Fatalf("Expected vertex %q pod log contains %q", vertexName, regex)
 	}
+
+	t.t.Logf("In VertexPodLogContains, check passed. Current Timestamp in second is: %d", time.Now().Second())
 	return t
 }
 
