@@ -338,6 +338,7 @@ func PodsLogContains(ctx context.Context, kubeClient kubernetes.Interface, names
 	for {
 		select {
 		case <-cctx.Done():
+			fmt.Printf("Pod log check timed out.\n")
 			return false // Consider timeout as false
 		case result := <-resultChan:
 			if result {
