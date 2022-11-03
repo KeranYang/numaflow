@@ -324,7 +324,11 @@ func PodsLogContains(ctx context.Context, kubeClient kubernetes.Interface, names
 		}
 	}
 	cctx, cancel := context.WithTimeout(ctx, o.timeout)
-	defer cancel()
+	defer func() {
+		fmt.Printf("PodsLogContains returned, canceling the cctx context...\n")
+		cancel()
+	}()
+
 	errChan := make(chan error)
 	resultChan := make(chan bool)
 	for _, p := range podList.Items {
@@ -341,10 +345,11 @@ func PodsLogContains(ctx context.Context, kubeClient kubernetes.Interface, names
 	for {
 		select {
 		case <-cctx.Done():
-			fmt.Printf("Pod log check timed out.\n")
-			fmt.Printf("In PodsLogContains, expecting regex %s for %d times.", regex, 3)
-			fmt.Printf("Current Timestamp in second is: %d", time.Now().Second())
-			fmt.Printf("ctx is already closed.")
+			fmt.Printf("\nPod log check timed out.\n")
+			fmt.Printf("In PodsLogContains, expecting regex %s for %d times.\n", regex, 3)
+			fmt.Printf("Current Timestamp in second is: %d\n", time.Now().Second())
+			fmt.Printf("cctx is already closed.\n")
+			fmt.Printf("The associated error if any, is %v\n", cctx.Err())
 			return false // Consider timeout as false
 		case result := <-resultChan:
 			if result {
@@ -352,12 +357,12 @@ func PodsLogContains(ctx context.Context, kubeClient kubernetes.Interface, names
 					return true
 				} else {
 					matchTimes++
-					fmt.Printf("In PodsLogContains, expecting regex %s for %d times.", regex, 3)
-					fmt.Printf("Current Timestamp in second is: %d", time.Now().Second())
-					fmt.Printf("Current match times is %d.", matchTimes)
+					fmt.Printf("\nIn PodsLogContains, expecting regex %s for %d times.\n", regex, 3)
+					fmt.Printf("Current Timestamp in second is: %d\n", time.Now().Second())
+					fmt.Printf("Current match times is %d.\n", matchTimes)
 					if matchTimes >= o.count {
-						fmt.Printf("Current Timestamp in second is: %d", time.Now().Second())
-						fmt.Printf("Count Matched!")
+						fmt.Printf("\nCurrent Timestamp in second is: %d\n", time.Now().Second())
+						fmt.Printf("Count Matched!\n")
 						return true
 					}
 				}
@@ -369,8 +374,8 @@ func PodsLogContains(ctx context.Context, kubeClient kubernetes.Interface, names
 }
 
 func podLogContains(ctx context.Context, client kubernetes.Interface, namespace, podName, containerName, regex string, result chan bool) error {
-	fmt.Printf("Entering podLogContains, expecting regex %s for %d times.", regex, 3)
-	fmt.Printf("current Timestamp in second is: %d", time.Now().Second())
+	fmt.Printf("\nEntering podLogContains, expecting regex %s for %d times.\n", regex, 3)
+	fmt.Printf("\ncurrent Timestamp in second is: %d\n", time.Now().Second())
 
 	var stream io.ReadCloser
 	var err error
@@ -408,9 +413,10 @@ func podLogContains(ctx context.Context, client kubernetes.Interface, namespace,
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Printf("Entering podLogContains, expecting regex %s for %d times.", regex, 3)
-			fmt.Printf("current Timestamp in second is: %d", time.Now().Second())
-			fmt.Printf("ctx is already closed.")
+			fmt.Printf("\nEntering podLogContains, expecting regex %s for %d times.\n", regex, 3)
+			fmt.Printf("current Timestamp in second is: %d\n", time.Now().Second())
+			fmt.Printf("ctx is already closed.\n")
+			fmt.Printf("The associated error if any, is %v\n", ctx.Err())
 			return nil
 		default:
 			if !s.Scan() {
