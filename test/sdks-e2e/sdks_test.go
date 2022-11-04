@@ -23,10 +23,10 @@ func (s *SDKsSuite) TestUDFunctionAndSink() {
 	w.Expect().
 		VertexPodsRunning().
 		VertexPodLogContains("in", LogSourceVertexStarted).
-		VertexPodLogContains("go-split", LogUDFVertexStarted, PodLogCheckOptionWithContainer("main")).
-		VertexPodLogContains("go-udsink", LogSinkVertexStarted, PodLogCheckOptionWithContainer("main")).
 		VertexPodLogContains("python-split", LogUDFVertexStarted, PodLogCheckOptionWithContainer("main")).
-		VertexPodLogContains("python-udsink", LogSinkVertexStarted, PodLogCheckOptionWithContainer("main"))
+		VertexPodLogContains("python-udsink", LogSinkVertexStarted, PodLogCheckOptionWithContainer("main")).
+		VertexPodLogContains("go-split", LogUDFVertexStarted, PodLogCheckOptionWithContainer("main")).
+		VertexPodLogContains("go-udsink", LogSinkVertexStarted, PodLogCheckOptionWithContainer("main"))
 
 	defer w.VertexPodPortForward("in", 8443, dfv1.VertexHTTPSPort).
 		TerminateAllPodPortForwards()
@@ -38,8 +38,8 @@ func (s *SDKsSuite) TestUDFunctionAndSink() {
 		Expect().
 		Status(204)
 
-	w.Expect().VertexPodLogContains("go-udsink", "hello", PodLogCheckOptionWithContainer("udsink"), PodLogCheckOptionWithCount(3)).
-		VertexPodLogContains("python-udsink", "hello", PodLogCheckOptionWithContainer("udsink"), PodLogCheckOptionWithCount(3))
+	w.Expect().VertexPodLogContains("python-udsink", "hello", PodLogCheckOptionWithContainer("udsink"), PodLogCheckOptionWithCount(3)).
+		VertexPodLogContains("go-udsink", "hello", PodLogCheckOptionWithContainer("udsink"), PodLogCheckOptionWithCount(3))
 }
 
 func TestHTTPSuite(t *testing.T) {
