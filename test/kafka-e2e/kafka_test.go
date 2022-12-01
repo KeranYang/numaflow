@@ -89,7 +89,7 @@ func (ks *KafkaSuite) TestKafkaSink() {
 		CreatePipelineAndWait()
 	defer w.DeletePipelineAndWait()
 	fixtures.ExpectKafkaTopicCount(outputTopic, 15, 3*time.Second)
-
+	fixtures.ExpectRedisKeyValue("keran-key", "keran-key-value", 3*time.Second)
 }
 
 func (ks *KafkaSuite) TestKafkaSourceSink() {
