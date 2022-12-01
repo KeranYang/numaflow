@@ -18,11 +18,6 @@ package jetstreamsink
 
 import (
 	"testing"
-	"time"
-)
-
-var (
-	testStartTime = time.Unix(1636470000, 0).UTC()
 )
 
 func TestJetStreamSink_Start(t *testing.T) {
