@@ -15,7 +15,7 @@ spec:
           name: cat
     - name: output
       sink:
-        jetstreamsink: {}
+        log: {}
   edges:
     - from: input
       to: p1
