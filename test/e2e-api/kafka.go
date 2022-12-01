@@ -28,14 +28,6 @@ import (
 )
 
 func init() {
-
-	http.HandleFunc("/redis/get-string", func(w http.ResponseWriter, r *http.Request) {
-		key := r.URL.Query().Get("key")
-		value := key + "-value"
-		w.WriteHeader(200)
-		_, _ = w.Write([]byte(fmt.Sprint(value)))
-	})
-
 	const bootstrapServers = "kafka-broker:9092"
 	var brokers = []string{bootstrapServers}
 	http.HandleFunc("/kafka/create-topic", func(w http.ResponseWriter, r *http.Request) {
