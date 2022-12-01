@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/go-redis/redis/v8"
 	"testing"
 	"time"
 
@@ -40,6 +41,17 @@ var vi = &dfv1.VertexInstance{
 	}},
 	Hostname: "test-host",
 	Replica:  0,
+}
+
+func Test_localRedis(t *testing.T) {
+	client := redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "",
+		DB:       0,
+	})
+
+	pong, err := client.Ping(context.Background()).Result()
+	fmt.Println(pong, err)
 }
 
 func Test_writeReadHeader(t *testing.T) {

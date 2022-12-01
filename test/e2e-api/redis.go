@@ -17,15 +17,34 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"fmt"
+	"github.com/go-redis/redis/v8"
+	"log"
 	"net/http"
 )
 
 func init() {
 
+	// const bootstrapServers = "kafka-broker:9092"
+	// var brokers = []string{bootstrapServers}
+
 	http.HandleFunc("/redis/get-string", func(w http.ResponseWriter, r *http.Request) {
 		key := r.URL.Query().Get("key")
-		value := key + "-value"
+
+		client := redis.NewClient(&redis.Options{
+			Addr:     "redis-cluster:6379",
+			Password: "",
+			DB:       0,
+		})
+
+		pong, err := client.Ping(context.Background()).Result()
+
+		if err != nil {
+			log.Fatalf("KeranTest - error %v", err)
+		}
+
+		value := key + "-" + pong
 		w.WriteHeader(200)
 		_, _ = w.Write([]byte(fmt.Sprint(value)))
 	})

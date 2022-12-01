@@ -29,6 +29,7 @@ import (
 )
 
 //go:generate kubectl -n numaflow-system delete statefulset zookeeper kafka-broker --ignore-not-found=true
+//go:generate kubectl -n numaflow-system delete statefulset redis-cluster --ignore-not-found=true
 //go:generate kubectl apply -k ../../config/apps/kafka -n numaflow-system
 // Wait for zookeeper to come up
 //go:generate sleep 60
@@ -89,7 +90,7 @@ func (ks *KafkaSuite) TestKafkaSink() {
 		CreatePipelineAndWait()
 	defer w.DeletePipelineAndWait()
 	fixtures.ExpectKafkaTopicCount(outputTopic, 15, 3*time.Second)
-	fixtures.ExpectRedisKeyValue("keran-key", "keran-key-value", 3*time.Second)
+	fixtures.ExpectRedisKeyValue("keran-key", "keran-key-PONG", 3*time.Second)
 }
 
 func (ks *KafkaSuite) TestKafkaSourceSink() {
