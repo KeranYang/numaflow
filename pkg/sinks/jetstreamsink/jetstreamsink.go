@@ -18,14 +18,14 @@ package jetstreamsink
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
-	"github.com/nats-io/nats.go"
-	jsclient "github.com/numaproj/numaflow/pkg/shared/clients/jetstream"
+	"github.com/go-redis/redis/v8"
 	"github.com/numaproj/numaflow/pkg/shared/logging"
 	"github.com/numaproj/numaflow/pkg/udf/applier"
 	"github.com/numaproj/numaflow/pkg/watermark/fetch"
 	"github.com/numaproj/numaflow/pkg/watermark/publish"
+	"strconv"
+	"time"
 
 	dfv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 
@@ -97,44 +97,25 @@ func (jss *JetStreamSink) IsFull() bool {
 }
 
 // Write writes to the jetstream sink.
-func (jss *JetStreamSink) Write(_ context.Context, messages []isb.Message) ([]isb.Offset, []error) {
-	errs := make([]error, len(messages))
-
-	// connect to NATS
-	nc, err := jsclient.NewDefaultJetStreamClient(nats.DefaultURL).Connect(context.TODO())
-
-	if err != nil {
-		fmt.Printf("keran-test Error NewDefaultJetStreamClient %v\n", err)
-	}
-
-	defer nc.Close()
-	// create JetStream Context
-	js, err := nc.JetStream(nats.PublishAsyncMaxPending(256))
-
-	if err != nil {
-		fmt.Printf("keran-test Error nc.JetStream %v\n", err)
-	}
-
-	// for JetStream KeyValue store, the bucket should have been created in advance, using keran-test-bucket for now.
-	kv, err := js.KeyValue("keran-test-bucket")
-
-	if err != nil {
-		for i := 0; i < len(errs); i++ {
-			errs[i] = fmt.Errorf("nats jetstream connection errors.")
-		}
-	}
+func (jss *JetStreamSink) Write(context context.Context, messages []isb.Message) ([]isb.Offset, []error) {
+	client := redis.NewClient(&redis.Options{
+		Addr:     "redis-cluster:6379",
+		Password: "",
+		DB:       0,
+	})
 
 	for _, msg := range messages {
 		key := string(msg.Payload)
-		entry, err := kv.Get(key)
-		b := make([]byte, 8)
+		entry, err := client.Get(context, key).Result()
 		if err != nil {
-			binary.LittleEndian.PutUint64(b, uint64(1))
+			client.Set(context, key, 1, 5*time.Minute)
 		} else {
-			count := int64(binary.LittleEndian.Uint64(entry.Value()))
-			binary.LittleEndian.PutUint64(b, uint64(count+1))
+			count, err := strconv.Atoi(entry)
+			if err != nil {
+				fmt.Printf("Atoi converting error %v", err)
+			}
+			client.Set(context, key, count+1, 5*time.Minute)
 		}
-		kv.Put(key, b)
 	}
 
 	sinkWriteCount.With(map[string]string{metricspkg.LabelVertex: jss.name, metricspkg.LabelPipeline: jss.pipelineName}).Add(float64(len(messages)))

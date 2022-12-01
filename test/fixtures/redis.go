@@ -20,12 +20,25 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
 	"time"
 )
 
 func GetRedisString(key string) string {
 	str := InvokeE2EAPI("/redis/get-string?key=%s", key)
 	return str
+}
+
+func GetRedisTotalKeyCount() int64 {
+	str := InvokeE2EAPI("/redis/get-total-key-count")
+
+	count, err := strconv.Atoi(str)
+	if err != nil {
+		log.Printf("invalid string %s", str)
+		return 0
+	}
+
+	return int64(count)
 }
 
 func ExpectRedisKeyValue(key string, expectedValue string, timeout time.Duration) {
@@ -40,6 +53,25 @@ func ExpectRedisKeyValue(key string, expectedValue string, timeout time.Duration
 			valueInRedis := GetRedisString(key)
 			if valueInRedis == expectedValue {
 				log.Printf("Received value %s, succeeding the test.", valueInRedis)
+				return
+			}
+			time.Sleep(time.Second)
+		}
+	}
+}
+
+func ExpectRedisTotalKeyCount(count int64, timeout time.Duration) {
+	log.Printf("expecting no. of keys larger than or equal to %d in %v\n", count, timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	for {
+		select {
+		case <-ctx.Done():
+			panic(fmt.Errorf("timeout waiting"))
+		default:
+			keyCount := GetRedisTotalKeyCount()
+			if keyCount >= count {
+				log.Printf("Key count %d > %d, succeeding the test.", keyCount, count)
 				return
 			}
 			time.Sleep(time.Second)

@@ -48,4 +48,23 @@ func init() {
 		w.WriteHeader(200)
 		_, _ = w.Write([]byte(fmt.Sprint(value)))
 	})
+
+	http.HandleFunc("/redis/get-total-key-count", func(w http.ResponseWriter, r *http.Request) {
+		client := redis.NewClient(&redis.Options{
+			Addr:     "redis-cluster:6379",
+			Password: "",
+			DB:       0,
+		})
+
+		keyList, err := client.Keys(context.Background(), "*").Result()
+
+		if err != nil {
+			log.Fatalf("KeranTest - error %v", err)
+		}
+
+		count := len(keyList)
+		log.Printf("KeranTest - got %d keys.", count)
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(fmt.Sprint(count)))
+	})
 }

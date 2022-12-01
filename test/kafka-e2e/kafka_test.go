@@ -38,6 +38,55 @@ type KafkaSuite struct {
 	fixtures.E2ESuite
 }
 
+func (ks *KafkaSuite) TestRedisSink() {
+	pipeline := &dfv1.Pipeline{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "redis-sink-e2e",
+		},
+		Spec: dfv1.PipelineSpec{
+			Vertices: []dfv1.AbstractVertex{
+				{
+					Name: "input",
+					Source: &dfv1.Source{
+						Generator: &dfv1.GeneratorSource{
+							RPU:      pointer.Int64Ptr(5),
+							Duration: &metav1.Duration{Duration: 2 * time.Second},
+						},
+					},
+				},
+				{
+					Name: "p1",
+					UDF: &dfv1.UDF{
+						Builtin: &dfv1.Function{Name: "cat"},
+					},
+				},
+
+				{
+					Name: "output",
+					Sink: &dfv1.Sink{
+						JetStreamSink: &dfv1.JetStreamSink{},
+					},
+				},
+			},
+			Edges: []dfv1.Edge{
+				{
+					From: "input",
+					To:   "p1",
+				},
+				{
+					From: "p1",
+					To:   "output",
+				},
+			},
+		},
+	}
+	w := ks.Given().WithPipeline(pipeline).
+		When().
+		CreatePipelineAndWait()
+	defer w.DeletePipelineAndWait()
+	fixtures.ExpectRedisTotalKeyCount(15, 3*time.Second)
+}
+
 func (ks *KafkaSuite) TestKafkaSink() {
 	outputTopic := fixtures.CreateKafkaTopic()
 	defer fixtures.DeleteKafkaTopic(outputTopic)

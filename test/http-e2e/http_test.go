@@ -17,18 +17,11 @@ limitations under the License.
 package http_e2e
 
 import (
-	"context"
-	"encoding/binary"
 	"fmt"
-	"github.com/nats-io/nats.go"
-	jsclient "github.com/numaproj/numaflow/pkg/shared/clients/jetstream"
-	"github.com/stretchr/testify/assert"
-	"testing"
-	"time"
-
 	dfv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	. "github.com/numaproj/numaflow/test/fixtures"
 	"github.com/stretchr/testify/suite"
+	"testing"
 )
 
 //go:generate kubectl apply -f testdata/http-auth-fake-secret.yaml -n numaflow-system
@@ -38,35 +31,6 @@ type HTTPSuite struct {
 }
 
 func (s *HTTPSuite) TestHTTPSourcePipeline() {
-	// connect to NATS
-	nc, err := jsclient.NewDefaultJetStreamClient(nats.DefaultURL).Connect(context.TODO())
-	assert.NoError(s.T(), err)
-	defer nc.Close()
-
-	// create JetStream Context
-	js, err := nc.JetStream(nats.PublishAsyncMaxPending(256))
-	assert.NoError(s.T(), err)
-
-	// create test bucket
-	_, err = js.CreateKeyValue(&nats.KeyValueConfig{
-		Bucket:       "keran-test-bucket",
-		Description:  "keran-test-bucket",
-		MaxValueSize: 0,
-		History:      0,
-		TTL:          0,
-		MaxBytes:     0,
-		Storage:      nats.MemoryStorage,
-		Replicas:     0,
-		Placement:    nil,
-	})
-
-	defer func() { _ = js.DeleteKeyValue("keran-test-bucket") }()
-	assert.NoError(s.T(), err)
-
-	// for JetStream KeyValue store, the bucket should have been created in advance
-	kv, err := js.KeyValue("keran-test-bucket")
-	assert.NoError(s.T(), err)
-
 	w := s.Given().Pipeline("@testdata/http-source.yaml").
 		When().
 		CreatePipelineAndWait()
@@ -94,19 +58,7 @@ func (s *HTTPSuite) TestHTTPSourcePipeline() {
 		Expect().
 		Status(204)
 	// No x-numaflow-id, expect 2 outputs
-	// w.Expect().VertexPodLogContains("out", "no-id", PodLogCheckOptionWithCount(2))
-
-	time.Sleep(time.Second * 30)
-
-	entry, err := kv.Get(string([]byte("no-id")))
-	if err != nil {
-		fmt.Printf("keran-test, kv get error %v", err)
-		println(err)
-	}
-	assert.Equal(s.T(), int64(2), int64(binary.LittleEndian.Uint64(entry.Value())))
-
 	w.Expect().VertexPodLogContains("out", "no-id", PodLogCheckOptionWithCount(2))
-
 	HTTPExpect(s.T(), "https://localhost:8443").POST("/vertices/in").WithHeader("x-numaflow-id", "101").WithBytes([]byte("with-id")).
 		Expect().
 		Status(204)
@@ -114,24 +66,11 @@ func (s *HTTPSuite) TestHTTPSourcePipeline() {
 		Expect().
 		Status(204)
 	// With same x-numaflow-id, expect 1 output
-	// w.Expect().VertexPodLogContains("out", "with-id", PodLogCheckOptionWithCount(1))
-	time.Sleep(time.Second * 30)
-
-	entry, err = kv.Get("with-id")
-	assert.Equal(s.T(), int64(1), int64(binary.LittleEndian.Uint64(entry.Value())))
-
 	w.Expect().VertexPodLogContains("out", "with-id", PodLogCheckOptionWithCount(1))
-
 	HTTPExpect(s.T(), "https://localhost:8443").POST("/vertices/in").WithHeader("x-numaflow-id", "102").WithBytes([]byte("with-id")).
 		Expect().
 		Status(204)
 	// With a new x-numaflow-id, expect 2 outputs
-	// w.Expect().VertexPodLogContains("out", "with-id", PodLogCheckOptionWithCount(2))
-	time.Sleep(time.Second * 30)
-
-	entry, err = kv.Get("with-id")
-	assert.Equal(s.T(), int64(2), int64(binary.LittleEndian.Uint64(entry.Value())))
-
 	w.Expect().VertexPodLogContains("out", "with-id", PodLogCheckOptionWithCount(2))
 }
 
