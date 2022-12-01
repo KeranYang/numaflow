@@ -28,8 +28,8 @@ func GetRedisString(key string) string {
 	return str
 }
 
-func ExpectRedisKeyValue(key string, value string, timeout time.Duration) {
-	log.Printf("expecting key value pair in redis: key %s, value %s within %v\n", key, value, timeout)
+func ExpectRedisKeyValue(key string, expectedValue string, timeout time.Duration) {
+	log.Printf("expecting key value pair in redis: key %s, value %s within %v\n", key, expectedValue, timeout)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	for {
@@ -38,7 +38,8 @@ func ExpectRedisKeyValue(key string, value string, timeout time.Duration) {
 			panic(fmt.Errorf("timeout waiting"))
 		default:
 			valueInRedis := GetRedisString(key)
-			if valueInRedis == value {
+			if valueInRedis == expectedValue {
+				log.Printf("Received value %s, succeeding the test.", valueInRedis)
 				return
 			}
 			time.Sleep(time.Second)
