@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/go-redis/redis/v8"
+	"log"
 	"testing"
 	"time"
 
@@ -49,6 +50,15 @@ func Test_localRedis(t *testing.T) {
 		Password: "",
 		DB:       0,
 	})
+
+	keyList, err := client.Keys(context.Background(), "*").Result()
+
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	count := len(keyList)
+	log.Printf("KeranTest - got %d keys.", count)
 
 	pong, err := client.Ping(context.Background()).Result()
 	fmt.Println(pong, err)

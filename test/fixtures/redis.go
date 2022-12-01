@@ -74,6 +74,7 @@ func ExpectRedisTotalKeyCount(count int64, timeout time.Duration) {
 				log.Printf("Key count %d > %d, succeeding the test.", keyCount, count)
 				return
 			}
+			log.Printf("Key count %d < %d, waiting for one second.", keyCount, count)
 			time.Sleep(time.Second)
 		}
 	}

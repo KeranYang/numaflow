@@ -84,7 +84,7 @@ func (ks *KafkaSuite) TestRedisSink() {
 		When().
 		CreatePipelineAndWait()
 	defer w.DeletePipelineAndWait()
-	fixtures.ExpectRedisTotalKeyCount(15, 3*time.Second)
+	fixtures.ExpectRedisTotalKeyCount(15, 1*time.Minute)
 }
 
 func (ks *KafkaSuite) TestKafkaSink() {

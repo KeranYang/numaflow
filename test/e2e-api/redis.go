@@ -58,6 +58,7 @@ func init() {
 
 		keyList, err := client.Keys(context.Background(), "*").Result()
 
+		log.Printf("KeranTest - error got key list, size %d", len(keyList))
 		if err != nil {
 			log.Fatalf("KeranTest - error %v", err)
 		}
