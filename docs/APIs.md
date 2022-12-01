@@ -1966,6 +1966,18 @@ TLS enabled or not
 </tr>
 </tbody>
 </table>
+<h3 id="numaflow.numaproj.io/v1alpha1.JetStreamSink">
+JetStreamSink
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#numaflow.numaproj.io/v1alpha1.Sink">Sink</a>)
+</p>
+<p>
+<p>
+JetStreamSink is a sink for publishing to JetStream
+</p>
+</p>
 <h3 id="numaflow.numaproj.io/v1alpha1.JobTemplate">
 JobTemplate
 </h3>
@@ -3340,6 +3352,15 @@ Log </a> </em>
 <td>
 <code>blackhole</code></br> <em>
 <a href="#numaflow.numaproj.io/v1alpha1.Blackhole"> Blackhole </a> </em>
+</td>
+<td>
+</td>
+</tr>
+<tr>
+<td>
+<code>jetstreamsink</code></br> <em>
+<a href="#numaflow.numaproj.io/v1alpha1.JetStreamSink"> JetStreamSink
+</a> </em>
 </td>
 <td>
 </td>

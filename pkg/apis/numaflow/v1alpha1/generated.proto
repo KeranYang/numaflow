@@ -512,6 +512,10 @@ message JetStreamConfig {
   optional bool tlsEnabled = 4;
 }
 
+// JetStreamSink is a sink for publishing to JetStream
+message JetStreamSink {
+}
+
 message JobTemplate {
   // +optional
   optional AbstractPodTemplate abstractPodTemplate = 1;
@@ -862,7 +866,9 @@ message Sink {
 
   optional Blackhole blackhole = 3;
 
-  optional UDSink udsink = 4;
+  optional JetStreamSink jetstreamsink = 4;
+
+  optional UDSink udsink = 5;
 }
 
 message Source {

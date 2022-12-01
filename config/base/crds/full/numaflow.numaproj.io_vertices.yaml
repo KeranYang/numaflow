@@ -2040,6 +2040,8 @@ spec:
                 properties:
                   blackhole:
                     type: object
+                  jetstreamsink:
+                    type: object
                   kafka:
                     properties:
                       brokers:

@@ -10,7 +10,7 @@ spec:
           service: true
     - name: out
       sink:
-        log: {}
+        jetstreamsink: {}
   edges:
     - from: in
       to: out

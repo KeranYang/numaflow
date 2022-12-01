@@ -18178,6 +18178,10 @@
       },
       "type": "object"
     },
+    "io.numaproj.numaflow.v1alpha1.JetStreamSink": {
+      "description": "JetStreamSink is a sink for publishing to JetStream",
+      "type": "object"
+    },
     "io.numaproj.numaflow.v1alpha1.JobTemplate": {
       "properties": {
         "affinity": {
@@ -18731,6 +18735,9 @@
       "properties": {
         "blackhole": {
           "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.Blackhole"
+        },
+        "jetstreamsink": {
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.JetStreamSink"
         },
         "kafka": {
           "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.KafkaSink"
