@@ -24,6 +24,18 @@ import (
 	"time"
 )
 
+func GetRedisRegexCount(regex string) int {
+	str := InvokeE2EAPI("/redis/get-regex-count?regex=%s", regex)
+
+	count, err := strconv.Atoi(str)
+	if err != nil {
+		log.Printf("invalid string %s", str)
+		return 0
+	}
+
+	return count
+}
+
 func GetRedisString(key string) string {
 	str := InvokeE2EAPI("/redis/get-string?key=%s", key)
 	return str

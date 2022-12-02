@@ -41,6 +41,26 @@ type Expect struct {
 	kubeClient     kubernetes.Interface
 }
 
+func (t *Expect) OutputSinkContains(regex string, opts ...SinkCheckOption) *Expect {
+	t.t.Helper()
+	ctx := context.Background()
+	contains := SinkOutputContains(ctx, regex, opts...)
+	if !contains {
+		t.t.Fatalf("Output doesn't contain regex %s", regex)
+	}
+	return t
+}
+
+func (t *Expect) OutputSinkNotContains(regex string, opts ...SinkCheckOption) *Expect {
+	t.t.Helper()
+	ctx := context.Background()
+	notContains := SinkOutputNotContains(ctx, regex, opts...)
+	if !notContains {
+		t.t.Fatalf("Output contains regex %s", regex)
+	}
+	return t
+}
+
 func (t *Expect) ISBSvcDeleted(timeout time.Duration) *Expect {
 	t.t.Helper()
 	ctx := context.Background()

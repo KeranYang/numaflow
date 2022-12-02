@@ -29,6 +29,28 @@ func init() {
 	// const bootstrapServers = "kafka-broker:9092"
 	// var brokers = []string{bootstrapServers}
 
+	http.HandleFunc("/redis/get-regex-count", func(w http.ResponseWriter, r *http.Request) {
+		regex := r.URL.Query().Get("regex")
+
+		client := redis.NewClient(&redis.Options{
+			Addr:     "redis-cluster:6379",
+			Password: "",
+			DB:       0,
+		})
+
+		keyList, err := client.Keys(context.Background(), regex).Result()
+
+		for i, key := range keyList {
+			fmt.Printf("KeranTest - index: %d, key: %s\n", i, key)
+		}
+
+		if err != nil {
+			panic(err)
+		}
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(fmt.Sprint(len(keyList))))
+	})
+
 	http.HandleFunc("/redis/get-string", func(w http.ResponseWriter, r *http.Request) {
 		key := r.URL.Query().Get("key")
 
