@@ -22,6 +22,7 @@ import (
 	"github.com/go-redis/redis/v8"
 	"log"
 	"net/http"
+	"regexp"
 )
 
 func init() {
@@ -31,6 +32,11 @@ func init() {
 
 	http.HandleFunc("/redis/get-regex-count", func(w http.ResponseWriter, r *http.Request) {
 		regex := r.URL.Query().Get("regex")
+
+		_, err := regexp.Compile(regex)
+		if err != nil {
+			panic(err)
+		}
 
 		client := redis.NewClient(&redis.Options{
 			Addr:     "redis-cluster:6379",
