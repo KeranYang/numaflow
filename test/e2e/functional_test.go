@@ -67,8 +67,10 @@ func (s *FunctionalSuite) TestFilteringRedis() {
 		Status(204)
 
 	time.Sleep(time.Minute * 1)
-	w.Expect().OutputSinkContains("*expect3*", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
-	w.Expect().OutputSinkNotContains("*expect[0-2]*", SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkContains("expect3", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkNotContains("expect0", SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkNotContains("expect1", SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkNotContains("expect2", SinkCheckOptionWithTimeout(2*time.Second))
 }
 
 func TestFunctionalSuite(t *testing.T) {
