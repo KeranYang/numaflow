@@ -24,8 +24,8 @@ import (
 	"time"
 )
 
-func GetRedisRegexCount(regex string) int {
-	str := InvokeE2EAPI("/redis/get-regex-count?regex=%s", regex)
+func GetMsgCountContains(sinkName string, regex string) int {
+	str := InvokeE2EAPI("/redis/get-msg-count-contains?sinkName=%s&regex=%s", sinkName, regex)
 
 	count, err := strconv.Atoi(str)
 	if err != nil {

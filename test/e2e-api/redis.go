@@ -30,7 +30,8 @@ func init() {
 	// const bootstrapServers = "kafka-broker:9092"
 	// var brokers = []string{bootstrapServers}
 
-	http.HandleFunc("/redis/get-regex-count", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/redis/get-msg-count-contains", func(w http.ResponseWriter, r *http.Request) {
+		sinkName := r.URL.Query().Get("sinkName")
 		regex := r.URL.Query().Get("regex")
 
 		_, err := regexp.Compile(regex)
@@ -44,7 +45,7 @@ func init() {
 			DB:       0,
 		})
 
-		keyList, err := client.Keys(context.Background(), fmt.Sprintf("*%s*", regex)).Result()
+		keyList, err := client.Keys(context.Background(), fmt.Sprintf("%s - *%s*", sinkName, regex)).Result()
 
 		for i, key := range keyList {
 			fmt.Printf("KeranTest - index: %d, key: %s\n", i, key)

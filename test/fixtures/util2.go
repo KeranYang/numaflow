@@ -22,7 +22,7 @@ import (
 	"time"
 )
 
-func SinkOutputNotContains(ctx context.Context, regex string, opts ...SinkCheckOption) bool {
+func SinkOutputNotContains(ctx context.Context, sinkName string, regex string, opts ...SinkCheckOption) bool {
 	o := defaultSinkCheckOptions()
 	for _, opt := range opts {
 		if opt != nil {
@@ -36,10 +36,10 @@ func SinkOutputNotContains(ctx context.Context, regex string, opts ...SinkCheckO
 		o.count = 1
 	}
 
-	return !sinkOutputContains(ctx, regex, o.count)
+	return !sinkOutputContains(ctx, sinkName, regex, o.count)
 }
 
-func SinkOutputContains(ctx context.Context, regex string, opts ...SinkCheckOption) bool {
+func SinkOutputContains(ctx context.Context, sinkName string, regex string, opts ...SinkCheckOption) bool {
 	o := defaultSinkCheckOptions()
 	for _, opt := range opts {
 		if opt != nil {
@@ -49,11 +49,11 @@ func SinkOutputContains(ctx context.Context, regex string, opts ...SinkCheckOpti
 	ctx, cancel := context.WithTimeout(ctx, o.timeout)
 	defer cancel()
 
-	return sinkOutputContains(ctx, regex, o.count)
+	return sinkOutputContains(ctx, sinkName, regex, o.count)
 
 }
 
-func sinkOutputContains(ctx context.Context, regex string, expectedCount int) bool {
+func sinkOutputContains(ctx context.Context, sinkName string, regex string, expectedCount int) bool {
 	if expectedCount <= 0 {
 		return true
 	}
@@ -65,7 +65,7 @@ func sinkOutputContains(ctx context.Context, regex string, expectedCount int) bo
 			fmt.Printf("KeranTest - timed out.")
 			return false
 		default:
-			return GetRedisRegexCount(regex) >= expectedCount
+			return GetMsgCountContains(sinkName, regex) >= expectedCount
 		}
 	}
 }

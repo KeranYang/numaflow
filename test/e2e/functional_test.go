@@ -138,10 +138,10 @@ func (s *FunctionalSuite) TestFiltering() {
 		Status(204)
 
 	time.Sleep(time.Minute * 1)
-	w.Expect().OutputSinkContains("expect3", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
-	w.Expect().OutputSinkNotContains("expect0", SinkCheckOptionWithTimeout(2*time.Second))
-	w.Expect().OutputSinkNotContains("expect1", SinkCheckOptionWithTimeout(2*time.Second))
-	w.Expect().OutputSinkNotContains("expect2", SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkContains("out", "expect3", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkNotContains("out", "expect0", SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkNotContains("out", "expect1", SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkNotContains("out", "expect2", SinkCheckOptionWithTimeout(2*time.Second))
 }
 
 func (s *FunctionalSuite) TestWatermarkEnabled() {
