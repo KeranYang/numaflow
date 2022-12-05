@@ -64,7 +64,7 @@ func (ks *KafkaSuite) TestRedisSink() {
 				{
 					Name: "output",
 					Sink: &dfv1.Sink{
-						JetStreamSink: &dfv1.JetStreamSink{},
+						Redis: &dfv1.RedisSink{},
 					},
 				},
 			},

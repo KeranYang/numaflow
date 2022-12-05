@@ -15,7 +15,7 @@ spec:
             expression: int(json(payload).id) < 100 && json(payload).msg == 'hello' && sprig.contains('good', string(json(payload).desc))
     - name: out
       sink:
-        jetstreamsink: {}
+        redis: {}
   edges:
     - from: in
       to: p1
