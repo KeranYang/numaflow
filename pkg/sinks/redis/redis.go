@@ -104,8 +104,8 @@ func (rs *RedisSink) Write(context context.Context, messages []isb.Message) ([]i
 		DB:       0,
 	})
 
-	// Our E2E tests time out after 10 minutes. Set redis message TTL to the same.
-	const msgTTL = 10 * time.Minute
+	// Our E2E tests time out after 20 minutes. Set redis message TTL to the same.
+	const msgTTL = 20 * time.Minute
 
 	for _, msg := range messages {
 		key := string(msg.Payload)

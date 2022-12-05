@@ -1,5 +1,5 @@
 resources:
-  - kafka-minimal.yaml
+  - redis-minimal.yaml
 
 commonLabels:
   "numaflow-e2e": "true"
