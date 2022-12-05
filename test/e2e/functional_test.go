@@ -144,6 +144,46 @@ func (s *FunctionalSuite) TestFiltering() {
 	w.Expect().OutputSinkNotContains("out", "expect2", SinkCheckOptionWithTimeout(2*time.Second))
 }
 
+func (s *FunctionalSuite) TestConditionalForwarding() {
+	w := s.Given().Pipeline("@testdata/even-odd.yaml").
+		When().
+		CreatePipelineAndWait()
+
+	defer w.DeletePipelineAndWait()
+
+	w.Expect().
+		VertexPodsRunning().
+		VertexPodLogContains("in", LogSourceVertexStarted).
+		VertexPodLogContains("even-or-odd", LogUDFVertexStarted, PodLogCheckOptionWithContainer("numa")).
+		VertexPodLogContains("even-sink", LogSinkVertexStarted).
+		VertexPodLogContains("odd-sink", LogSinkVertexStarted).
+		VertexPodLogContains("number-sink", LogSinkVertexStarted)
+	defer w.VertexPodPortForward("in", 8443, dfv1.VertexHTTPSPort).
+		TerminateAllPodPortForwards()
+
+	HTTPExpect(s.T(), "https://localhost:8443").POST("/vertices/in").WithBytes([]byte("888888")).
+		Expect().
+		Status(204)
+	HTTPExpect(s.T(), "https://localhost:8443").POST("/vertices/in").WithBytes([]byte("888889")).
+		Expect().
+		Status(204)
+	HTTPExpect(s.T(), "https://localhost:8443").POST("/vertices/in").WithBytes([]byte("not an integer")).
+		Expect().
+		Status(204)
+
+	w.Expect().OutputSinkContains("even-sink", "888888", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkNotContains("even-sink", "888889", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkNotContains("even-sink", "not an integer", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
+
+	w.Expect().OutputSinkContains("odd-sink", "888889", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkNotContains("odd-sink", "888888", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkNotContains("odd-sink", "not an integer", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
+
+	w.Expect().OutputSinkContains("number-sink", "888888", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkContains("number-sink", "888889", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkNotContains("number-sink", "not an integer", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
+}
+
 func (s *FunctionalSuite) TestWatermarkEnabled() {
 	w := s.Given().Pipeline("@testdata/watermark.yaml").
 		When().
