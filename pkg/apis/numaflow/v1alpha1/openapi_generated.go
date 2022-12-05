@@ -59,7 +59,6 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.InterStepBufferServiceStatus":   schema_pkg_apis_numaflow_v1alpha1_InterStepBufferServiceStatus(ref),
 		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.JetStreamBufferService":         schema_pkg_apis_numaflow_v1alpha1_JetStreamBufferService(ref),
 		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.JetStreamConfig":                schema_pkg_apis_numaflow_v1alpha1_JetStreamConfig(ref),
-		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.JetStreamSink":                  schema_pkg_apis_numaflow_v1alpha1_JetStreamSink(ref),
 		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.JobTemplate":                    schema_pkg_apis_numaflow_v1alpha1_JobTemplate(ref),
 		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.KafkaSink":                      schema_pkg_apis_numaflow_v1alpha1_KafkaSink(ref),
 		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.KafkaSource":                    schema_pkg_apis_numaflow_v1alpha1_KafkaSource(ref),
@@ -78,6 +77,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.RedisBufferService":             schema_pkg_apis_numaflow_v1alpha1_RedisBufferService(ref),
 		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.RedisConfig":                    schema_pkg_apis_numaflow_v1alpha1_RedisConfig(ref),
 		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.RedisSettings":                  schema_pkg_apis_numaflow_v1alpha1_RedisSettings(ref),
+		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.RedisSink":                      schema_pkg_apis_numaflow_v1alpha1_RedisSink(ref),
 		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.Scale":                          schema_pkg_apis_numaflow_v1alpha1_Scale(ref),
 		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.Sink":                           schema_pkg_apis_numaflow_v1alpha1_Sink(ref),
 		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.Source":                         schema_pkg_apis_numaflow_v1alpha1_Source(ref),
@@ -1833,17 +1833,6 @@ func schema_pkg_apis_numaflow_v1alpha1_JetStreamConfig(ref common.ReferenceCallb
 	}
 }
 
-func schema_pkg_apis_numaflow_v1alpha1_JetStreamSink(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "JetStreamSink is a sink for publishing to JetStream",
-				Type:        []string{"object"},
-			},
-		},
-	}
-}
-
 func schema_pkg_apis_numaflow_v1alpha1_JobTemplate(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -2789,6 +2778,17 @@ func schema_pkg_apis_numaflow_v1alpha1_RedisSettings(ref common.ReferenceCallbac
 	}
 }
 
+func schema_pkg_apis_numaflow_v1alpha1_RedisSink(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RedisSink is a sink for publishing to Redis",
+				Type:        []string{"object"},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_numaflow_v1alpha1_Scale(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -2888,7 +2888,7 @@ func schema_pkg_apis_numaflow_v1alpha1_Sink(ref common.ReferenceCallback) common
 					},
 					"redis": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.JetStreamSink"),
+							Ref: ref("github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.RedisSink"),
 						},
 					},
 					"udsink": {
@@ -2900,7 +2900,7 @@ func schema_pkg_apis_numaflow_v1alpha1_Sink(ref common.ReferenceCallback) common
 			},
 		},
 		Dependencies: []string{
-			"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.Blackhole", "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.JetStreamSink", "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.KafkaSink", "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.Log", "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.UDSink"},
+			"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.Blackhole", "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.KafkaSink", "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.Log", "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.RedisSink", "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.UDSink"},
 	}
 }
 

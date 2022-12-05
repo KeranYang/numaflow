@@ -5689,8 +5689,6 @@ spec:
                       properties:
                         blackhole:
                           type: object
-                        redis:
-                          type: object
                         kafka:
                           properties:
                             brokers:
@@ -5743,6 +5741,8 @@ spec:
                           - topic
                           type: object
                         log:
+                          type: object
+                        redis:
                           type: object
                         udsink:
                           properties:
@@ -8948,8 +8948,6 @@ spec:
                 properties:
                   blackhole:
                     type: object
-                  redis:
-                    type: object
                   kafka:
                     properties:
                       brokers:
@@ -9002,6 +9000,8 @@ spec:
                     - topic
                     type: object
                   log:
+                    type: object
+                  redis:
                     type: object
                   udsink:
                     properties:

@@ -41,12 +41,6 @@ func (s *FunctionalSuite) TestFilteringRedis() {
 		CreatePipelineAndWait()
 	defer w.DeletePipelineAndWait()
 
-	w.Expect().
-		VertexPodsRunning().
-		VertexPodLogContains("in", LogSourceVertexStarted).
-		VertexPodLogContains("p1", LogUDFVertexStarted, PodLogCheckOptionWithContainer("numa")).
-		VertexPodLogContains("out", LogSinkVertexStarted)
-
 	defer w.VertexPodPortForward("in", 8443, dfv1.VertexHTTPSPort).
 		TerminateAllPodPortForwards()
 
