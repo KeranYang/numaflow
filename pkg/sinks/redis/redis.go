@@ -36,7 +36,7 @@ import (
 	metricspkg "github.com/numaproj/numaflow/pkg/metrics"
 )
 
-// RedisSink is a sink to publish to redis
+// RedisSink is a sink to publish to redis. Currently, redis sink is mainly used for E2E testing.
 type RedisSink struct {
 	name         string
 	pipelineName string
@@ -96,7 +96,7 @@ func (rs *RedisSink) IsFull() bool {
 	return false
 }
 
-// Write writes to the jetstream sink.
+// Write writes to the redis sink.
 func (rs *RedisSink) Write(context context.Context, messages []isb.Message) ([]isb.Offset, []error) {
 	client := redis.NewClient(&redis.Options{
 		Addr:     "redis-cluster:6379",
@@ -104,22 +104,24 @@ func (rs *RedisSink) Write(context context.Context, messages []isb.Message) ([]i
 		DB:       0,
 	})
 
+	// Our E2E tests time out after 10 minutes. Set redis message TTL to the same.
+	const msgTTL = 10 * time.Minute
+
 	for _, msg := range messages {
 		key := string(msg.Payload)
 		entry, err := client.Get(context, key).Result()
 		if err != nil {
-			client.Set(context, key, 1, 5*time.Minute)
+			client.Set(context, key, 1, msgTTL)
 		} else {
 			count, err := strconv.Atoi(entry)
 			if err != nil {
 				fmt.Printf("Atoi converting error %v", err)
 			}
-			client.Set(context, key, count+1, 5*time.Minute)
+			client.Set(context, key, count+1, msgTTL)
 		}
 	}
 
 	sinkWriteCount.With(map[string]string{metricspkg.LabelVertex: rs.name, metricspkg.LabelPipeline: rs.pipelineName}).Add(float64(len(messages)))
-
 	return nil, make([]error, len(messages))
 }
 

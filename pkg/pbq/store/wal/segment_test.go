@@ -44,6 +44,7 @@ var vi = &dfv1.VertexInstance{
 	Replica:  0,
 }
 
+// TODO - Remove this
 func Test_localRedis(t *testing.T) {
 	client := redis.NewClient(&redis.Options{
 		Addr:     "localhost:6379",
