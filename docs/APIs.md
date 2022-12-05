@@ -1966,8 +1966,8 @@ TLS enabled or not
 </tr>
 </tbody>
 </table>
-<h3 id="numaflow.numaproj.io/v1alpha1.JetStreamSink">
-JetStreamSink
+<h3 id="numaflow.numaproj.io/v1alpha1.RedisSink">
+RedisSink
 </h3>
 <p>
 (<em>Appears on:</em>
@@ -1975,7 +1975,7 @@ JetStreamSink
 </p>
 <p>
 <p>
-JetStreamSink is a sink for publishing to JetStream
+RedisSink is a sink for publishing to Redis
 </p>
 </p>
 <h3 id="numaflow.numaproj.io/v1alpha1.JobTemplate">
@@ -3358,8 +3358,8 @@ Log </a> </em>
 </tr>
 <tr>
 <td>
-<code>jetstreamsink</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.JetStreamSink"> JetStreamSink
+<code>redis</code></br> <em>
+<a href="#numaflow.numaproj.io/v1alpha1.RedisSink"> RedisSink
 </a> </em>
 </td>
 <td>

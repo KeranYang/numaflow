@@ -14,15 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package jetstreamsink
+package v1alpha1
 
-import (
-	"testing"
-)
-
-func TestJetStreamSink_Start(t *testing.T) {
-}
-
-// TestJetStreamSink_ForwardToTwoVertex writes to 2 vertices and have a jetstream sinks attached to each vertex.
-func TestJetStreamSink_ForwardToTwoVertex(t *testing.T) {
+// RedisSink is a sink for publishing to Redis
+type RedisSink struct {
 }

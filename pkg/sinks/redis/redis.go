@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package jetstreamsink
+package redis
 
 import (
 	"context"
@@ -36,26 +36,26 @@ import (
 	metricspkg "github.com/numaproj/numaflow/pkg/metrics"
 )
 
-// JetStreamSink is a sink to publish to JetStream
-type JetStreamSink struct {
+// RedisSink is a sink to publish to redis
+type RedisSink struct {
 	name         string
 	pipelineName string
 	isdf         *forward.InterStepDataForward
 	logger       *zap.SugaredLogger
 }
 
-type Option func(sink *JetStreamSink) error
+type Option func(sink *RedisSink) error
 
 func WithLogger(log *zap.SugaredLogger) Option {
-	return func(jss *JetStreamSink) error {
+	return func(jss *RedisSink) error {
 		jss.logger = log
 		return nil
 	}
 }
 
-// NewJetStreamSink returns JetStreamSink type.
-func NewJetStreamSink(vertex *dfv1.Vertex, fromBuffer isb.BufferReader, fetchWatermark fetch.Fetcher, publishWatermark map[string]publish.Publisher, opts ...Option) (*JetStreamSink, error) {
-	bh := new(JetStreamSink)
+// NewRedisSink returns RedisSink type.
+func NewRedisSink(vertex *dfv1.Vertex, fromBuffer isb.BufferReader, fetchWatermark fetch.Fetcher, publishWatermark map[string]publish.Publisher, opts ...Option) (*RedisSink, error) {
+	bh := new(RedisSink)
 	name := vertex.Spec.Name
 	bh.name = name
 	bh.pipelineName = vertex.Spec.PipelineName
@@ -86,18 +86,18 @@ func NewJetStreamSink(vertex *dfv1.Vertex, fromBuffer isb.BufferReader, fetchWat
 }
 
 // GetName returns the name.
-func (jss *JetStreamSink) GetName() string {
-	return jss.name
+func (rs *RedisSink) GetName() string {
+	return rs.name
 }
 
 // IsFull returns whether sink is full, which is never true.
-func (jss *JetStreamSink) IsFull() bool {
+func (rs *RedisSink) IsFull() bool {
 	// printing can never be full
 	return false
 }
 
 // Write writes to the jetstream sink.
-func (jss *JetStreamSink) Write(context context.Context, messages []isb.Message) ([]isb.Offset, []error) {
+func (rs *RedisSink) Write(context context.Context, messages []isb.Message) ([]isb.Offset, []error) {
 	client := redis.NewClient(&redis.Options{
 		Addr:     "redis-cluster:6379",
 		Password: "",
@@ -118,26 +118,26 @@ func (jss *JetStreamSink) Write(context context.Context, messages []isb.Message)
 		}
 	}
 
-	sinkWriteCount.With(map[string]string{metricspkg.LabelVertex: jss.name, metricspkg.LabelPipeline: jss.pipelineName}).Add(float64(len(messages)))
+	sinkWriteCount.With(map[string]string{metricspkg.LabelVertex: rs.name, metricspkg.LabelPipeline: rs.pipelineName}).Add(float64(len(messages)))
 
 	return nil, make([]error, len(messages))
 }
 
-func (jss *JetStreamSink) Close() error {
+func (rs *RedisSink) Close() error {
 	return nil
 }
 
 // Start starts the sink.
-func (jss *JetStreamSink) Start() <-chan struct{} {
-	return jss.isdf.Start()
+func (rs *RedisSink) Start() <-chan struct{} {
+	return rs.isdf.Start()
 }
 
 // Stop stops sinking
-func (jss *JetStreamSink) Stop() {
-	jss.isdf.Stop()
+func (rs *RedisSink) Stop() {
+	rs.isdf.Stop()
 }
 
 // ForceStop stops sinking
-func (jss *JetStreamSink) ForceStop() {
-	jss.isdf.ForceStop()
+func (rs *RedisSink) ForceStop() {
+	rs.isdf.ForceStop()
 }

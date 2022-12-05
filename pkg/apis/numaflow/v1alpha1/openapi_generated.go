@@ -2886,7 +2886,7 @@ func schema_pkg_apis_numaflow_v1alpha1_Sink(ref common.ReferenceCallback) common
 							Ref: ref("github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.Blackhole"),
 						},
 					},
-					"jetstreamsink": {
+					"redis": {
 						SchemaProps: spec.SchemaProps{
 							Ref: ref("github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.JetStreamSink"),
 						},

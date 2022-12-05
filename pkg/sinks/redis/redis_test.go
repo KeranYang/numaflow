@@ -14,18 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package jetstreamsink
+package redis
 
 import (
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-
-	metricspkg "github.com/numaproj/numaflow/pkg/metrics"
+	"testing"
 )
 
-// sinkWriteCount is used to indicate the number of messages written to the sink
-var sinkWriteCount = promauto.NewCounterVec(prometheus.CounterOpts{
-	Subsystem: "jetstream_sink",
-	Name:      "write_total",
-	Help:      "Total number of messages written to jetstream sink",
-}, []string{metricspkg.LabelVertex, metricspkg.LabelPipeline})
+func TestRedisSink_Start(t *testing.T) {
+}
+
+// TestRedisSinkSink_ForwardToTwoVertex writes to 2 vertices and have a jetstream sinks attached to each vertex.
+func TestRedisSinkSink_ForwardToTwoVertex(t *testing.T) {
+}

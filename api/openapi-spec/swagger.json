@@ -18173,8 +18173,8 @@
         }
       }
     },
-    "io.numaproj.numaflow.v1alpha1.JetStreamSink": {
-      "description": "JetStreamSink is a sink for publishing to JetStream",
+    "io.numaproj.numaflow.v1alpha1.RedisSink": {
+      "description": "RedisSink is a sink for publishing to Redis",
       "type": "object"
     },
     "io.numaproj.numaflow.v1alpha1.JobTemplate": {
@@ -18723,8 +18723,8 @@
         "blackhole": {
           "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.Blackhole"
         },
-        "jetstreamsink": {
-          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.JetStreamSink"
+        "redis": {
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.RedisSink"
         },
         "kafka": {
           "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.KafkaSink"

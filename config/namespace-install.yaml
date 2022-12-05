@@ -5689,7 +5689,7 @@ spec:
                       properties:
                         blackhole:
                           type: object
-                        jetstreamsink:
+                        redis:
                           type: object
                         kafka:
                           properties:
@@ -8948,7 +8948,7 @@ spec:
                 properties:
                   blackhole:
                     type: object
-                  jetstreamsink:
+                  redis:
                     type: object
                   kafka:
                     properties:
