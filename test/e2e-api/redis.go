@@ -45,7 +45,7 @@ func init() {
 			DB:       0,
 		})
 
-		keyList, err := client.Keys(context.Background(), fmt.Sprintf("%s - *%s*", sinkName, regex)).Result()
+		keyList, err := client.Keys(context.Background(), fmt.Sprintf("%s*%s*", sinkName, regex)).Result()
 
 		for i, key := range keyList {
 			fmt.Printf("KeranTest - index: %d, key: %s\n", i, key)

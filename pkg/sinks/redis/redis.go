@@ -108,7 +108,7 @@ func (rs *RedisSink) Write(context context.Context, messages []isb.Message) ([]i
 	const msgTTL = 20 * time.Minute
 
 	for _, msg := range messages {
-		key := fmt.Sprintf("%s - %s", rs.name, string(msg.Payload))
+		key := fmt.Sprintf("%s-%s", rs.name, string(msg.Payload))
 		entry, err := client.Get(context, key).Result()
 		if err != nil {
 			client.Set(context, key, 1, msgTTL)
