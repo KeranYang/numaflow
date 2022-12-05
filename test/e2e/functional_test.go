@@ -34,8 +34,8 @@ type FunctionalSuite struct {
 	E2ESuite
 }
 
-func (s *FunctionalSuite) TestFilteringRedis() {
-	w := s.Given().Pipeline("@testdata/filtering-redis.yaml").
+func (s *FunctionalSuite) TestFiltering() {
+	w := s.Given().Pipeline("@testdata/filtering.yaml").
 		When().
 		CreatePipelineAndWait()
 	defer w.DeletePipelineAndWait()
