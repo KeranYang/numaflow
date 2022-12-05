@@ -52,7 +52,7 @@ func Test_localRedis(t *testing.T) {
 		DB:       0,
 	})
 
-	keyList, err := client.Keys(context.Background(), "*eran*").Result()
+	keyList, err := client.Keys(context.Background(), "out - *1234*").Result()
 
 	if err != nil {
 		fmt.Println(err)
