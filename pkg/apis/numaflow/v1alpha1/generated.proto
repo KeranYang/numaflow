@@ -811,6 +811,7 @@ message RedisSettings {
 }
 
 // RedisSink is a sink for publishing to Redis
+// TODO - add attributes like port number, credential data etc.
 message RedisSink {
 }
 

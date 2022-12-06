@@ -3171,7 +3171,8 @@ RedisSink
 </p>
 <p>
 <p>
-RedisSink is a sink for publishing to Redis
+RedisSink is a sink for publishing to Redis TODO - add attributes like
+port number, credential data etc.
 </p>
 </p>
 <h3 id="numaflow.numaproj.io/v1alpha1.Scale">
