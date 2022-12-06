@@ -22,6 +22,6 @@ import (
 
 func SendMessageToPod(pipelineName string, vertexName string, msg string) string {
 	log.Printf("Sending msg %s to pipeline %s, vertex %s\n", msg, pipelineName, vertexName)
-	InvokeE2EAPI("/http/send-message?pName=%s&vName=%s&msg=%s", pipelineName, vertexName, msg)
+	InvokeE2EAPIPOST("/http/send-message?pipeline=%s&vertex=%s", msg, pipelineName, vertexName)
 	return msg
 }

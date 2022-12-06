@@ -17,22 +17,30 @@ limitations under the License.
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	dfv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"io"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"log"
 	"net/http"
-	"strings"
 )
 
 func init() {
-	// TODO - can try using POST instead of get - see kafka example.
 	http.HandleFunc("/http/send-message", func(w http.ResponseWriter, r *http.Request) {
-		pName := r.URL.Query().Get("pName")
-		vertexName := r.URL.Query().Get("vName")
-		msg := r.URL.Query().Get("msg")
+		pName := r.URL.Query().Get("pipeline")
+		vertexName := r.URL.Query().Get("vertex")
+
+		buf, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Println(err)
+			w.WriteHeader(500)
+			_, _ = w.Write([]byte(err.Error()))
+			return
+		}
 
 		restConfig, err := rest.InClusterConfig()
 		if err != nil {
@@ -59,19 +67,12 @@ func init() {
 		pod := podList.Items[0]
 		podIp := pod.Status.PodIP
 		// Send the msg to the input vertex.
-		resp, err := http.Post("https://"+podIp+":8443/vertices/in", "application/json", strings.NewReader(msg))
+		resp, err := http.Post("https://"+podIp+":8443/vertices/in", "application/json", bytes.NewBuffer(buf))
 		if err != nil {
 			w.WriteHeader(500)
 			_, _ = w.Write([]byte(err.Error()))
 			// panic(err)
 		}
-
 		defer resp.Body.Close()
-
-		if resp.StatusCode >= 300 {
-			w.WriteHeader(resp.StatusCode)
-			return
-		}
-		w.WriteHeader(201)
 	})
 }
