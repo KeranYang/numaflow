@@ -98,6 +98,7 @@ func (rs *RedisSink) IsFull() bool {
 
 // Write writes to the redis sink.
 func (rs *RedisSink) Write(context context.Context, messages []isb.Message) ([]isb.Offset, []error) {
+	// TODO - redis options can be passed in from RedisSink attributes, as opposed to being hardcoded here.
 	client := redis.NewClient(&redis.Options{
 		Addr:     "redis-cluster:6379",
 		Password: "",
@@ -107,6 +108,9 @@ func (rs *RedisSink) Write(context context.Context, messages []isb.Message) ([]i
 	// Our E2E tests time out after 20 minutes. Set redis message TTL to the same.
 	const msgTTL = 20 * time.Minute
 
+	// To serve various E2E test cases, the redis sink is written in a way that it constructs the key
+	// as vertex name concatenated with message payload.
+	// The value is the no. of occurrence of the key.
 	for _, msg := range messages {
 		key := fmt.Sprintf("%s-%s", rs.name, string(msg.Payload))
 		entry, err := client.Get(context, key).Result()

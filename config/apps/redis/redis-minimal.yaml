@@ -1,4 +1,5 @@
-# https://github.com/sobotklp/kubernetes-redis-cluster
+# This is a direct copy from https://github.com/sobotklp/kubernetes-redis-cluster
+# TODO - can we simplify it by removing some resources/configurations?
 ---
 #
 # Redis Cluster service

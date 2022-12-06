@@ -20,8 +20,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/go-redis/redis/v8"
-	"log"
 	"testing"
 	"time"
 
@@ -42,27 +40,6 @@ var vi = &dfv1.VertexInstance{
 	}},
 	Hostname: "test-host",
 	Replica:  0,
-}
-
-// TODO - Remove this
-func Test_localRedis(t *testing.T) {
-	client := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
-		Password: "",
-		DB:       0,
-	})
-
-	keyList, err := client.Keys(context.Background(), "out - *1234*").Result()
-
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	count := len(keyList)
-	log.Printf("KeranTest - got %d keys.", count)
-
-	pong, err := client.Ping(context.Background()).Result()
-	fmt.Println(pong, err)
 }
 
 func Test_writeReadHeader(t *testing.T) {

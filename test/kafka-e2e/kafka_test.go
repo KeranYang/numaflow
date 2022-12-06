@@ -29,63 +29,12 @@ import (
 )
 
 //go:generate kubectl -n numaflow-system delete statefulset zookeeper kafka-broker --ignore-not-found=true
-//go:generate kubectl -n numaflow-system delete statefulset redis-cluster --ignore-not-found=true
 //go:generate kubectl apply -k ../../config/apps/kafka -n numaflow-system
-//go:generate kubectl apply -k ../../config/apps/redis -n numaflow-system
-// Wait for zookeeper and redis to come up
+// Wait for zookeeper to come up
 //go:generate sleep 60
 
 type KafkaSuite struct {
 	fixtures.E2ESuite
-}
-
-func (ks *KafkaSuite) TestRedisSink() {
-	pipeline := &dfv1.Pipeline{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "redis-sink-e2e",
-		},
-		Spec: dfv1.PipelineSpec{
-			Vertices: []dfv1.AbstractVertex{
-				{
-					Name: "input",
-					Source: &dfv1.Source{
-						Generator: &dfv1.GeneratorSource{
-							RPU:      pointer.Int64Ptr(5),
-							Duration: &metav1.Duration{Duration: 2 * time.Second},
-						},
-					},
-				},
-				{
-					Name: "p1",
-					UDF: &dfv1.UDF{
-						Builtin: &dfv1.Function{Name: "cat"},
-					},
-				},
-
-				{
-					Name: "output",
-					Sink: &dfv1.Sink{
-						Redis: &dfv1.RedisSink{},
-					},
-				},
-			},
-			Edges: []dfv1.Edge{
-				{
-					From: "input",
-					To:   "p1",
-				},
-				{
-					From: "p1",
-					To:   "output",
-				},
-			},
-		},
-	}
-	w := ks.Given().WithPipeline(pipeline).
-		When().
-		CreatePipelineAndWait()
-	defer w.DeletePipelineAndWait()
-	fixtures.ExpectRedisTotalKeyCount(15, 1*time.Minute)
 }
 
 func (ks *KafkaSuite) TestKafkaSink() {
@@ -140,7 +89,6 @@ func (ks *KafkaSuite) TestKafkaSink() {
 		CreatePipelineAndWait()
 	defer w.DeletePipelineAndWait()
 	fixtures.ExpectKafkaTopicCount(outputTopic, 15, 3*time.Second)
-	fixtures.ExpectRedisKeyValue("keran-key", "keran-key-PONG", 3*time.Second)
 }
 
 func (ks *KafkaSuite) TestKafkaSourceSink() {

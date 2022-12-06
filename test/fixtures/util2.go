@@ -18,7 +18,6 @@ package fixtures
 
 import (
 	"context"
-	"fmt"
 	"time"
 )
 
@@ -39,7 +38,7 @@ func SinkOutputNotContains(ctx context.Context, sinkName string, regex string, o
 	return !sinkOutputContains(ctx, sinkName, regex, o.count)
 }
 
-func SinkOutputContains(ctx context.Context, sinkName string, regex string, opts ...SinkCheckOption) bool {
+func SinkOutputContains(ctx context.Context, sinkName string, targetStr string, opts ...SinkCheckOption) bool {
 	o := defaultSinkCheckOptions()
 	for _, opt := range opts {
 		if opt != nil {
@@ -49,11 +48,11 @@ func SinkOutputContains(ctx context.Context, sinkName string, regex string, opts
 	ctx, cancel := context.WithTimeout(ctx, o.timeout)
 	defer cancel()
 
-	return sinkOutputContains(ctx, sinkName, regex, o.count)
+	return sinkOutputContains(ctx, sinkName, targetStr, o.count)
 
 }
 
-func sinkOutputContains(ctx context.Context, sinkName string, regex string, expectedCount int) bool {
+func sinkOutputContains(ctx context.Context, sinkName string, targetStr string, expectedCount int) bool {
 	if expectedCount <= 0 {
 		return true
 	}
@@ -61,11 +60,9 @@ func sinkOutputContains(ctx context.Context, sinkName string, regex string, expe
 	for {
 		select {
 		case <-ctx.Done():
-			// Timeout.
-			fmt.Printf("KeranTest - timed out.")
 			return false
 		default:
-			return GetMsgCountContains(sinkName, regex) >= expectedCount
+			return GetMsgCountContains(sinkName, targetStr) >= expectedCount
 		}
 	}
 }

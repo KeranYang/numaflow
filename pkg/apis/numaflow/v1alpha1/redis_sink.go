@@ -17,5 +17,6 @@ limitations under the License.
 package v1alpha1
 
 // RedisSink is a sink for publishing to Redis
+// TODO - add attributes like port number, credential data etc.
 type RedisSink struct {
 }

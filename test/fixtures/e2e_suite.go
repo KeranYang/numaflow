@@ -48,7 +48,7 @@ const (
 	Label          = "numaflow-e2e"
 	LabelValue     = "true"
 	ISBSvcName     = "numaflow-e2e"
-	defaultTimeout = 180 * time.Second
+	defaultTimeout = 60 * time.Second
 
 	LogSourceVertexStarted = "Start processing source messages"
 	LogSinkVertexStarted   = "Start processing sink messages"

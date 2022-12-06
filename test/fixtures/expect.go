@@ -41,12 +41,12 @@ type Expect struct {
 	kubeClient     kubernetes.Interface
 }
 
-func (t *Expect) OutputSinkContains(sinkName string, regex string, opts ...SinkCheckOption) *Expect {
+func (t *Expect) OutputSinkContains(sinkName string, targetStr string, opts ...SinkCheckOption) *Expect {
 	t.t.Helper()
 	ctx := context.Background()
-	contains := SinkOutputContains(ctx, sinkName, regex, opts...)
+	contains := SinkOutputContains(ctx, sinkName, targetStr, opts...)
 	if !contains {
-		t.t.Fatalf("Output doesn't contain regex %s", regex)
+		t.t.Fatalf("Output doesn't contain target string %s", targetStr)
 	}
 	return t
 }

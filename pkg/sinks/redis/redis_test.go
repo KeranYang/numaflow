@@ -20,6 +20,7 @@ import (
 	"testing"
 )
 
+// TODO - implement unit tests
 func TestRedisSink_Start(t *testing.T) {
 }
 

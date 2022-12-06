@@ -172,6 +172,9 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 		Status(204)
 
 	time.Sleep(time.Minute * 1)
+	// Limitation - The regex string itself has to be REST APU url compatible.
+	// Meaning it can't contain special characters like space, star, question mark etc.
+	// Otherwise, the E2E will fail with 400 Bad Request Error.
 	w.Expect().OutputSinkContains("even-sink", "888888", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
 	w.Expect().OutputSinkNotContains("even-sink", "888889", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
 	w.Expect().OutputSinkNotContains("even-sink", "not-an-integer", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))

@@ -18,10 +18,11 @@ package http_e2e
 
 import (
 	"fmt"
+	"testing"
+
 	dfv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	. "github.com/numaproj/numaflow/test/fixtures"
 	"github.com/stretchr/testify/suite"
-	"testing"
 )
 
 //go:generate kubectl apply -f testdata/http-auth-fake-secret.yaml -n numaflow-system
@@ -59,6 +60,7 @@ func (s *HTTPSuite) TestHTTPSourcePipeline() {
 		Status(204)
 	// No x-numaflow-id, expect 2 outputs
 	w.Expect().VertexPodLogContains("out", "no-id", PodLogCheckOptionWithCount(2))
+
 	HTTPExpect(s.T(), "https://localhost:8443").POST("/vertices/in").WithHeader("x-numaflow-id", "101").WithBytes([]byte("with-id")).
 		Expect().
 		Status(204)
@@ -67,6 +69,7 @@ func (s *HTTPSuite) TestHTTPSourcePipeline() {
 		Status(204)
 	// With same x-numaflow-id, expect 1 output
 	w.Expect().VertexPodLogContains("out", "with-id", PodLogCheckOptionWithCount(1))
+
 	HTTPExpect(s.T(), "https://localhost:8443").POST("/vertices/in").WithHeader("x-numaflow-id", "102").WithBytes([]byte("with-id")).
 		Expect().
 		Status(204)

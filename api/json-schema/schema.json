@@ -18678,7 +18678,7 @@
       "type": "object"
     },
     "io.numaproj.numaflow.v1alpha1.RedisSink": {
-      "description": "RedisSink is a sink for publishing to Redis",
+      "description": "RedisSink is a sink for publishing to Redis.",
       "type": "object"
     },
     "io.numaproj.numaflow.v1alpha1.Scale": {

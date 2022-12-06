@@ -20,81 +20,27 @@ import (
 	"context"
 	"fmt"
 	"github.com/go-redis/redis/v8"
-	"log"
 	"net/http"
-	"regexp"
 )
 
 func init() {
-
-	// const bootstrapServers = "kafka-broker:9092"
-	// var brokers = []string{bootstrapServers}
-
 	http.HandleFunc("/redis/get-msg-count-contains", func(w http.ResponseWriter, r *http.Request) {
 		sinkName := r.URL.Query().Get("sinkName")
-		regex := r.URL.Query().Get("regex")
+		targetStr := r.URL.Query().Get("targetStr")
 
-		_, err := regexp.Compile(regex)
-		if err != nil {
-			panic(err)
-		}
-
+		// Currently E2E tests share the same redis instance, in the future we can consider passing in redis configurations
+		// to enable REST backend sending requests to specified redis instance.
 		client := redis.NewClient(&redis.Options{
 			Addr:     "redis-cluster:6379",
 			Password: "",
 			DB:       0,
 		})
 
-		keyList, err := client.Keys(context.Background(), fmt.Sprintf("%s*%s*", sinkName, regex)).Result()
-
-		for i, key := range keyList {
-			fmt.Printf("KeranTest - index: %d, key: %s\n", i, key)
-		}
-
+		keyList, err := client.Keys(context.Background(), fmt.Sprintf("%s*%s*", sinkName, targetStr)).Result()
 		if err != nil {
 			panic(err)
 		}
 		w.WriteHeader(200)
 		_, _ = w.Write([]byte(fmt.Sprint(len(keyList))))
-	})
-
-	http.HandleFunc("/redis/get-string", func(w http.ResponseWriter, r *http.Request) {
-		key := r.URL.Query().Get("key")
-
-		client := redis.NewClient(&redis.Options{
-			Addr:     "redis-cluster:6379",
-			Password: "",
-			DB:       0,
-		})
-
-		pong, err := client.Ping(context.Background()).Result()
-
-		if err != nil {
-			log.Fatalf("KeranTest - error %v", err)
-		}
-
-		value := key + "-" + pong
-		w.WriteHeader(200)
-		_, _ = w.Write([]byte(fmt.Sprint(value)))
-	})
-
-	http.HandleFunc("/redis/get-total-key-count", func(w http.ResponseWriter, r *http.Request) {
-		client := redis.NewClient(&redis.Options{
-			Addr:     "redis-cluster:6379",
-			Password: "",
-			DB:       0,
-		})
-
-		keyList, err := client.Keys(context.Background(), "*").Result()
-
-		log.Printf("KeranTest - error got key list, size %d", len(keyList))
-		if err != nil {
-			log.Fatalf("KeranTest - error %v", err)
-		}
-
-		count := len(keyList)
-		log.Printf("KeranTest - got %d keys.", count)
-		w.WriteHeader(200)
-		_, _ = w.Write([]byte(fmt.Sprint(count)))
 	})
 }
