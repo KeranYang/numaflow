@@ -18,7 +18,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	dfv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,36 +36,41 @@ func init() {
 
 		restConfig, err := rest.InClusterConfig()
 		if err != nil {
-			w.Write([]byte(err.Error()))
-			panic(err)
+			w.WriteHeader(500)
+			_, _ = w.Write([]byte(err.Error()))
+			// panic(err)
 		}
 
 		kubeClient, err := kubernetes.NewForConfig(restConfig)
 		if err != nil {
-			w.Write([]byte(err.Error()))
-			panic(err)
+			w.WriteHeader(500)
+			_, _ = w.Write([]byte(err.Error()))
+			// panic(err)
 		}
 
 		labelSelector := fmt.Sprintf("%s=%s,%s=%s", dfv1.KeyPipelineName, pName, dfv1.KeyVertexName, vertexName)
 		ctx := context.Background()
 		podList, err := kubeClient.CoreV1().Pods("numaflow-system").List(ctx, metav1.ListOptions{LabelSelector: labelSelector, FieldSelector: "status.phase=Running"})
 		if err != nil {
-			w.Write([]byte(err.Error()))
-			panic(err)
+			w.WriteHeader(500)
+			_, _ = w.Write([]byte(err.Error()))
+			// panic(err)
 		}
 		pod := podList.Items[0]
 		podIp := pod.Status.PodIP
 		// Send the msg to the input vertex.
 		resp, err := http.Post("https://"+podIp+":8443/vertices/in", "application/json", strings.NewReader(msg))
 		if err != nil {
-			w.Write([]byte(err.Error()))
-			panic(err)
+			w.WriteHeader(500)
+			_, _ = w.Write([]byte(err.Error()))
+			// panic(err)
 		}
 
 		defer resp.Body.Close()
 
 		if resp.StatusCode >= 300 {
-			panic(errors.New(resp.Status))
+			w.WriteHeader(resp.StatusCode)
+			return
 		}
 		w.WriteHeader(201)
 	})
