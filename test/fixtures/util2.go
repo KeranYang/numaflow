@@ -18,6 +18,7 @@ package fixtures
 
 import (
 	"context"
+	"log"
 	"time"
 )
 
@@ -60,6 +61,7 @@ func sinkOutputContains(ctx context.Context, sinkName string, targetStr string, 
 	for {
 		select {
 		case <-ctx.Done():
+			log.Fatal("KeranTest - sinkOutputContains timed out.")
 			return false
 		default:
 			return GetMsgCountContains(sinkName, targetStr) >= expectedCount

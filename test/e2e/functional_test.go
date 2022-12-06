@@ -137,7 +137,7 @@ func (s *FunctionalSuite) TestFiltering() {
 		Expect().
 		Status(204)
 
-	time.Sleep(time.Minute * 1)
+	time.Sleep(time.Minute * 2)
 	w.Expect().OutputSinkContains("out", "expect3", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
 	w.Expect().OutputSinkNotContains("out", "expect0", SinkCheckOptionWithTimeout(2*time.Second))
 	w.Expect().OutputSinkNotContains("out", "expect1", SinkCheckOptionWithTimeout(2*time.Second))
@@ -171,8 +171,7 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 		Expect().
 		Status(204)
 
-	// Is one minute long enough? Let me test it for 10 times.
-	time.Sleep(time.Minute * 1)
+	time.Sleep(time.Minute * 2)
 	// Limitation - The regex string itself has to be REST APU url compatible.
 	// Meaning it can't contain special characters like space, star, question mark etc.
 	// Otherwise, the E2E will fail with 400 Bad Request Error.
