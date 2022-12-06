@@ -171,6 +171,7 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 		Expect().
 		Status(204)
 
+	// Is one minute long enough? Let me test it for 10 times.
 	time.Sleep(time.Minute * 1)
 	// Limitation - The regex string itself has to be REST APU url compatible.
 	// Meaning it can't contain special characters like space, star, question mark etc.
