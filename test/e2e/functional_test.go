@@ -65,13 +65,14 @@ func (s *FunctionalSuite) TestFiltering() {
 		Expect().
 		Status(204)
 
-	time.Sleep(time.Minute * 2)
+	time.Sleep(time.Minute * 1)
 	w.Expect().OutputSinkContains("out", "expect3", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
 	w.Expect().OutputSinkNotContains("out", "expect0", SinkCheckOptionWithTimeout(2*time.Second))
 	w.Expect().OutputSinkNotContains("out", "expect1", SinkCheckOptionWithTimeout(2*time.Second))
 	w.Expect().OutputSinkNotContains("out", "expect2", SinkCheckOptionWithTimeout(2*time.Second))
 }
 
+/*
 func (s *FunctionalSuite) TestConditionalForwarding() {
 	w := s.Given().Pipeline("@testdata/even-odd.yaml").
 		When().
@@ -115,6 +116,7 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 	w.Expect().OutputSinkContains("number-sink", "888889", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
 	w.Expect().OutputSinkNotContains("number-sink", "not-an-integer", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
 }
+*/
 
 func TestFunctionalSuite(t *testing.T) {
 	suite.Run(t, new(FunctionalSuite))
