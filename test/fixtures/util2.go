@@ -57,14 +57,16 @@ func sinkOutputContains(ctx context.Context, sinkName string, targetStr string, 
 	if expectedCount <= 0 {
 		return true
 	}
-
+	log.Println("KeranTest - I am here.")
 	for {
 		select {
 		case <-ctx.Done():
-			log.Fatal("KeranTest - sinkOutputContains timed out.")
+			log.Println("KeranTest - sinkOutputContains timed out.")
 			return false
 		default:
-			return GetMsgCountContains(sinkName, targetStr) >= expectedCount
+			contains := GetMsgCountContains(sinkName, targetStr) >= expectedCount
+			log.Printf("KeranTest - calling the API returns me %t, in terms of count being as expected.\n", contains)
+			return contains
 		}
 	}
 }
