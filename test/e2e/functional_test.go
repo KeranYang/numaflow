@@ -49,7 +49,7 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 	println("KeranTest")
 	println(w.GetOnePodIp("in"))
 
-	w.SendMessageTo(w.GetOnePodIp("in"), "888888")
+	w.SendMessageTo("even-odd", "in", "888888")
 
 	// HTTPExpect(s.T(), "https://localhost:8443").POST("/vertices/in").WithBytes([]byte("888888")).
 	//	Expect().

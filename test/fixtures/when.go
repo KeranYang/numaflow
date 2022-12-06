@@ -59,8 +59,8 @@ func (w *When) GetOnePodIp(vertexName string) string {
 	return pod.Status.PodIP
 }
 
-func (w *When) SendMessageTo(ip string, msg string) string {
-	return SendMessageToPod(ip, msg)
+func (w *When) SendMessageTo(pipelineName string, vertexName string, msg string) string {
+	return SendMessageToPod(pipelineName, vertexName, msg)
 }
 
 func (w *When) CreateISBSvc() *When {

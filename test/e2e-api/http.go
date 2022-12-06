@@ -17,16 +17,57 @@ limitations under the License.
 package main
 
 import (
-	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	dfv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"net/http"
+	"strings"
 )
 
 func init() {
+	// TODO - can try using POST instead of get - see kafka example.
 	http.HandleFunc("/http/send-message", func(w http.ResponseWriter, r *http.Request) {
+		pName := r.URL.Query().Get("pName")
+		vertexName := r.URL.Query().Get("vName")
 		msg := r.URL.Query().Get("msg")
-		podIp := r.URL.Query().Get("ip")
+
+		restConfig, err := rest.InClusterConfig()
+		if err != nil {
+			w.Write([]byte(err.Error()))
+			panic(err)
+		}
+
+		kubeClient, err := kubernetes.NewForConfig(restConfig)
+		if err != nil {
+			w.Write([]byte(err.Error()))
+			panic(err)
+		}
+
+		labelSelector := fmt.Sprintf("%s=%s,%s=%s", dfv1.KeyPipelineName, pName, dfv1.KeyVertexName, vertexName)
+		ctx := context.Background()
+		podList, err := kubeClient.CoreV1().Pods("numaflow-system").List(ctx, metav1.ListOptions{LabelSelector: labelSelector, FieldSelector: "status.phase=Running"})
+		if err != nil {
+			w.Write([]byte(err.Error()))
+			panic(err)
+		}
+		pod := podList.Items[0]
+		podIp := pod.Status.PodIP
 		// Send the msg to the input vertex.
-		http.Post("https://"+podIp+":8443/vertices/in", "text/plain", bytes.NewBuffer([]byte(msg)))
+		resp, err := http.Post("https://"+podIp+":8443/vertices/in", "application/json", strings.NewReader(msg))
+		if err != nil {
+			w.Write([]byte(err.Error()))
+			panic(err)
+		}
+
+		defer resp.Body.Close()
+
+		if resp.StatusCode >= 300 {
+			panic(errors.New(resp.Status))
+		}
 		w.WriteHeader(201)
 	})
 }

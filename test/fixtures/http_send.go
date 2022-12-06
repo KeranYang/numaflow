@@ -20,8 +20,8 @@ import (
 	"log"
 )
 
-func SendMessageToPod(pIp string, msg string) string {
-	log.Printf("Sending msg %s to pod ip %s\n", msg, pIp)
-	InvokeE2EAPI("/http/send-message?ip=%s&msg=%s", pIp, msg)
+func SendMessageToPod(pipelineName string, vertexName string, msg string) string {
+	log.Printf("Sending msg %s to pipeline %s, vertex %s\n", msg, pipelineName, vertexName)
+	InvokeE2EAPI("/http/send-message?pName=%s&vName=%s&msg=%s", pipelineName, vertexName, msg)
 	return msg
 }
