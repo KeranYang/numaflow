@@ -17,7 +17,6 @@ limitations under the License.
 package e2e
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
@@ -66,8 +65,7 @@ func (s *FunctionalSuite) TestFiltering() {
 		Expect().
 		Status(204)
 
-	fmt.Print("Start sleeping 1m...")
-	time.Sleep(time.Minute * 1)
+	time.Sleep(time.Second * 10)
 	w.Expect().OutputSinkContains("out", "expect3", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
 	w.Expect().OutputSinkNotContains("out", "expect0", SinkCheckOptionWithTimeout(2*time.Second))
 	w.Expect().OutputSinkNotContains("out", "expect1", SinkCheckOptionWithTimeout(2*time.Second))
@@ -101,7 +99,8 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 		Expect().
 		Status(204)
 
-	time.Sleep(time.Minute * 1)
+	time.Sleep(time.Second * 10)
+
 	// Limitation - The regex string itself has to be REST APU url compatible.
 	// Meaning it can't contain special characters like space, star, question mark etc.
 	// Otherwise, the E2E will fail with 400 Bad Request Error.
