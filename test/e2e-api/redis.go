@@ -38,8 +38,11 @@ func init() {
 
 		keyList, err := client.Keys(context.Background(), fmt.Sprintf("%s*%s*", sinkName, targetStr)).Result()
 		if err != nil {
+			fmt.Printf("KeranTest - panic err %v", err)
 			panic(err)
 		}
+
+		fmt.Printf("KeranTest - got key list %v", keyList)
 		w.WriteHeader(200)
 		_, _ = w.Write([]byte(fmt.Sprint(len(keyList))))
 	})

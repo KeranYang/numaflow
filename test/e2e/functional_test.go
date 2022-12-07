@@ -17,6 +17,7 @@ limitations under the License.
 package e2e
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -65,6 +66,7 @@ func (s *FunctionalSuite) TestFiltering() {
 		Expect().
 		Status(204)
 
+	fmt.Print("Start sleeping 1m...")
 	time.Sleep(time.Minute * 1)
 	w.Expect().OutputSinkContains("out", "expect3", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
 	w.Expect().OutputSinkNotContains("out", "expect0", SinkCheckOptionWithTimeout(2*time.Second))

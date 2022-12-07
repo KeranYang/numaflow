@@ -22,6 +22,7 @@ import (
 )
 
 func GetMsgCountContains(sinkName string, targetStr string) int {
+	println("KeranTest")
 	str := InvokeE2EAPI("/redis/get-msg-count-contains?sinkName=%s&targetStr=%s", sinkName, targetStr)
 	count, err := strconv.Atoi(str)
 	if err != nil {

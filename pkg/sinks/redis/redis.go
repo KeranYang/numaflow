@@ -24,7 +24,7 @@ import (
 	"github.com/numaproj/numaflow/pkg/udf/applier"
 	"github.com/numaproj/numaflow/pkg/watermark/fetch"
 	"github.com/numaproj/numaflow/pkg/watermark/publish"
-	"strconv"
+	"log"
 	"time"
 
 	dfv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
@@ -99,11 +99,21 @@ func (rs *RedisSink) IsFull() bool {
 // Write writes to the redis sink.
 func (rs *RedisSink) Write(context context.Context, messages []isb.Message) ([]isb.Offset, []error) {
 	// TODO - redis options can be passed in from RedisSink attributes, as opposed to being hardcoded here.
-	client := redis.NewClient(&redis.Options{
-		Addr:     "redis-cluster:6379",
-		Password: "",
-		DB:       0,
+	client := redis.NewClusterClient(&redis.ClusterOptions{
+		Addrs: []string{"redis-cluster:6379"},
 	})
+
+	/*
+		redis.NewClient(&redis.Options{
+			Addr:     "redis-cluster:6379",
+			Password: "",
+			DB:       0,
+		})
+	*/
+
+	pong, err := client.Ping(context).Result()
+	log.Println("Testing if successfully connected to redis server.")
+	log.Println(pong, err)
 
 	// Our E2E tests time out after 20 minutes. Set redis message TTL to the same.
 	const msgTTL = 20 * time.Minute
@@ -112,17 +122,28 @@ func (rs *RedisSink) Write(context context.Context, messages []isb.Message) ([]i
 	// as vertex name concatenated with message payload.
 	// The value is the no. of occurrence of the key.
 	for _, msg := range messages {
+		log.Println(" Payload - ", string(msg.Payload))
 		key := fmt.Sprintf("%s-%s", rs.name, string(msg.Payload))
-		entry, err := client.Get(context, key).Result()
+
+		err := client.Set(context, key, 1, msgTTL).Err()
 		if err != nil {
-			client.Set(context, key, 1, msgTTL)
+			log.Println(" Set Error - ", err)
 		} else {
-			count, err := strconv.Atoi(entry)
-			if err != nil {
-				fmt.Printf("Atoi converting error %v", err)
-			}
-			client.Set(context, key, count+1, msgTTL)
+			log.Printf("Added key %s\n", key)
 		}
+
+		/*
+			entry, err := client.Get(context, key).Result()
+			if err != nil {
+				client.Set(context, key, 1, msgTTL)
+			} else {
+				count, err := strconv.Atoi(entry)
+				if err != nil {
+					fmt.Printf("Atoi converting error %v", err)
+				}
+				client.Set(context, key, count+1, msgTTL)
+			}
+		*/
 	}
 
 	sinkWriteCount.With(map[string]string{metricspkg.LabelVertex: rs.name, metricspkg.LabelPipeline: rs.pipelineName}).Add(float64(len(messages)))
