@@ -74,7 +74,6 @@ func (s *FunctionalSuite) TestFiltering() {
 	w.Expect().OutputSinkNotContains("out", "expect2", SinkCheckOptionWithTimeout(2*time.Second))
 }
 
-/*
 func (s *FunctionalSuite) TestConditionalForwarding() {
 	w := s.Given().Pipeline("@testdata/even-odd.yaml").
 		When().
@@ -102,7 +101,7 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 		Expect().
 		Status(204)
 
-	time.Sleep(time.Minute * 2)
+	time.Sleep(time.Minute * 1)
 	// Limitation - The regex string itself has to be REST APU url compatible.
 	// Meaning it can't contain special characters like space, star, question mark etc.
 	// Otherwise, the E2E will fail with 400 Bad Request Error.
@@ -118,7 +117,6 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 	w.Expect().OutputSinkContains("number-sink", "888889", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
 	w.Expect().OutputSinkNotContains("number-sink", "not-an-integer", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
 }
-*/
 
 func TestFunctionalSuite(t *testing.T) {
 	suite.Run(t, new(FunctionalSuite))
