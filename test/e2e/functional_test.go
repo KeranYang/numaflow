@@ -62,6 +62,7 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 		Expect().
 		Status(204)
 
+	// time.Sleep(time.Minute * 5)
 	w.Expect().VertexPodLogContains("even-sink", "888888")
 	w.Expect().VertexPodLogNotContains("even-sink", "888889", PodLogCheckOptionWithTimeout(2*time.Second))
 	w.Expect().VertexPodLogNotContains("even-sink", "not an integer", PodLogCheckOptionWithTimeout(2*time.Second))

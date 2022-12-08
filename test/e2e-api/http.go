@@ -18,10 +18,12 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"time"
 )
 
 func init() {
@@ -36,6 +38,30 @@ func init() {
 			panic(err)
 		}
 
+		log.Printf("Sending request to %s", fmt.Sprintf("https://%s-%s.numaflow-system.svc.cluster.local:8443/vertices/%s", pName, vertexName, vertexName))
+		// https://even-odd-in.numaflow-system.svc.cluster.local:8443/vertices/in
+
+		httpClient := &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			},
+			Timeout: time.Second * 3,
+		}
+
+		response, err := httpClient.Post(fmt.Sprintf("https://%s-%s:8443/vertices/%s",
+			pName, vertexName, vertexName), "application/json", bytes.NewBuffer(buf))
+
+		/*
+			response, err := http.Post(
+				fmt.Sprintf("https://%s-%s:8443/vertices/%s",
+					pName, vertexName, vertexName), "application/json", bytes.NewBuffer(buf))
+		*/
+
+		if err != nil {
+			panic(err)
+		}
+		log.Printf("KeranTest - post response: %v", *response)
+
 		/*
 			restConfig, err := rest.InClusterConfig()
 			if err != nil {
@@ -48,6 +74,7 @@ func init() {
 			}
 
 			labelSelector := fmt.Sprintf("%s=%s,%s=%s", dfv1.KeyPipelineName, pName, dfv1.KeyVertexName, vertexName)
+
 			log.Printf("labelSelector is %s", labelSelector)
 
 			ctx := context.Background()
@@ -63,20 +90,9 @@ func init() {
 			podIp := pod.Status.PodIP
 			log.Printf("podIP is %s", podIp)
 			// Send the msg to the input vertex.
-			// _, err = http.Post("http://"+podIp+":8443/vertices/in", "application/json", bytes.NewBuffer(buf))
+			// _, err = https.Post("http://"+podIp+":8443/vertices/in", "application/json", bytes.NewBuffer(buf))
 
 		*/
-
-		log.Printf("Sending request to %s", fmt.Sprintf("http://%s-%s.numaflow-system.svc.cluster.local:8443/vertices/%s", pName, vertexName, vertexName))
-		// http://even-odd-in.numaflow-system.svc.cluster.local:8443/vertices/in
-
-		response, err := http.Post(
-			fmt.Sprintf("http://%s-%s.numaflow-system.svc.cluster.local:8443/vertices/%s",
-				pName, vertexName, vertexName), "application/json", bytes.NewBuffer(buf))
-		if err != nil {
-			panic(err)
-		}
-		log.Printf("KeranTest - post response: %v", *response)
 
 	})
 }
