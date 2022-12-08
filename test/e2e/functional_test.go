@@ -20,7 +20,6 @@ import (
 	"testing"
 	"time"
 
-	dfv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	. "github.com/numaproj/numaflow/test/fixtures"
 	"github.com/stretchr/testify/suite"
 )
@@ -33,8 +32,8 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 	w := s.Given().Pipeline("@testdata/even-odd.yaml").
 		When().
 		CreatePipelineAndWait()
-
 	defer w.DeletePipelineAndWait()
+	pipelineName := "even-odd"
 
 	w.Expect().
 		VertexPodsRunning().
@@ -43,26 +42,11 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 		VertexPodLogContains("even-sink", LogSinkVertexStarted).
 		VertexPodLogContains("odd-sink", LogSinkVertexStarted).
 		VertexPodLogContains("number-sink", LogSinkVertexStarted)
-	defer w.VertexPodPortForward("in", 8443, dfv1.VertexHTTPSPort).
-		TerminateAllPodPortForwards()
 
-	println("KeranTest")
-	println(w.GetOnePodIp("in"))
+	w.SendMessageTo(pipelineName, "in", []byte(`888888`))
+	w.SendMessageTo(pipelineName, "in", []byte(`888889`))
+	w.SendMessageTo(pipelineName, "in", []byte(`not an integer`))
 
-	w.SendMessageTo("even-odd", "in", "888888")
-
-	// HTTPExpect(s.T(), "https://localhost:8443").POST("/vertices/in").WithBytes([]byte("888888")).
-	//	Expect().
-	//	Status(204)
-
-	HTTPExpect(s.T(), "https://localhost:8443").POST("/vertices/in").WithBytes([]byte("888889")).
-		Expect().
-		Status(204)
-	HTTPExpect(s.T(), "https://localhost:8443").POST("/vertices/in").WithBytes([]byte("not an integer")).
-		Expect().
-		Status(204)
-
-	// time.Sleep(time.Minute * 5)
 	w.Expect().VertexPodLogContains("even-sink", "888888")
 	w.Expect().VertexPodLogNotContains("even-sink", "888889", PodLogCheckOptionWithTimeout(2*time.Second))
 	w.Expect().VertexPodLogNotContains("even-sink", "not an integer", PodLogCheckOptionWithTimeout(2*time.Second))
