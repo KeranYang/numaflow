@@ -42,25 +42,8 @@ type When struct {
 	portForwarderStopChannels map[string]chan struct{}
 }
 
-func (w *When) GetOnePodIp(vertexName string) string {
-	w.t.Helper()
-
-	labelSelector := fmt.Sprintf("%s=%s,%s=%s", dfv1.KeyPipelineName, w.pipeline.Name, dfv1.KeyVertexName, vertexName)
-	ctx := context.Background()
-	podList, err := w.kubeClient.CoreV1().Pods(Namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector, FieldSelector: "status.phase=Running"})
-	if err != nil {
-		w.t.Fatalf("Error getting vertex pod name: %v", err)
-	}
-
-	pod := podList.Items[0]
-	w.t.Logf("Vertex POD name: %s", pod.GetName())
-	w.t.Logf("KeranTest - Vertex POD ip: %s", pod.Status.PodIP)
-
-	return pod.Status.PodIP
-}
-
-func (w *When) SendMessageTo(pipelineName string, vertexName string, msg string) string {
-	return SendMessageToPod(pipelineName, vertexName, msg)
+func (w *When) SendMessageTo(pipelineName string, vertexName string, msg []byte) {
+	SendMessageTo(pipelineName, vertexName, msg)
 }
 
 func (w *When) CreateISBSvc() *When {

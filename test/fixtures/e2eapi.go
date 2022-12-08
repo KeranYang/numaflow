@@ -23,6 +23,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 )
 
 func InvokeE2EAPI(format string, args ...interface{}) string {
@@ -52,7 +53,10 @@ func InvokeE2EAPI(format string, args ...interface{}) string {
 func InvokeE2EAPIPOST(format string, body string, args ...interface{}) string {
 	url := "http://127.0.0.1:8378" + fmt.Sprintf(format, args...)
 	log.Printf("Post %s\n", url)
-	resp, err := http.Post(url, "application/json", strings.NewReader(body))
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+	resp, err := client.Post(url, "application/json", strings.NewReader(body))
 	if err != nil {
 		panic(err)
 	}
