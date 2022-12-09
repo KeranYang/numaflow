@@ -1,5 +1,3 @@
-//go:build test
-
 /*
 Copyright 2022 The Numaproj Authors.
 
@@ -31,6 +29,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
+
+//go:generate kubectl -n numaflow-system delete statefulset redis-cluster --ignore-not-found=true
+//go:generate kubectl apply -k ../../config/apps/redis -n numaflow-system
+// Wait for redis cluster to come up
+//go:generate sleep 120
 
 type FunctionalSuite struct {
 	E2ESuite
@@ -124,13 +127,13 @@ func (s *FunctionalSuite) TestFiltering() {
 	w.SendMessageTo(pipelineName, "in", []byte(`{"id": 80, "msg": "hello", "expect2": "fail", "desc": "A bad example"}`))
 	w.SendMessageTo(pipelineName, "in", []byte(`{"id": 80, "msg": "hello", "expect3": "succeed", "desc": "A good example"}`))
 
-	// After sending message, wait 5 seconds for data to reach sink vertex.
-	// Don't wait too long, which will cause sink vertex to scale down to 0 pod.
-	// Once we switch from log to output data verification, we can wait longer.
-	time.Sleep(time.Second * 5)
+	// After sending message, wait 10 seconds for data to reach sink vertex.
+	time.Sleep(time.Second * 10)
 
-	w.Expect().VertexPodLogContains("out", "expect3")
-	w.Expect().VertexPodLogNotContains("out", "expect[0-2]", PodLogCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkContains("out", "expect3", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkNotContains("out", "expect0", SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkNotContains("out", "expect1", SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkNotContains("out", "expect2", SinkCheckOptionWithTimeout(2*time.Second))
 }
 
 func (s *FunctionalSuite) TestConditionalForwarding() {
@@ -153,24 +156,25 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 
 	w.SendMessageTo(pipelineName, "in", []byte(`888888`))
 	w.SendMessageTo(pipelineName, "in", []byte(`888889`))
-	w.SendMessageTo(pipelineName, "in", []byte(`not an integer`))
+	w.SendMessageTo(pipelineName, "in", []byte(`not-an-integer`))
 
-	// After sending message, wait 5 seconds for data to reach sink vertex.
-	// Don't wait too long, which will cause sink vertex to scale down to 0 pod.
-	// Once we switch from log to output data verification, we can wait longer.
-	time.Sleep(time.Second * 5)
+	// After sending message, wait 10 seconds for data to reach sink vertex.
+	time.Sleep(time.Second * 10)
 
-	w.Expect().VertexPodLogContains("even-sink", "888888")
-	w.Expect().VertexPodLogNotContains("even-sink", "888889", PodLogCheckOptionWithTimeout(2*time.Second))
-	w.Expect().VertexPodLogNotContains("even-sink", "not an integer", PodLogCheckOptionWithTimeout(2*time.Second))
+	// Limitation - The regex string itself has to be REST APU url compatible.
+	// Meaning it can't contain special characters like space, star, question mark etc.
+	// Otherwise, the E2E will fail with 400 Bad Request Error.
+	w.Expect().OutputSinkContains("even-sink", "888888", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkNotContains("even-sink", "888889", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkNotContains("even-sink", "not-an-integer", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
 
-	w.Expect().VertexPodLogContains("odd-sink", "888889")
-	w.Expect().VertexPodLogNotContains("odd-sink", "888888", PodLogCheckOptionWithTimeout(2*time.Second))
-	w.Expect().VertexPodLogNotContains("odd-sink", "not an integer", PodLogCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkContains("odd-sink", "888889", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkNotContains("odd-sink", "888888", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkNotContains("odd-sink", "not-an-integer", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
 
-	w.Expect().VertexPodLogContains("number-sink", "888888")
-	w.Expect().VertexPodLogContains("number-sink", "888889")
-	w.Expect().VertexPodLogNotContains("number-sink", "not an integer", PodLogCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkContains("number-sink", "888888", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkContains("number-sink", "888889", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkNotContains("number-sink", "not-an-integer", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
 }
 
 func (s *FunctionalSuite) TestWatermarkEnabled() {
