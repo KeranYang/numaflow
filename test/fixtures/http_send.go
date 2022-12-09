@@ -20,6 +20,7 @@ import (
 	"log"
 )
 
+// SendMessageTo sends msg to a http source vertex.
 func SendMessageTo(pipelineName string, vertexName string, msg []byte) {
 	log.Printf("Sending msg %v to pipeline %s, vertex %s\n", msg, pipelineName, vertexName)
 	InvokeE2EAPIPOST("/http/send-message?pipeline=%s&vertex=%s", string(msg[:]), pipelineName, vertexName)

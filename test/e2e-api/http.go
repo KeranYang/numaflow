@@ -42,7 +42,10 @@ func init() {
 			},
 		}
 
-		// TODO - It's observed that post doesn't always succeed (sometimes connection refused error), surround it by retry.
+		// It's observed that POST sometimes fails with connection refused error.
+		// It's because the ClusterIP is not yet ready when E2E test case sends the request.
+		// Currently, the solution is to sleep for 1 minute in the test before POST.
+		// TODO - Consider surrounding it with retry.
 		_, err = httpClient.Post(fmt.Sprintf("https://%s-%s:8443/vertices/%s", pName, vName, vName), "application/json", bytes.NewBuffer(buf))
 		if err != nil {
 			w.WriteHeader(500)

@@ -53,6 +53,7 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 
 	// After sending message, wait 5 seconds for data to reach sink vertex.
 	// Don't wait too long (1 min) which will cause sink vertex to scale down to 0 pods.
+	// Once we switch to using output verification, we can wait longer.
 	time.Sleep(time.Second * 5)
 
 	w.Expect().VertexPodLogContains("even-sink", "888888")

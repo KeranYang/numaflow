@@ -21,7 +21,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -133,7 +132,6 @@ func New(vertexInstance *dfv1.VertexInstance, writers []isb.BufferWriter, fetchW
 			return
 		}
 		msg, err := io.ReadAll(r.Body)
-		log.Printf("KeranTest - Received msg %v\n", msg)
 		_ = r.Body.Close()
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
