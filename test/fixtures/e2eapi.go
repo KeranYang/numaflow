@@ -54,7 +54,7 @@ func InvokeE2EAPIPOST(format string, body string, args ...interface{}) string {
 	log.Printf("Post %s\n", url)
 	resp, err := http.Post(url, "application/json", strings.NewReader(body))
 	if err != nil {
-		log.Printf("KeranTest - error %v", *resp)
+		log.Printf("KeranTest - response %v", resp)
 		panic(err)
 	}
 	log.Printf("> %s\n", resp.Status)
