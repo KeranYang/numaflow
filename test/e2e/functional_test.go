@@ -108,6 +108,7 @@ func (s *FunctionalSuite) TestFiltering() {
 		When().
 		CreatePipelineAndWait()
 	defer w.DeletePipelineAndWait()
+	pipelineName := "filtering"
 
 	w.Expect().
 		VertexPodsRunning().
@@ -115,24 +116,18 @@ func (s *FunctionalSuite) TestFiltering() {
 		VertexPodLogContains("p1", LogUDFVertexStarted, PodLogCheckOptionWithContainer("numa")).
 		VertexPodLogContains("out", LogSinkVertexStarted)
 
-	defer w.VertexPodPortForward("in", 8443, dfv1.VertexHTTPSPort).
-		TerminateAllPodPortForwards()
+	// To ensure the source vertex http service is up and running and ready to receive POST requests.
+	time.Sleep(time.Minute * 1)
 
-	HTTPExpect(s.T(), "https://localhost:8443").POST("/vertices/in").WithBytes([]byte(`{"id": 180, "msg": "hello", "expect0": "fail", "desc": "A bad example"}`)).
-		Expect().
-		Status(204)
+	w.SendMessageTo(pipelineName, "in", []byte(`{"id": 180, "msg": "hello", "expect0": "fail", "desc": "A bad example"}`))
+	w.SendMessageTo(pipelineName, "in", []byte(`{"id": 80, "msg": "hello1", "expect1": "fail", "desc": "A bad example"}`))
+	w.SendMessageTo(pipelineName, "in", []byte(`{"id": 80, "msg": "hello", "expect2": "fail", "desc": "A bad example"}`))
+	w.SendMessageTo(pipelineName, "in", []byte(`{"id": 80, "msg": "hello", "expect3": "succeed", "desc": "A good example"}`))
 
-	HTTPExpect(s.T(), "https://localhost:8443").POST("/vertices/in").WithBytes([]byte(`{"id": 80, "msg": "hello1", "expect1": "fail", "desc": "A bad example"}`)).
-		Expect().
-		Status(204)
-
-	HTTPExpect(s.T(), "https://localhost:8443").POST("/vertices/in").WithBytes([]byte(`{"id": 80, "msg": "hello", "expect2": "fail", "desc": "A bad example"}`)).
-		Expect().
-		Status(204)
-
-	HTTPExpect(s.T(), "https://localhost:8443").POST("/vertices/in").WithBytes([]byte(`{"id": 80, "msg": "hello", "expect3": "succeed", "desc": "A good example"}`)).
-		Expect().
-		Status(204)
+	// After sending message, wait 5 seconds for data to reach sink vertex.
+	// Don't wait too long, which will cause sink vertex to scale down to 0 pod.
+	// Once we switch from log to output data verification, we can wait longer.
+	time.Sleep(time.Second * 5)
 
 	w.Expect().VertexPodLogContains("out", "expect3")
 	w.Expect().VertexPodLogNotContains("out", "expect[0-2]", PodLogCheckOptionWithTimeout(2*time.Second))
@@ -142,8 +137,8 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 	w := s.Given().Pipeline("@testdata/even-odd.yaml").
 		When().
 		CreatePipelineAndWait()
-
 	defer w.DeletePipelineAndWait()
+	pipelineName := "even-odd"
 
 	w.Expect().
 		VertexPodsRunning().
@@ -152,18 +147,18 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 		VertexPodLogContains("even-sink", LogSinkVertexStarted).
 		VertexPodLogContains("odd-sink", LogSinkVertexStarted).
 		VertexPodLogContains("number-sink", LogSinkVertexStarted)
-	defer w.VertexPodPortForward("in", 8443, dfv1.VertexHTTPSPort).
-		TerminateAllPodPortForwards()
 
-	HTTPExpect(s.T(), "https://localhost:8443").POST("/vertices/in").WithBytes([]byte("888888")).
-		Expect().
-		Status(204)
-	HTTPExpect(s.T(), "https://localhost:8443").POST("/vertices/in").WithBytes([]byte("888889")).
-		Expect().
-		Status(204)
-	HTTPExpect(s.T(), "https://localhost:8443").POST("/vertices/in").WithBytes([]byte("not an integer")).
-		Expect().
-		Status(204)
+	// To ensure the source vertex http service is up and running and ready to receive POST requests.
+	time.Sleep(time.Minute * 1)
+
+	w.SendMessageTo(pipelineName, "in", []byte(`888888`))
+	w.SendMessageTo(pipelineName, "in", []byte(`888889`))
+	w.SendMessageTo(pipelineName, "in", []byte(`not an integer`))
+
+	// After sending message, wait 5 seconds for data to reach sink vertex.
+	// Don't wait too long, which will cause sink vertex to scale down to 0 pod.
+	// Once we switch from log to output data verification, we can wait longer.
+	time.Sleep(time.Second * 5)
 
 	w.Expect().VertexPodLogContains("even-sink", "888888")
 	w.Expect().VertexPodLogNotContains("even-sink", "888889", PodLogCheckOptionWithTimeout(2*time.Second))
