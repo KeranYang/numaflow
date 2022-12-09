@@ -43,6 +43,9 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 		VertexPodLogContains("odd-sink", LogSinkVertexStarted).
 		VertexPodLogContains("number-sink", LogSinkVertexStarted)
 
+	// does sleep help?
+	time.Sleep(time.Minute * 2)
+
 	w.SendMessageTo(pipelineName, "in", []byte(`888888`))
 	w.SendMessageTo(pipelineName, "in", []byte(`888889`))
 	w.SendMessageTo(pipelineName, "in", []byte(`not an integer`))
