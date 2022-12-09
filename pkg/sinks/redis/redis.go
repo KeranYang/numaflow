@@ -90,9 +90,8 @@ func (rs *RedisSink) GetName() string {
 	return rs.name
 }
 
-// IsFull returns whether sink is full, which is never true.
+// IsFull returns whether sink is full.
 func (rs *RedisSink) IsFull() bool {
-	// printing can never be full
 	return false
 }
 
@@ -103,47 +102,21 @@ func (rs *RedisSink) Write(context context.Context, messages []isb.Message) ([]i
 		Addrs: []string{"redis-cluster:6379"},
 	})
 
-	/*
-		redis.NewClient(&redis.Options{
-			Addr:     "redis-cluster:6379",
-			Password: "",
-			DB:       0,
-		})
-	*/
-
-	pong, err := client.Ping(context).Result()
-	log.Println("Testing if successfully connected to redis server.")
-	log.Println(pong, err)
-
 	// Our E2E tests time out after 20 minutes. Set redis message TTL to the same.
 	const msgTTL = 20 * time.Minute
 
 	// To serve various E2E test cases, the redis sink is written in a way that it constructs the key
 	// as vertex name concatenated with message payload.
-	// The value is the no. of occurrence of the key.
+	// A dummy value 1 is set for every entry.
 	for _, msg := range messages {
-		log.Println(" Payload - ", string(msg.Payload))
 		key := fmt.Sprintf("%s-%s", rs.name, string(msg.Payload))
-
 		err := client.Set(context, key, 1, msgTTL).Err()
+
 		if err != nil {
 			log.Println(" Set Error - ", err)
 		} else {
 			log.Printf("Added key %s\n", key)
 		}
-
-		/*
-			entry, err := client.Get(context, key).Result()
-			if err != nil {
-				client.Set(context, key, 1, msgTTL)
-			} else {
-				count, err := strconv.Atoi(entry)
-				if err != nil {
-					fmt.Printf("Atoi converting error %v", err)
-				}
-				client.Set(context, key, count+1, msgTTL)
-			}
-		*/
 	}
 
 	sinkWriteCount.With(map[string]string{metricspkg.LabelVertex: rs.name, metricspkg.LabelPipeline: rs.pipelineName}).Add(float64(len(messages)))

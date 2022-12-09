@@ -89,6 +89,7 @@ func (ks *KafkaSuite) TestKafkaSink() {
 		CreatePipelineAndWait()
 	defer w.DeletePipelineAndWait()
 	fixtures.ExpectKafkaTopicCount(outputTopic, 15, 3*time.Second)
+
 }
 
 func (ks *KafkaSuite) TestKafkaSourceSink() {

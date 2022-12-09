@@ -20,10 +20,9 @@ import (
 	"testing"
 )
 
-// TODO - implement unit tests
+// TODO - implement unit tests.
 func TestRedisSink_Start(t *testing.T) {
 }
 
-// TestRedisSinkSink_ForwardToTwoVertex writes to 2 vertices and have a jetstream sinks attached to each vertex.
 func TestRedisSinkSink_ForwardToTwoVertex(t *testing.T) {
 }

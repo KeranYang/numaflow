@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/go-redis/redis/v8"
+	"log"
 	"net/http"
 )
 
@@ -30,20 +31,20 @@ func init() {
 
 		// Currently E2E tests share the same redis instance, in the future we can consider passing in redis configurations
 		// to enable REST backend sending requests to specified redis instance.
-		client := redis.NewClient(&redis.Options{
-			Addr:     "redis-cluster:6379",
-			Password: "",
-			DB:       0,
+		client := redis.NewClusterClient(&redis.ClusterOptions{
+			Addrs: []string{"redis-cluster:6379"},
 		})
 
 		keyList, err := client.Keys(context.Background(), fmt.Sprintf("%s*%s*", sinkName, targetStr)).Result()
 		if err != nil {
-			fmt.Printf("KeranTest - panic err %v", err)
-			panic(err)
+			log.Println(err)
+			w.WriteHeader(500)
+			_, _ = w.Write([]byte(err.Error()))
+			return
 		}
 
-		fmt.Printf("KeranTest - got key list %v", keyList)
 		w.WriteHeader(200)
 		_, _ = w.Write([]byte(fmt.Sprint(len(keyList))))
+		return
 	})
 }
