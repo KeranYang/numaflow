@@ -44,11 +44,16 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 		VertexPodLogContains("number-sink", LogSinkVertexStarted)
 
 	// does sleep help?
-	time.Sleep(time.Minute * 2)
+	// Turns out yes, I think it helps to ensure the http service is up and running and ready to receive POST requests.
+	time.Sleep(time.Minute * 1)
 
 	w.SendMessageTo(pipelineName, "in", []byte(`888888`))
 	w.SendMessageTo(pipelineName, "in", []byte(`888889`))
 	w.SendMessageTo(pipelineName, "in", []byte(`not an integer`))
+
+	// After sending message, wait 5 seconds for data to reach sink vertex.
+	// Don't wait too long (1 min) which will cause sink vertex to scale down to 0 pods.
+	time.Sleep(time.Second * 5)
 
 	w.Expect().VertexPodLogContains("even-sink", "888888")
 	w.Expect().VertexPodLogNotContains("even-sink", "888889", PodLogCheckOptionWithTimeout(2*time.Second))
