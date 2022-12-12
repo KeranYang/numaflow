@@ -44,7 +44,6 @@ func (s *FunctionalSuite) TestCreateSimplePipeline() {
 		When().
 		CreatePipelineAndWait()
 	defer w.DeletePipelineAndWait()
-
 	pipelineName := "simple-pipeline"
 
 	w.Expect().
@@ -53,7 +52,7 @@ func (s *FunctionalSuite) TestCreateSimplePipeline() {
 		VertexPodLogContains("p1", LogUDFVertexStarted, PodLogCheckOptionWithContainer("numa")).
 		VertexPodLogContains("output", LogSinkVertexStarted).
 		DaemonPodLogContains(pipelineName, LogDaemonStarted).
-		VertexPodLogContains("output", `"Data":".*","Createdts":.*`)
+		OutputSinkContains("output", "Data*Createdts", SinkCheckOptionWithCount(1))
 
 	defer w.VertexPodPortForward("input", 8001, dfv1.VertexMetricsPort).
 		VertexPodPortForward("p1", 8002, dfv1.VertexMetricsPort).
@@ -151,9 +150,6 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 		VertexPodLogContains("odd-sink", LogSinkVertexStarted).
 		VertexPodLogContains("number-sink", LogSinkVertexStarted)
 
-	// To ensure the source vertex http service is up and running and ready to receive POST requests.
-	time.Sleep(time.Minute * 1)
-
 	w.SendMessageTo(pipelineName, "in", []byte(`888888`))
 	w.SendMessageTo(pipelineName, "in", []byte(`888889`))
 	w.SendMessageTo(pipelineName, "in", []byte(`not-an-integer`))
@@ -161,20 +157,17 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 	// After sending message, wait 10 seconds for data to reach sink vertex.
 	time.Sleep(time.Second * 10)
 
-	// Limitation - The regex string itself has to be REST APU url compatible.
-	// Meaning it can't contain special characters like space, star, question mark etc.
-	// Otherwise, the E2E will fail with 400 Bad Request Error.
 	w.Expect().OutputSinkContains("even-sink", "888888", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
 	w.Expect().OutputSinkNotContains("even-sink", "888889", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
-	w.Expect().OutputSinkNotContains("even-sink", "not-an-integer", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkNotContains("even-sink", "not an integer", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
 
 	w.Expect().OutputSinkContains("odd-sink", "888889", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
 	w.Expect().OutputSinkNotContains("odd-sink", "888888", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
-	w.Expect().OutputSinkNotContains("odd-sink", "not-an-integer", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkNotContains("odd-sink", "not an integer", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
 
 	w.Expect().OutputSinkContains("number-sink", "888888", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
 	w.Expect().OutputSinkContains("number-sink", "888889", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
-	w.Expect().OutputSinkNotContains("number-sink", "not-an-integer", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkNotContains("number-sink", "not an integer", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
 }
 
 func (s *FunctionalSuite) TestWatermarkEnabled() {

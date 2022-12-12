@@ -18,12 +18,13 @@ package fixtures
 
 import (
 	"fmt"
+	"net/url"
 	"strconv"
 )
 
-// GetMsgCountContains returns number of keys containing targetStr in the redis sink.
-func GetMsgCountContains(sinkName string, targetStr string) int {
-	str := InvokeE2EAPI("/redis/get-msg-count-contains?sinkName=%s&targetStr=%s", sinkName, targetStr)
+// GetMsgCountContains returns number of keys containing targetRegex in the redis sink.
+func GetMsgCountContains(sinkName string, targetRegex string) int {
+	str := InvokeE2EAPI("/redis/get-msg-count-contains?sinkName=%s&targetRegex=%s", sinkName, url.QueryEscape(targetRegex))
 	count, err := strconv.Atoi(str)
 	if err != nil {
 		panic(fmt.Sprintf("Can't parse string %s to an integer.", str))

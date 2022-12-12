@@ -33,7 +33,7 @@ func SinkOutputNotContains(ctx context.Context, sinkName string, regex string, o
 	return !sinkOutputContains(ctx, sinkName, regex, 1)
 }
 
-func SinkOutputContains(ctx context.Context, sinkName string, targetStr string, opts ...SinkCheckOption) bool {
+func SinkOutputContains(ctx context.Context, sinkName string, targetRegex string, opts ...SinkCheckOption) bool {
 	o := defaultSinkCheckOptions()
 	for _, opt := range opts {
 		if opt != nil {
@@ -42,11 +42,11 @@ func SinkOutputContains(ctx context.Context, sinkName string, targetStr string, 
 	}
 	ctx, cancel := context.WithTimeout(ctx, o.timeout)
 	defer cancel()
-	return sinkOutputContains(ctx, sinkName, targetStr, o.count)
+	return sinkOutputContains(ctx, sinkName, targetRegex, o.count)
 
 }
 
-func sinkOutputContains(ctx context.Context, sinkName string, targetStr string, expectedCount int) bool {
+func sinkOutputContains(ctx context.Context, sinkName string, targetRegex string, expectedCount int) bool {
 	if expectedCount <= 0 {
 		return true
 	}
@@ -55,7 +55,7 @@ func sinkOutputContains(ctx context.Context, sinkName string, targetStr string, 
 		case <-ctx.Done():
 			panic("sinkOutputContains timed out.")
 		default:
-			contains := GetMsgCountContains(sinkName, targetStr) == expectedCount
+			contains := GetMsgCountContains(sinkName, targetRegex) >= expectedCount
 			return contains
 		}
 	}

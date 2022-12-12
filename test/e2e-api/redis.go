@@ -22,12 +22,20 @@ import (
 	"github.com/go-redis/redis/v8"
 	"log"
 	"net/http"
+	"net/url"
 )
 
 func init() {
 	http.HandleFunc("/redis/get-msg-count-contains", func(w http.ResponseWriter, r *http.Request) {
 		sinkName := r.URL.Query().Get("sinkName")
-		targetStr := r.URL.Query().Get("targetStr")
+		targetRegex, err := url.QueryUnescape(r.URL.Query().Get("targetRegex"))
+
+		if err != nil {
+			log.Println(err)
+			w.WriteHeader(500)
+			_, _ = w.Write([]byte(err.Error()))
+			return
+		}
 
 		// Currently E2E tests share the same redis instance, in the future we can consider passing in redis configurations
 		// to enable REST backend sending requests to specified redis instance.
@@ -35,7 +43,7 @@ func init() {
 			Addrs: []string{"redis-cluster:6379"},
 		})
 
-		keyList, err := client.Keys(context.Background(), fmt.Sprintf("%s*%s*", sinkName, targetStr)).Result()
+		keyList, err := client.Keys(context.Background(), fmt.Sprintf("%s*%s*", sinkName, targetRegex)).Result()
 		if err != nil {
 			log.Println(err)
 			w.WriteHeader(500)
