@@ -32,9 +32,6 @@ import (
 
 //go:generate kubectl -n numaflow-system delete statefulset redis-cluster --ignore-not-found=true
 //go:generate kubectl apply -k ../../config/apps/redis -n numaflow-system
-// Wait for redis cluster to come up
-//go:generate sleep 120
-
 type FunctionalSuite struct {
 	E2ESuite
 }
@@ -43,6 +40,7 @@ func (s *FunctionalSuite) TestCreateSimplePipeline() {
 	w := s.Given().Pipeline("@testdata/simple-pipeline.yaml").
 		When().
 		CreatePipelineAndWait()
+	//.WaitForRedisStatefulSetReady()
 	defer w.DeletePipelineAndWait()
 	pipelineName := "simple-pipeline"
 
@@ -109,6 +107,7 @@ func (s *FunctionalSuite) TestFiltering() {
 	w := s.Given().Pipeline("@testdata/filtering.yaml").
 		When().
 		CreatePipelineAndWait()
+	//.WaitForRedisStatefulSetReady()
 	defer w.DeletePipelineAndWait()
 	pipelineName := "filtering"
 
@@ -138,6 +137,7 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 	w := s.Given().Pipeline("@testdata/even-odd.yaml").
 		When().
 		CreatePipelineAndWait()
+	//.WaitForRedisStatefulSetReady()
 	defer w.DeletePipelineAndWait()
 	pipelineName := "even-odd"
 

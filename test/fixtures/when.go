@@ -141,6 +141,15 @@ func (w *When) WaitForISBSvcReady() *When {
 	return w
 }
 
+func (w *When) WaitForRedisStatefulSetReady() *When {
+	w.t.Helper()
+	ctx := context.Background()
+	if err := WaitForRedisStatefulSetReady(ctx, w.kubeClient, Namespace, 1*time.Minute); err != nil {
+		w.t.Fatal(err)
+	}
+	return w
+}
+
 func (w *When) VertexPodPortForward(vertexName string, localPort, remotePort int) *When {
 	w.t.Helper()
 	labelSelector := fmt.Sprintf("%s=%s,%s=%s", dfv1.KeyPipelineName, w.pipeline.Name, dfv1.KeyVertexName, vertexName)
