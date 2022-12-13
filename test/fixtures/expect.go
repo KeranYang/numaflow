@@ -51,10 +51,10 @@ func (t *Expect) OutputSinkContains(sinkName string, targetRegex string, opts ..
 	return t
 }
 
-func (t *Expect) OutputSinkNotContains(sinkName string, regex string, opts ...SinkCheckOption) *Expect {
+func (t *Expect) OutputSinkNotContains(sinkName string, regex string) *Expect {
 	t.t.Helper()
 	ctx := context.Background()
-	notContains := SinkOutputNotContains(ctx, sinkName, regex, opts...)
+	notContains := SinkOutputNotContains(ctx, sinkName, regex)
 	if !notContains {
 		t.t.Fatalf("Sink %s contains regex %s", sinkName, regex)
 	}

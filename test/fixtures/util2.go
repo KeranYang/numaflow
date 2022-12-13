@@ -18,18 +18,9 @@ package fixtures
 
 import (
 	"context"
-	"time"
 )
 
-func SinkOutputNotContains(ctx context.Context, sinkName string, regex string, opts ...SinkCheckOption) bool {
-	o := defaultSinkCheckOptions()
-	for _, opt := range opts {
-		if opt != nil {
-			opt(o)
-		}
-	}
-	ctx, cancel := context.WithTimeout(ctx, o.timeout)
-	defer cancel()
+func SinkOutputNotContains(ctx context.Context, sinkName string, regex string) bool {
 	return !sinkOutputContains(ctx, sinkName, regex, 1)
 }
 
@@ -40,46 +31,25 @@ func SinkOutputContains(ctx context.Context, sinkName string, targetRegex string
 			opt(o)
 		}
 	}
-	ctx, cancel := context.WithTimeout(ctx, o.timeout)
-	defer cancel()
 	return sinkOutputContains(ctx, sinkName, targetRegex, o.count)
 
 }
 
 func sinkOutputContains(ctx context.Context, sinkName string, targetRegex string, expectedCount int) bool {
-	if expectedCount <= 0 {
-		return true
-	}
-	for {
-		select {
-		case <-ctx.Done():
-			panic("sinkOutputContains timed out.")
-		default:
-			contains := GetMsgCountContains(sinkName, targetRegex) >= expectedCount
-			return contains
-		}
-	}
+	return GetMsgCountContains(sinkName, targetRegex) >= expectedCount
 }
 
 type sinkCheckOptions struct {
-	timeout time.Duration
-	count   int
+	count int
 }
 
 func defaultSinkCheckOptions() *sinkCheckOptions {
 	return &sinkCheckOptions{
-		timeout: defaultTimeout,
-		count:   -1,
+		count: -1,
 	}
 }
 
 type SinkCheckOption func(*sinkCheckOptions)
-
-func SinkCheckOptionWithTimeout(t time.Duration) SinkCheckOption {
-	return func(o *sinkCheckOptions) {
-		o.timeout = t
-	}
-}
 
 func SinkCheckOptionWithCount(c int) SinkCheckOption {
 	return func(o *sinkCheckOptions) {

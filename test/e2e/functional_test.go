@@ -118,21 +118,15 @@ func (s *FunctionalSuite) TestFiltering() {
 		VertexPodLogContains("p1", LogUDFVertexStarted, PodLogCheckOptionWithContainer("numa")).
 		VertexPodLogContains("out", LogSinkVertexStarted)
 
-	// To ensure the source vertex http service is up and running and ready to receive POST requests.
-	time.Sleep(time.Minute * 1)
-
 	w.SendMessageTo(pipelineName, "in", []byte(`{"id": 180, "msg": "hello", "expect0": "fail", "desc": "A bad example"}`))
 	w.SendMessageTo(pipelineName, "in", []byte(`{"id": 80, "msg": "hello1", "expect1": "fail", "desc": "A bad example"}`))
 	w.SendMessageTo(pipelineName, "in", []byte(`{"id": 80, "msg": "hello", "expect2": "fail", "desc": "A bad example"}`))
 	w.SendMessageTo(pipelineName, "in", []byte(`{"id": 80, "msg": "hello", "expect3": "succeed", "desc": "A good example"}`))
 
-	// After sending message, wait 10 seconds for data to reach sink vertex.
-	time.Sleep(time.Second * 10)
-
-	w.Expect().OutputSinkContains("out", "expect3", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
-	w.Expect().OutputSinkNotContains("out", "expect0", SinkCheckOptionWithTimeout(2*time.Second))
-	w.Expect().OutputSinkNotContains("out", "expect1", SinkCheckOptionWithTimeout(2*time.Second))
-	w.Expect().OutputSinkNotContains("out", "expect2", SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkContains("out", "expect3", SinkCheckOptionWithCount(1))
+	w.Expect().OutputSinkNotContains("out", "expect0")
+	w.Expect().OutputSinkNotContains("out", "expect1")
+	w.Expect().OutputSinkNotContains("out", "expect2")
 }
 
 func (s *FunctionalSuite) TestConditionalForwarding() {
@@ -152,22 +146,22 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 
 	w.SendMessageTo(pipelineName, "in", []byte(`888888`))
 	w.SendMessageTo(pipelineName, "in", []byte(`888889`))
-	w.SendMessageTo(pipelineName, "in", []byte(`not-an-integer`))
+	w.SendMessageTo(pipelineName, "in", []byte(`not an integer`))
 
-	// After sending message, wait 10 seconds for data to reach sink vertex.
+	// Wait 10 seconds for data to reach sink vertex.
 	time.Sleep(time.Second * 10)
 
-	w.Expect().OutputSinkContains("even-sink", "888888", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
-	w.Expect().OutputSinkNotContains("even-sink", "888889", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
-	w.Expect().OutputSinkNotContains("even-sink", "not an integer", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkContains("even-sink", "888888", SinkCheckOptionWithCount(1))
+	w.Expect().OutputSinkNotContains("even-sink", "888889")
+	w.Expect().OutputSinkNotContains("even-sink", "not an integer")
 
-	w.Expect().OutputSinkContains("odd-sink", "888889", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
-	w.Expect().OutputSinkNotContains("odd-sink", "888888", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
-	w.Expect().OutputSinkNotContains("odd-sink", "not an integer", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkContains("odd-sink", "888889", SinkCheckOptionWithCount(1))
+	w.Expect().OutputSinkNotContains("odd-sink", "888888")
+	w.Expect().OutputSinkNotContains("odd-sink", "not an integer")
 
-	w.Expect().OutputSinkContains("number-sink", "888888", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
-	w.Expect().OutputSinkContains("number-sink", "888889", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
-	w.Expect().OutputSinkNotContains("number-sink", "not an integer", SinkCheckOptionWithCount(1), SinkCheckOptionWithTimeout(2*time.Second))
+	w.Expect().OutputSinkContains("number-sink", "888888", SinkCheckOptionWithCount(1))
+	w.Expect().OutputSinkContains("number-sink", "888889", SinkCheckOptionWithCount(1))
+	w.Expect().OutputSinkNotContains("number-sink", "not an integer")
 }
 
 func (s *FunctionalSuite) TestWatermarkEnabled() {
