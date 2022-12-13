@@ -49,7 +49,7 @@ func (s *FunctionalSuite) TestCreateSimplePipeline() {
 		VertexPodLogContains("p1", LogUDFVertexStarted, PodLogCheckOptionWithContainer("numa")).
 		VertexPodLogContains("output", LogSinkVertexStarted).
 		DaemonPodLogContains(pipelineName, LogDaemonStarted).
-		RedisContains("output", "Data*Createdts")
+		VertexPodLogContains("output", `"Data":".*","Createdts":.*`)
 
 	defer w.VertexPodPortForward("input", 8001, dfv1.VertexMetricsPort).
 		VertexPodPortForward("p1", 8002, dfv1.VertexMetricsPort).
