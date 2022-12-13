@@ -18,14 +18,11 @@ package fixtures
 
 import (
 	"bufio"
-	"context"
 	"errors"
 	"fmt"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"log"
 	"net/http"
 	"strings"
-	"time"
 )
 
 func InvokeE2EAPI(format string, args ...interface{}) string {
@@ -53,32 +50,9 @@ func InvokeE2EAPI(format string, args ...interface{}) string {
 }
 
 func InvokeE2EAPIPOST(format string, body string, args ...interface{}) string {
-	ctx := context.Background()
 	url := "http://127.0.0.1:8378" + fmt.Sprintf(format, args...)
 	log.Printf("Post %s\n", url)
-
-	// Posting right after vertex creation sometimes gets the "dial tcp: connect: connection refused" error.
-	// Adding retry to mitigate such issue.
-	// 3 attempts with 2 second fixed wait time are tested sufficient for it.
-	var retryBackOff = wait.Backoff{
-		Factor:   1,
-		Jitter:   0,
-		Steps:    3,
-		Duration: time.Second * 2,
-	}
-
-	var err error
-	var resp *http.Response
-	_ = wait.ExponentialBackoffWithContext(ctx, retryBackOff, func() (done bool, err error) {
-		resp, err = http.Post(url, "application/json", strings.NewReader(body))
-		if err == nil {
-			return true, nil
-		}
-
-		fmt.Printf("Got error %v, retrying.\n", err)
-		return false, nil
-	})
-
+	resp, err := http.Post(url, "application/json", strings.NewReader(body))
 	if err != nil {
 		panic(err)
 	}
