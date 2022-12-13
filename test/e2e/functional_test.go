@@ -124,8 +124,8 @@ func (s *FunctionalSuite) TestFiltering() {
 	w.SendMessageTo(pipelineName, "in", []byte(`{"id": 80, "msg": "hello", "expect3": "succeed", "desc": "A good example"}`))
 	w.SendMessageTo(pipelineName, "in", []byte(`{"id": 80, "msg": "hello", "expect4": "succeed", "desc": "A good example"}`))
 
-	// Wait 10 seconds for data to reach sink vertex.
-	time.Sleep(time.Second * 10)
+	// Wait for data to reach sink vertex.
+	time.Sleep(time.Second * 30)
 
 	w.Expect().OutputSinkContains("out", "expect[3-4]", SinkCheckOptionWithCount(2))
 	w.Expect().OutputSinkNotContains("out", "expect[0-2]")
@@ -150,8 +150,8 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 	w.SendMessageTo(pipelineName, "in", []byte(`888889`))
 	w.SendMessageTo(pipelineName, "in", []byte(`not an integer`))
 
-	// Wait 10 seconds for data to reach sink vertex.
-	time.Sleep(time.Second * 10)
+	// Wait for data to reach sink vertex.
+	time.Sleep(time.Second * 30)
 
 	w.Expect().OutputSinkContains("even-sink", "888888")
 	w.Expect().OutputSinkNotContains("even-sink", "888889")
