@@ -45,7 +45,7 @@ type sinkCheckOptions struct {
 
 func defaultSinkCheckOptions() *sinkCheckOptions {
 	return &sinkCheckOptions{
-		count: -1,
+		count: 1,
 	}
 }
 

@@ -52,7 +52,7 @@ func (s *FunctionalSuite) TestCreateSimplePipeline() {
 		VertexPodLogContains("p1", LogUDFVertexStarted, PodLogCheckOptionWithContainer("numa")).
 		VertexPodLogContains("output", LogSinkVertexStarted).
 		DaemonPodLogContains(pipelineName, LogDaemonStarted).
-		OutputSinkContains("output", "Data*Createdts", SinkCheckOptionWithCount(1))
+		OutputSinkContains("output", "Data*Createdts")
 
 	defer w.VertexPodPortForward("input", 8001, dfv1.VertexMetricsPort).
 		VertexPodPortForward("p1", 8002, dfv1.VertexMetricsPort).
@@ -122,11 +122,13 @@ func (s *FunctionalSuite) TestFiltering() {
 	w.SendMessageTo(pipelineName, "in", []byte(`{"id": 80, "msg": "hello1", "expect1": "fail", "desc": "A bad example"}`))
 	w.SendMessageTo(pipelineName, "in", []byte(`{"id": 80, "msg": "hello", "expect2": "fail", "desc": "A bad example"}`))
 	w.SendMessageTo(pipelineName, "in", []byte(`{"id": 80, "msg": "hello", "expect3": "succeed", "desc": "A good example"}`))
+	w.SendMessageTo(pipelineName, "in", []byte(`{"id": 80, "msg": "hello", "expect4": "succeed", "desc": "A good example"}`))
 
-	w.Expect().OutputSinkContains("out", "expect3", SinkCheckOptionWithCount(1))
-	w.Expect().OutputSinkNotContains("out", "expect0")
-	w.Expect().OutputSinkNotContains("out", "expect1")
-	w.Expect().OutputSinkNotContains("out", "expect2")
+	// Wait 10 seconds for data to reach sink vertex.
+	time.Sleep(time.Second * 10)
+
+	w.Expect().OutputSinkContains("out", "expect[3-4]", SinkCheckOptionWithCount(2))
+	w.Expect().OutputSinkNotContains("out", "expect[0-2]")
 }
 
 func (s *FunctionalSuite) TestConditionalForwarding() {
@@ -151,16 +153,16 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 	// Wait 10 seconds for data to reach sink vertex.
 	time.Sleep(time.Second * 10)
 
-	w.Expect().OutputSinkContains("even-sink", "888888", SinkCheckOptionWithCount(1))
+	w.Expect().OutputSinkContains("even-sink", "888888")
 	w.Expect().OutputSinkNotContains("even-sink", "888889")
 	w.Expect().OutputSinkNotContains("even-sink", "not an integer")
 
-	w.Expect().OutputSinkContains("odd-sink", "888889", SinkCheckOptionWithCount(1))
+	w.Expect().OutputSinkContains("odd-sink", "888889")
 	w.Expect().OutputSinkNotContains("odd-sink", "888888")
 	w.Expect().OutputSinkNotContains("odd-sink", "not an integer")
 
-	w.Expect().OutputSinkContains("number-sink", "888888", SinkCheckOptionWithCount(1))
-	w.Expect().OutputSinkContains("number-sink", "888889", SinkCheckOptionWithCount(1))
+	w.Expect().OutputSinkContains("number-sink", "888888")
+	w.Expect().OutputSinkContains("number-sink", "888889")
 	w.Expect().OutputSinkNotContains("number-sink", "not an integer")
 }
 

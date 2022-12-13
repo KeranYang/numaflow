@@ -113,7 +113,7 @@ func (rs *RedisSink) Write(context context.Context, messages []isb.Message) ([]i
 		err := client.Set(context, key, 1, msgTTL).Err()
 
 		if err != nil {
-			log.Println(" Set Error - ", err)
+			log.Println("Set Error - ", err)
 		} else {
 			log.Printf("Added key %s\n", key)
 		}

@@ -37,8 +37,6 @@ func init() {
 			return
 		}
 
-		// Currently E2E tests share the same redis instance, in the future we can consider passing in redis configurations
-		// to enable REST backend sending requests to specified redis instance.
 		client := redis.NewClusterClient(&redis.ClusterOptions{
 			Addrs: []string{"redis-cluster:6379"},
 		})
