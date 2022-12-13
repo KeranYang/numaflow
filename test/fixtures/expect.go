@@ -41,20 +41,20 @@ type Expect struct {
 	kubeClient     kubernetes.Interface
 }
 
-func (t *Expect) OutputSinkContains(sinkName string, targetRegex string, opts ...SinkCheckOption) *Expect {
+func (t *Expect) RedisContains(sinkName string, targetRegex string, opts ...RedisCheckOption) *Expect {
 	t.t.Helper()
 	ctx := context.Background()
-	contains := SinkOutputContains(ctx, sinkName, targetRegex, opts...)
+	contains := RedisContains(ctx, sinkName, targetRegex, opts...)
 	if !contains {
-		t.t.Fatalf("Output doesn't contain enough strings matching target string %s", targetRegex)
+		t.t.Fatalf("Redis doesn't contain enough data matching target regex %s", targetRegex)
 	}
 	return t
 }
 
-func (t *Expect) OutputSinkNotContains(sinkName string, regex string) *Expect {
+func (t *Expect) RedisNotContains(sinkName string, regex string) *Expect {
 	t.t.Helper()
 	ctx := context.Background()
-	notContains := SinkOutputNotContains(ctx, sinkName, regex)
+	notContains := RedisNotContains(ctx, sinkName, regex)
 	if !notContains {
 		t.t.Fatalf("Sink %s contains regex %s", sinkName, regex)
 	}

@@ -52,7 +52,7 @@ func (s *FunctionalSuite) TestCreateSimplePipeline() {
 		VertexPodLogContains("p1", LogUDFVertexStarted, PodLogCheckOptionWithContainer("numa")).
 		VertexPodLogContains("output", LogSinkVertexStarted).
 		DaemonPodLogContains(pipelineName, LogDaemonStarted).
-		OutputSinkContains("output", "Data*Createdts")
+		RedisContains("output", "Data*Createdts")
 
 	defer w.VertexPodPortForward("input", 8001, dfv1.VertexMetricsPort).
 		VertexPodPortForward("p1", 8002, dfv1.VertexMetricsPort).
@@ -127,8 +127,8 @@ func (s *FunctionalSuite) TestFiltering() {
 	// Wait for data to reach sink vertex.
 	time.Sleep(time.Second * 30)
 
-	w.Expect().OutputSinkContains("out", "expect[3-4]", SinkCheckOptionWithCount(2))
-	w.Expect().OutputSinkNotContains("out", "expect[0-2]")
+	w.Expect().RedisContains("out", "expect[3-4]", SinkCheckOptionWithCount(2))
+	w.Expect().RedisNotContains("out", "expect[0-2]")
 }
 
 func (s *FunctionalSuite) TestConditionalForwarding() {
@@ -153,17 +153,17 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 	// Wait for data to reach sink vertex.
 	time.Sleep(time.Second * 30)
 
-	w.Expect().OutputSinkContains("even-sink", "888888")
-	w.Expect().OutputSinkNotContains("even-sink", "888889")
-	w.Expect().OutputSinkNotContains("even-sink", "not an integer")
+	w.Expect().RedisContains("even-sink", "888888")
+	w.Expect().RedisNotContains("even-sink", "888889")
+	w.Expect().RedisNotContains("even-sink", "not an integer")
 
-	w.Expect().OutputSinkContains("odd-sink", "888889")
-	w.Expect().OutputSinkNotContains("odd-sink", "888888")
-	w.Expect().OutputSinkNotContains("odd-sink", "not an integer")
+	w.Expect().RedisContains("odd-sink", "888889")
+	w.Expect().RedisNotContains("odd-sink", "888888")
+	w.Expect().RedisNotContains("odd-sink", "not an integer")
 
-	w.Expect().OutputSinkContains("number-sink", "888888")
-	w.Expect().OutputSinkContains("number-sink", "888889")
-	w.Expect().OutputSinkNotContains("number-sink", "not an integer")
+	w.Expect().RedisContains("number-sink", "888888")
+	w.Expect().RedisContains("number-sink", "888889")
+	w.Expect().RedisNotContains("number-sink", "not an integer")
 }
 
 func (s *FunctionalSuite) TestWatermarkEnabled() {

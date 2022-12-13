@@ -20,39 +20,39 @@ import (
 	"context"
 )
 
-func SinkOutputNotContains(ctx context.Context, sinkName string, regex string) bool {
-	return !sinkOutputContains(ctx, sinkName, regex, 1)
+func RedisNotContains(ctx context.Context, sinkName string, regex string) bool {
+	return !redisContains(ctx, sinkName, regex, 1)
 }
 
-func SinkOutputContains(ctx context.Context, sinkName string, targetRegex string, opts ...SinkCheckOption) bool {
-	o := defaultSinkCheckOptions()
+func RedisContains(ctx context.Context, sinkName string, targetRegex string, opts ...RedisCheckOption) bool {
+	o := defaultRedisCheckOptions()
 	for _, opt := range opts {
 		if opt != nil {
 			opt(o)
 		}
 	}
-	return sinkOutputContains(ctx, sinkName, targetRegex, o.count)
+	return redisContains(ctx, sinkName, targetRegex, o.count)
 
 }
 
-func sinkOutputContains(ctx context.Context, sinkName string, targetRegex string, expectedCount int) bool {
+func redisContains(ctx context.Context, sinkName string, targetRegex string, expectedCount int) bool {
 	return GetMsgCountContains(sinkName, targetRegex) >= expectedCount
 }
 
-type sinkCheckOptions struct {
+type redisCheckOptions struct {
 	count int
 }
 
-func defaultSinkCheckOptions() *sinkCheckOptions {
-	return &sinkCheckOptions{
+func defaultRedisCheckOptions() *redisCheckOptions {
+	return &redisCheckOptions{
 		count: 1,
 	}
 }
 
-type SinkCheckOption func(*sinkCheckOptions)
+type RedisCheckOption func(*redisCheckOptions)
 
-func SinkCheckOptionWithCount(c int) SinkCheckOption {
-	return func(o *sinkCheckOptions) {
+func SinkCheckOptionWithCount(c int) RedisCheckOption {
+	return func(o *redisCheckOptions) {
 		o.count = c
 	}
 }
