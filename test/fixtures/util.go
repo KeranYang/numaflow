@@ -22,7 +22,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"os/exec"
 	"regexp"
@@ -185,82 +184,6 @@ statefulSetWatch:
 			}
 		case <-podTimeoutCh:
 			return fmt.Errorf("timeout after %v waiting for ISB svc Pod ready", timeout)
-		}
-	}
-}
-
-func WaitForRedisStatefulSetReady(ctx context.Context, kubeClient kubernetes.Interface, namespace string, timeout time.Duration) error {
-	labelSelector := "app=redis-cluster,name=redis-cluster,numaflow-e2e=true"
-	opts := metav1.ListOptions{LabelSelector: labelSelector}
-	watch, err := kubeClient.AppsV1().StatefulSets(namespace).Watch(ctx, opts)
-	if err != nil {
-		return err
-	}
-	defer watch.Stop()
-	timeoutCh := make(chan bool, 1)
-	go func() {
-		time.Sleep(timeout)
-		timeoutCh <- true
-	}()
-
-statefulSetWatch:
-	for {
-		select {
-		case event := <-watch.ResultChan():
-			ss, ok := event.Object.(*appsv1.StatefulSet)
-			if ok {
-				if ss.Status.Replicas == ss.Status.ReadyReplicas {
-					log.Printf("KeranTest - YES! %d=%d", ss.Status.Replicas, ss.Status.ReadyReplicas)
-					break statefulSetWatch
-				}
-			} else {
-				return fmt.Errorf("not statefulset")
-			}
-		case <-timeoutCh:
-			return fmt.Errorf("timeout after %v waiting for ISB svc StatefulSet ready", timeout)
-		}
-	}
-
-	// POD
-	podWatch, err := kubeClient.CoreV1().Pods(namespace).Watch(ctx, opts)
-	if err != nil {
-		return err
-	}
-	defer podWatch.Stop()
-	podTimeoutCh := make(chan bool, 1)
-	go func() {
-		time.Sleep(timeout)
-		podTimeoutCh <- true
-	}()
-
-	podNames := make(map[string]bool)
-	for {
-		if len(podNames) == 2 {
-			// defaults to 2 Pods
-			return nil
-		}
-		select {
-		case event := <-podWatch.ResultChan():
-			p, ok := event.Object.(*corev1.Pod)
-			if ok {
-				if p.Status.Phase == corev1.PodRunning {
-					podReady := true
-					for _, cs := range p.Status.ContainerStatuses {
-						if !cs.Ready {
-							podReady = false
-						}
-					}
-					if podReady {
-						if _, existing := podNames[p.GetName()]; !existing {
-							podNames[p.GetName()] = true
-						}
-					}
-				}
-			} else {
-				return fmt.Errorf("not pod")
-			}
-		case <-podTimeoutCh:
-			return fmt.Errorf("timeout after %v waiting for redis svc Pod ready", timeout)
 		}
 	}
 }

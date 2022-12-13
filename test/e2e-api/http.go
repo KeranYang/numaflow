@@ -18,14 +18,18 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"net/http"
+	"time"
 )
 
 func init() {
 	http.HandleFunc("/http/send-message", func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.Background()
 		pName := r.URL.Query().Get("pipeline")
 		vName := r.URL.Query().Get("vertex")
 
@@ -42,7 +46,25 @@ func init() {
 			},
 		}
 
-		_, err = httpClient.Post(fmt.Sprintf("https://%s-%s:8443/vertices/%s", pName, vName, vName), "application/json", bytes.NewBuffer(buf))
+		// Posting right after vertex creation sometimes gets the "dial tcp: connect: connection refused" error.
+		// Adding retry to mitigate such issue.
+		// 3 attempts with 2 second fixed wait time are tested sufficient for it.
+		var retryBackOff = wait.Backoff{
+			Factor:   1,
+			Jitter:   0,
+			Steps:    3,
+			Duration: time.Second * 2,
+		}
+
+		_ = wait.ExponentialBackoffWithContext(ctx, retryBackOff, func() (done bool, err error) {
+			_, err = httpClient.Post(fmt.Sprintf("https://%s-%s:8443/vertices/%s", pName, vName, vName), "application/json", bytes.NewBuffer(buf))
+			if err == nil {
+				return true, nil
+			}
+			fmt.Printf("Got error %v, retrying.\n", err)
+			return false, nil
+		})
+
 		if err != nil {
 			w.WriteHeader(500)
 			_, _ = w.Write([]byte(err.Error()))
