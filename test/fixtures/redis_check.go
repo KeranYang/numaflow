@@ -51,7 +51,7 @@ func defaultRedisCheckOptions() *redisCheckOptions {
 
 type RedisCheckOption func(*redisCheckOptions)
 
-func SinkCheckOptionWithCount(c int) RedisCheckOption {
+func RedisCheckOptionWithCount(c int) RedisCheckOption {
 	return func(o *redisCheckOptions) {
 		o.count = c
 	}
