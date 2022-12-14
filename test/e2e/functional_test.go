@@ -32,7 +32,6 @@ import (
 
 //go:generate kubectl -n numaflow-system delete statefulset redis-cluster --ignore-not-found=true
 //go:generate kubectl apply -k ../../config/apps/redis -n numaflow-system
-//go:generate sleep 120
 type FunctionalSuite struct {
 	E2ESuite
 }
@@ -125,8 +124,10 @@ func (s *FunctionalSuite) TestFiltering() {
 	// Wait for data to reach sink vertex. TODO - Delegate this wait time to RedisCheckOptionWithTimeout
 	time.Sleep(time.Second * 5)
 
-	w.Expect().RedisContains("out", "expect[3-4]", RedisCheckOptionWithCount(2))
-	w.Expect().RedisNotContains("out", "expect[0-2]")
+	// w.Expect().RedisContains("out", "expect[3-4]", RedisCheckOptionWithCount(2))
+	// w.Expect().RedisNotContains("out", "expect[0-2]")
+	w.Expect().VertexPodLogNotContains("out", "expect[0-2]", PodLogCheckOptionWithTimeout(2*time.Second))
+	w.Expect().VertexPodLogContains("out", "expect[3-4]", PodLogCheckOptionWithTimeout(2*time.Second))
 }
 
 func (s *FunctionalSuite) TestConditionalForwarding() {

@@ -139,8 +139,7 @@ func (t *Expect) HttpVertexReadyForPost(pipelineName, vertexName string) *Expect
 		Duration: time.Second * 2,
 	}
 
-	var err error
-	err = wait.ExponentialBackoffWithContext(ctx, retryBackOff, func() (done bool, err error) {
+	err := wait.ExponentialBackoffWithContext(ctx, retryBackOff, func() (done bool, err error) {
 		err = SendMessageTo(pipelineName, vertexName, []byte("test"))
 		if err == nil {
 			return true, nil
