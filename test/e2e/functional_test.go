@@ -32,6 +32,8 @@ import (
 
 //go:generate kubectl -n numaflow-system delete statefulset redis-cluster --ignore-not-found=true
 //go:generate kubectl apply -k ../../config/apps/redis -n numaflow-system
+//go:generate sleep 60
+
 type FunctionalSuite struct {
 	E2ESuite
 }
