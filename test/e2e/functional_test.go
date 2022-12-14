@@ -145,10 +145,11 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 		VertexPodLogContains("even-or-odd", LogUDFVertexStarted, PodLogCheckOptionWithContainer("numa")).
 		VertexPodLogContains("even-sink", LogSinkVertexStarted).
 		VertexPodLogContains("odd-sink", LogSinkVertexStarted).
-		VertexPodLogContains("number-sink", LogSinkVertexStarted)
+		VertexPodLogContains("number-sink", LogSinkVertexStarted).
+		HttpVertexReadyForPost(pipelineName, "in")
 
 	// To ensure the source vertex http service is up and running and ready to receive POST requests.
-	time.Sleep(time.Minute * 1)
+	// time.Sleep(time.Minute * 1)
 
 	w.SendMessageTo(pipelineName, "in", []byte(`888888`))
 	w.SendMessageTo(pipelineName, "in", []byte(`888889`))
