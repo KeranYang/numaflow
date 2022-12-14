@@ -123,7 +123,7 @@ func (s *FunctionalSuite) TestFiltering() {
 	w.SendMessageTo(pipelineName, "in", []byte(`{"id": 80, "msg": "hello", "expect4": "succeed", "desc": "A good example"}`))
 
 	// Wait for data to reach sink vertex. TODO - Delegate this wait time to RedisCheckOptionWithTimeout?
-	time.Sleep(time.Second * 5)
+	time.Sleep(time.Second * 10)
 
 	w.Expect().RedisContains("out", "expect[3-4]", RedisCheckOptionWithCount(2))
 	w.Expect().RedisNotContains("out", "expect[0-2]")
@@ -150,7 +150,7 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 	w.SendMessageTo(pipelineName, "in", []byte(`not an integer`))
 
 	// Wait for data to reach sink vertex. TODO - Delegate this wait time to RedisCheckOptionWithTimeout?
-	time.Sleep(time.Second * 5)
+	time.Sleep(time.Second * 10)
 
 	w.Expect().RedisContains("even-sink", "888888")
 	w.Expect().RedisNotContains("even-sink", "888889")
