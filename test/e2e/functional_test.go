@@ -32,8 +32,6 @@ import (
 
 //go:generate kubectl -n numaflow-system delete statefulset redis-cluster --ignore-not-found=true
 //go:generate kubectl apply -k ../../config/apps/redis -n numaflow-system
-//go:generate sleep 60
-
 type FunctionalSuite struct {
 	E2ESuite
 }
@@ -118,13 +116,16 @@ func (s *FunctionalSuite) TestFiltering() {
 		VertexPodLogContains("out", LogSinkVertexStarted).
 		HttpVertexReadyForPost(pipelineName, "in")
 
+	// To ensure the source vertex http service is up and running and ready to receive POST requests.
+	// time.Sleep(time.Minute * 1)
+
 	w.SendMessageTo(pipelineName, "in", []byte(`{"id": 180, "msg": "hello", "expect0": "fail", "desc": "A bad example"}`))
 	w.SendMessageTo(pipelineName, "in", []byte(`{"id": 80, "msg": "hello1", "expect1": "fail", "desc": "A bad example"}`))
 	w.SendMessageTo(pipelineName, "in", []byte(`{"id": 80, "msg": "hello", "expect2": "fail", "desc": "A bad example"}`))
 	w.SendMessageTo(pipelineName, "in", []byte(`{"id": 80, "msg": "hello", "expect3": "succeed", "desc": "A good example"}`))
 	w.SendMessageTo(pipelineName, "in", []byte(`{"id": 80, "msg": "hello", "expect4": "succeed", "desc": "A good example"}`))
 
-	// Wait for data to reach sink vertex. TODO - Delegate this wait time to RedisCheckOptionWithTimeout?
+	// Wait for data to reach sink vertex. TODO - Delegate this wait time to RedisCheckOptionWithTimeout
 	time.Sleep(time.Second * 5)
 
 	w.Expect().RedisContains("out", "expect[3-4]", RedisCheckOptionWithCount(2))
@@ -144,14 +145,16 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 		VertexPodLogContains("even-or-odd", LogUDFVertexStarted, PodLogCheckOptionWithContainer("numa")).
 		VertexPodLogContains("even-sink", LogSinkVertexStarted).
 		VertexPodLogContains("odd-sink", LogSinkVertexStarted).
-		VertexPodLogContains("number-sink", LogSinkVertexStarted).
-		HttpVertexReadyForPost(pipelineName, "in")
+		VertexPodLogContains("number-sink", LogSinkVertexStarted)
+
+	// To ensure the source vertex http service is up and running and ready to receive POST requests.
+	time.Sleep(time.Minute * 1)
 
 	w.SendMessageTo(pipelineName, "in", []byte(`888888`))
 	w.SendMessageTo(pipelineName, "in", []byte(`888889`))
 	w.SendMessageTo(pipelineName, "in", []byte(`not an integer`))
 
-	// Wait for data to reach sink vertex. TODO - Delegate this wait time to RedisCheckOptionWithTimeout?
+	// Wait for data to reach sink vertex. TODO - Delegate this wait time to RedisCheckOptionWithTimeout
 	time.Sleep(time.Second * 5)
 
 	w.Expect().RedisContains("even-sink", "888888")
