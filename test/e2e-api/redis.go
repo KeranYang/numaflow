@@ -37,8 +37,8 @@ func init() {
 			return
 		}
 
-		client := redis.NewClusterClient(&redis.ClusterOptions{
-			Addrs: []string{"redis-cluster:6379"},
+		client := redis.NewClient(&redis.Options{
+			Addr: "redis:6379",
 		})
 
 		keyList, err := client.Keys(context.Background(), fmt.Sprintf("%s*%s*", sinkName, targetRegex)).Result()

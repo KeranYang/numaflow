@@ -97,9 +97,8 @@ func (rs *RedisSink) IsFull() bool {
 
 // Write writes to the redis sink.
 func (rs *RedisSink) Write(context context.Context, messages []isb.Message) ([]isb.Offset, []error) {
-	// TODO - redis options can be passed in from RedisSink attributes, as opposed to being hardcoded here.
-	client := redis.NewClusterClient(&redis.ClusterOptions{
-		Addrs: []string{"redis-cluster:6379"},
+	client := redis.NewClient(&redis.Options{
+		Addr: "redis:6379",
 	})
 
 	// Our E2E tests time out after 20 minutes. Set redis message TTL to the same.
