@@ -53,7 +53,7 @@ func init() {
 			Factor:   1,
 			Jitter:   0,
 			Steps:    3,
-			Duration: time.Second * 2,
+			Duration: time.Second * 20,
 		}
 
 		_ = wait.ExponentialBackoffWithContext(ctx, retryBackOff, func() (done bool, err error) {
