@@ -107,35 +107,22 @@ func (s *FunctionalSuite) TestFiltering() {
 		When().
 		CreatePipelineAndWait()
 	defer w.DeletePipelineAndWait()
-	
+	pipelineName := "filtering"
+
 	w.Expect().
 		VertexPodsRunning().
 		VertexPodLogContains("in", LogSourceVertexStarted).
 		VertexPodLogContains("p1", LogUDFVertexStarted, PodLogCheckOptionWithContainer("numa")).
 		VertexPodLogContains("out", LogSinkVertexStarted)
 
-	defer w.VertexPodPortForward("in", 8443, dfv1.VertexHTTPSPort).
-		TerminateAllPodPortForwards()
+	// To ensure the source vertex http service is up and running and ready to receive POST requests.
+	time.Sleep(time.Minute * 1)
 
-	HTTPExpect(s.T(), "https://localhost:8443").POST("/vertices/in").WithBytes([]byte(`{"id": 180, "msg": "hello", "expect0": "fail", "desc": "A bad example"}`)).
-		Expect().
-		Status(204)
-
-	HTTPExpect(s.T(), "https://localhost:8443").POST("/vertices/in").WithBytes([]byte(`{"id": 80, "msg": "hello1", "expect1": "fail", "desc": "A bad example"}`)).
-		Expect().
-		Status(204)
-
-	HTTPExpect(s.T(), "https://localhost:8443").POST("/vertices/in").WithBytes([]byte(`{"id": 80, "msg": "hello", "expect2": "fail", "desc": "A bad example"}`)).
-		Expect().
-		Status(204)
-
-	HTTPExpect(s.T(), "https://localhost:8443").POST("/vertices/in").WithBytes([]byte(`{"id": 80, "msg": "hello", "expect3": "succeed", "desc": "A good example"}`)).
-		Expect().
-		Status(204)
-
-	HTTPExpect(s.T(), "https://localhost:8443").POST("/vertices/in").WithBytes([]byte(`{"id": 80, "msg": "hello", "expect4": "succeed", "desc": "A good example"}`)).
-		Expect().
-		Status(204)
+	w.SendMessageTo(pipelineName, "in", []byte(`{"id": 180, "msg": "hello", "expect0": "fail", "desc": "A bad example"}`))
+	w.SendMessageTo(pipelineName, "in", []byte(`{"id": 80, "msg": "hello1", "expect1": "fail", "desc": "A bad example"}`))
+	w.SendMessageTo(pipelineName, "in", []byte(`{"id": 80, "msg": "hello", "expect2": "fail", "desc": "A bad example"}`))
+	w.SendMessageTo(pipelineName, "in", []byte(`{"id": 80, "msg": "hello", "expect3": "succeed", "desc": "A good example"}`))
+	w.SendMessageTo(pipelineName, "in", []byte(`{"id": 80, "msg": "hello", "expect4": "succeed", "desc": "A good example"}`))
 
 	// Wait for data to reach sink vertex.
 	time.Sleep(time.Second * 5)

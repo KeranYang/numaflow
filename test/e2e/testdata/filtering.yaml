@@ -6,7 +6,8 @@ spec:
   vertices:
     - name: in
       source:
-        http: {}
+        http:
+          service: true
     - name: p1
       udf:
         builtin:
