@@ -40,20 +40,24 @@ func init() {
 			panic(err)
 		}
 
+		// TODO - http client timeout to 1 minute.
 		httpClient := &http.Client{
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 			},
+			Timeout: time.Minute * 1,
 		}
 
 		// Posting right after vertex creation sometimes gets the "dial tcp: connect: connection refused" error.
 		// Adding retry to mitigate such issue.
 		// 3 attempts with 2 second fixed wait time are tested sufficient for it.
+
+		// TODO - make it a one minute retry.
 		var retryBackOff = wait.Backoff{
 			Factor:   1,
 			Jitter:   0,
 			Steps:    3,
-			Duration: time.Second * 2,
+			Duration: time.Second * 20,
 		}
 
 		_ = wait.ExponentialBackoffWithContext(ctx, retryBackOff, func() (done bool, err error) {
