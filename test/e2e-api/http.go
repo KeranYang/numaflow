@@ -30,7 +30,7 @@ import (
 func init() {
 	http.HandleFunc("/http/send-message", func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.Background()
-		pName := r.URL.Query().Get("pipeline")
+		podIp := r.URL.Query().Get("podIp")
 		vName := r.URL.Query().Get("vertex")
 
 		buf, err := io.ReadAll(r.Body)
@@ -53,11 +53,12 @@ func init() {
 			Factor:   1,
 			Jitter:   0,
 			Steps:    3,
-			Duration: time.Second * 20,
+			Duration: time.Second * 2,
 		}
 
 		_ = wait.ExponentialBackoffWithContext(ctx, retryBackOff, func() (done bool, err error) {
-			_, err = httpClient.Post(fmt.Sprintf("https://%s-%s:8443/vertices/%s", pName, vName, vName), "application/json", bytes.NewBuffer(buf))
+			url := fmt.Sprintf("https://%s:8443/vertices/%s", podIp, vName)
+			_, err = httpClient.Post(url, "application/json", bytes.NewBuffer(buf))
 			if err == nil {
 				return true, nil
 			}

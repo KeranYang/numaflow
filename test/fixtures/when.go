@@ -45,11 +45,28 @@ type When struct {
 // SendMessageTo sends msg to a http source vertex.
 func (w *When) SendMessageTo(pipelineName string, vertexName string, msg []byte) *When {
 	w.t.Helper()
-	err := SendMessageTo(pipelineName, vertexName, msg)
+	err := SendMessageTo(w.GetOnePodIp(pipelineName, vertexName), vertexName, msg)
 	if err != nil {
 		w.t.Fatal(err)
 	}
 	return w
+}
+
+func (w *When) GetOnePodIp(pipelineName string, vertexName string) string {
+	w.t.Helper()
+
+	labelSelector := fmt.Sprintf("%s=%s,%s=%s", dfv1.KeyPipelineName, pipelineName, dfv1.KeyVertexName, vertexName)
+	ctx := context.Background()
+	podList, err := w.kubeClient.CoreV1().Pods(Namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector, FieldSelector: "status.phase=Running"})
+	if err != nil {
+		w.t.Fatalf("Error getting vertex pod name: %v", err)
+	}
+
+	pod := podList.Items[0]
+	w.t.Logf("KeranTest - Vertex POD name: %s", pod.GetName())
+	w.t.Logf("KeranTest - Vertex POD ip: %s", pod.Status.PodIP)
+
+	return pod.Status.PodIP
 }
 
 func (w *When) CreateISBSvc() *When {

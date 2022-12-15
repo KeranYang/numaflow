@@ -6,8 +6,7 @@ spec:
   vertices:
     - name: in
       source:
-        http:
-          service: true
+        http: {}
     - name: even-or-odd
       udf:
         container:
