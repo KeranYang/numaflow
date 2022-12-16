@@ -26,11 +26,11 @@ import (
 
 func init() {
 	// send-message API is used to post data to a http source vertex pod.
-	// The API takes in two parameters(podIp and vName) and constructs the target url as
-	// https://{podIp}:8443/vertices/{vName}.
+	// The API takes in two parameters(podIp and vertexName) and constructs the target url as
+	// https://{podIp}:8443/vertices/{vertexName}.
 	http.HandleFunc("/http/send-message", func(w http.ResponseWriter, r *http.Request) {
 		podIp := r.URL.Query().Get("podIp")
-		vName := r.URL.Query().Get("vertex")
+		vertexName := r.URL.Query().Get("vertexName")
 		buf, err := io.ReadAll(r.Body)
 		if err != nil {
 			w.WriteHeader(500)
@@ -44,7 +44,7 @@ func init() {
 			},
 		}
 
-		_, err = httpClient.Post(fmt.Sprintf("https://%s:8443/vertices/%s", podIp, vName), "application/json", bytes.NewBuffer(buf))
+		_, err = httpClient.Post(fmt.Sprintf("https://%s:8443/vertices/%s", podIp, vertexName), "application/json", bytes.NewBuffer(buf))
 
 		if err != nil {
 			w.WriteHeader(500)
