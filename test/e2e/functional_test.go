@@ -132,8 +132,8 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 	w := s.Given().Pipeline("@testdata/even-odd.yaml").
 		When().
 		CreatePipelineAndWait()
+
 	defer w.DeletePipelineAndWait()
-	pipelineName := "even-odd"
 
 	w.Expect().
 		VertexPodsRunning().
@@ -142,28 +142,30 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 		VertexPodLogContains("even-sink", LogSinkVertexStarted).
 		VertexPodLogContains("odd-sink", LogSinkVertexStarted).
 		VertexPodLogContains("number-sink", LogSinkVertexStarted)
+	defer w.VertexPodPortForward("in", 8443, dfv1.VertexHTTPSPort).
+		TerminateAllPodPortForwards()
 
-	// To ensure the source vertex http service is up and running and ready to receive POST requests.
-	time.Sleep(time.Minute * 1)
+	HTTPExpect(s.T(), "https://localhost:8443").POST("/vertices/in").WithBytes([]byte("888888")).
+		Expect().
+		Status(204)
+	HTTPExpect(s.T(), "https://localhost:8443").POST("/vertices/in").WithBytes([]byte("888889")).
+		Expect().
+		Status(204)
+	HTTPExpect(s.T(), "https://localhost:8443").POST("/vertices/in").WithBytes([]byte("not an integer")).
+		Expect().
+		Status(204)
 
-	w.SendMessageTo(pipelineName, "in", []byte(`888888`))
-	w.SendMessageTo(pipelineName, "in", []byte(`888889`))
-	w.SendMessageTo(pipelineName, "in", []byte(`not an integer`))
+	w.Expect().VertexPodLogContains("even-sink", "888888")
+	w.Expect().VertexPodLogNotContains("even-sink", "888889", PodLogCheckOptionWithTimeout(2*time.Second))
+	w.Expect().VertexPodLogNotContains("even-sink", "not an integer", PodLogCheckOptionWithTimeout(2*time.Second))
 
-	// Wait for data to reach sink vertex.
-	time.Sleep(time.Second * 5)
+	w.Expect().VertexPodLogContains("odd-sink", "888889")
+	w.Expect().VertexPodLogNotContains("odd-sink", "888888", PodLogCheckOptionWithTimeout(2*time.Second))
+	w.Expect().VertexPodLogNotContains("odd-sink", "not an integer", PodLogCheckOptionWithTimeout(2*time.Second))
 
-	w.Expect().RedisContains("even-sink", "888888")
-	w.Expect().RedisNotContains("even-sink", "888889")
-	w.Expect().RedisNotContains("even-sink", "not an integer")
-
-	w.Expect().RedisContains("odd-sink", "888889")
-	w.Expect().RedisNotContains("odd-sink", "888888")
-	w.Expect().RedisNotContains("odd-sink", "not an integer")
-
-	w.Expect().RedisContains("number-sink", "888888")
-	w.Expect().RedisContains("number-sink", "888889")
-	w.Expect().RedisNotContains("number-sink", "not an integer")
+	w.Expect().VertexPodLogContains("number-sink", "888888")
+	w.Expect().VertexPodLogContains("number-sink", "888889")
+	w.Expect().VertexPodLogNotContains("number-sink", "not an integer", PodLogCheckOptionWithTimeout(2*time.Second))
 }
 
 func (s *FunctionalSuite) TestWatermarkEnabled() {
