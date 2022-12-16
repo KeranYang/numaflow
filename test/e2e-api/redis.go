@@ -27,7 +27,7 @@ import (
 
 func init() {
 	http.HandleFunc("/redis/get-msg-count-contains", func(w http.ResponseWriter, r *http.Request) {
-		sinkName := r.URL.Query().Get("sinkName")
+		// sinkName := r.URL.Query().Get("sinkName")
 		targetRegex, err := url.QueryUnescape(r.URL.Query().Get("targetRegex"))
 
 		if err != nil {
@@ -41,7 +41,7 @@ func init() {
 			Addr: "redis:6379",
 		})
 
-		keyList, err := client.Keys(context.Background(), fmt.Sprintf("%s*%s*", sinkName, targetRegex)).Result()
+		keyList, err := client.Keys(context.Background(), fmt.Sprintf("*%s*", targetRegex)).Result()
 		if err != nil {
 			log.Println(err)
 			w.WriteHeader(500)
