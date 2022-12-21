@@ -27,6 +27,8 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+//go:generate kubectl -n numaflow-system delete statefulset redis --ignore-not-found=true
+//go:generate kubectl apply -k ../../config/apps/redis -n numaflow-system
 type ReduceSuite struct {
 	E2ESuite
 }
@@ -66,8 +68,9 @@ func (r *ReduceSuite) TestSimpleKeyedReducePipeline() {
 
 	// since the key can be even or odd and the window duration is 10s
 	// the sum should be 20(for even) and 40(for odd)
-	w.Expect().VertexPodLogContains("sink", "Payload -  40  Key -  odd  Start -  60000  End -  70000")
-	w.Expect().VertexPodLogContains("sink", "Payload -  20  Key -  even  Start -  60000  End -  70000")
+	w.Expect().
+		RedisContains("sink", "40").
+		RedisContains("sink", "20")
 	done <- struct{}{}
 }
 
@@ -105,7 +108,7 @@ func (r *ReduceSuite) TestSimpleNonKeyedReducePipeline() {
 
 	// since there is no key, all the messages will be assigned to same window
 	// the sum should be 60(since the window is 10s)
-	w.Expect().VertexPodLogContains("sink", "Payload -  60  Key -  NON_KEYED_STREAM  Start -  60000  End -  70000")
+	w.Expect().RedisContains("sink", "60")
 	done <- struct{}{}
 }
 
@@ -143,7 +146,7 @@ func (r *ReduceSuite) TestComplexReducePipelineKeyedNonKeyed() {
 	// since the key can be even or odd and the first window duration is 10s(which is keyed)
 	// and the second window duration is 60s(non-keyed)
 	// the sum should be 180(60 + 120)
-	w.Expect().VertexPodLogContains("sink", "Payload -  180  Key -  NON_KEYED_STREAM  Start -  120000  End -  180000")
+	w.Expect().RedisContains("sink", "180")
 	done <- struct{}{}
 }
 
@@ -194,18 +197,19 @@ func (r *ReduceSuite) TestSimpleReducePipelineFailOverUsingWAL() {
 		}
 	}()
 
-	w.Expect().VertexPodLogContains("sink", "Payload -  38", PodLogCheckOptionWithCount(1))
-	w.Expect().VertexPodLogContains("sink", "Payload -  76", PodLogCheckOptionWithCount(1))
-	w.Expect().VertexPodLogContains("sink", "Payload -  120", PodLogCheckOptionWithCount(1))
-	w.Expect().VertexPodLogContains("sink", "Payload -  240", PodLogCheckOptionWithCount(1))
+	w.Expect().
+		RedisContains("sink", "38").
+		RedisContains("sink", "76").
+		RedisContains("sink", "120").
+		RedisContains("sink", "240")
 
 	// Kill the reducer pods after processing to trigger failover.
 	w.Exec("/bin/sh", []string{"-c", args}, CheckPodKillSucceeded)
-	w.Expect().VertexPodsRunning()
-	w.Expect().VertexPodLogContains("sink", "Payload -  38", PodLogCheckOptionWithCount(1))
-	w.Expect().VertexPodLogContains("sink", "Payload -  76", PodLogCheckOptionWithCount(1))
-	w.Expect().VertexPodLogContains("sink", "Payload -  120", PodLogCheckOptionWithCount(1))
-	w.Expect().VertexPodLogContains("sink", "Payload -  240", PodLogCheckOptionWithCount(1))
+	w.Expect().VertexPodsRunning().
+		RedisContains("sink", "38").
+		RedisContains("sink", "76").
+		RedisContains("sink", "120").
+		RedisContains("sink", "240")
 	done <- struct{}{}
 }
 
@@ -241,9 +245,10 @@ func (r *ReduceSuite) TestComplexSlidingWindowPipeline() {
 		}
 	}()
 
-	w.Expect().VertexPodLogContains("sink", "Payload -  15  Key -  NON_KEYED_STREAM  Start -  20000  End -  80000")
-	w.Expect().VertexPodLogContains("sink", "Payload -  45  Key -  NON_KEYED_STREAM  Start -  30000  End -  90000")
-	w.Expect().VertexPodLogContains("sink", "Payload -  180  Key -  NON_KEYED_STREAM  Start -  80000  End -  140000")
+	w.Expect().
+		RedisContains("sink", "15").
+		RedisContains("sink", "45").
+		RedisContains("sink", "180")
 	done <- struct{}{}
 }
 
