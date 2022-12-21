@@ -40,10 +40,8 @@ func (s *HTTPSuite) TestHTTPSourcePipeline() {
 	defer w.DeletePipelineAndWait()
 	pipelineName := "http-source"
 
-	w.Expect().
-		VertexPodsRunning().
-		VertexPodLogContains("in", LogSourceVertexStarted).
-		VertexPodLogContains("out", SinkVertexStarted, PodLogCheckOptionWithContainer("numa"))
+	// wait for all the pods to come up
+	w.Expect().VertexPodsRunning()
 
 	// Check Service
 	cmd := fmt.Sprintf("kubectl -n %s get svc -lnumaflow.numaproj.io/pipeline-name=%s,numaflow.numaproj.io/vertex-name=%s | grep -v CLUSTER-IP | grep -v headless", Namespace, "http-source", "in")
@@ -71,10 +69,8 @@ func (s *HTTPSuite) TestHTTPSourceAuthPipeline() {
 	defer w.DeletePipelineAndWait()
 	pipelineName := "http-auth-source"
 
-	w.Expect().
-		VertexPodsRunning().
-		VertexPodLogContains("in", LogSourceVertexStarted).
-		VertexPodLogContains("out", SinkVertexStarted, PodLogCheckOptionWithContainer("numa"))
+	// wait for all the pods to come up
+	w.Expect().VertexPodsRunning()
 
 	w.SendMessageTo(pipelineName, "in", *NewRequestBuilder().WithBody([]byte("no-auth")).Build()).
 		SendMessageTo(pipelineName, "in", *NewRequestBuilder().WithBody([]byte("with-auth")).WithHeader("Authorization", "Bearer faketoken").Build())

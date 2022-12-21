@@ -111,11 +111,8 @@ func (s *FunctionalSuite) TestFiltering() {
 	defer w.DeletePipelineAndWait()
 	pipelineName := "filtering"
 
-	w.Expect().
-		VertexPodsRunning().
-		VertexPodLogContains("in", LogSourceVertexStarted).
-		VertexPodLogContains("p1", LogUDFVertexStarted, PodLogCheckOptionWithContainer("numa")).
-		VertexPodLogContains("out", SinkVertexStarted, PodLogCheckOptionWithContainer("numa"))
+	// wait for all the pods to come up
+	w.Expect().VertexPodsRunning()
 
 	w.SendMessageTo(pipelineName, "in", *NewRequestBuilder().WithBody([]byte(`{"id": 180, "msg": "hello", "expect0": "fail", "desc": "A bad example"}`)).Build()).
 		SendMessageTo(pipelineName, "in", *NewRequestBuilder().WithBody([]byte(`{"id": 80, "msg": "hello1", "expect1": "fail", "desc": "A bad example"}`)).Build()).
@@ -134,13 +131,8 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 	defer w.DeletePipelineAndWait()
 	pipelineName := "even-odd"
 
-	w.Expect().
-		VertexPodsRunning().
-		VertexPodLogContains("in", LogSourceVertexStarted).
-		VertexPodLogContains("even-or-odd", LogUDFVertexStarted, PodLogCheckOptionWithContainer("numa")).
-		VertexPodLogContains("even-sink", SinkVertexStarted).
-		VertexPodLogContains("odd-sink", SinkVertexStarted).
-		VertexPodLogContains("number-sink", SinkVertexStarted)
+	// wait for all the pods to come up
+	w.Expect().VertexPodsRunning()
 
 	w.SendMessageTo(pipelineName, "in", *NewRequestBuilder().WithBody([]byte("888888")).Build()).
 		SendMessageTo(pipelineName, "in", *NewRequestBuilder().WithBody([]byte("888889")).Build()).
@@ -169,17 +161,8 @@ func (s *FunctionalSuite) TestWatermarkEnabled() {
 	// TODO: Any way to extract the list from suite
 	vertexList := []string{"input", "cat1", "cat2", "cat3", "output1", "output2"}
 
-	w.Expect().
-		VertexPodsRunning().DaemonPodsRunning().
-		VertexPodLogContains("input", LogSourceVertexStarted).
-		VertexPodLogContains("cat1", LogUDFVertexStarted, PodLogCheckOptionWithContainer("numa")).
-		VertexPodLogContains("cat2", LogUDFVertexStarted, PodLogCheckOptionWithContainer("numa")).
-		VertexPodLogContains("cat3", LogUDFVertexStarted, PodLogCheckOptionWithContainer("numa")).
-		VertexPodLogContains("output1", SinkVertexStarted).
-		VertexPodLogContains("output2", SinkVertexStarted).
-		DaemonPodLogContains(pipelineName, LogDaemonStarted).
-		VertexPodLogContains("output1", `"Data":".*","Createdts":.*`).
-		VertexPodLogContains("output2", `"Data":".*","Createdts":.*`)
+	// wait for all the pods to come up
+	w.Expect().VertexPodsRunning().DaemonPodsRunning()
 
 	defer w.DaemonPodPortForward(pipelineName, 1234, dfv1.DaemonServicePort).
 		TerminateAllPodPortForwards()
