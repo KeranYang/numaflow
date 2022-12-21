@@ -44,8 +44,7 @@ func (r *ReduceSuite) TestSimpleKeyedReducePipeline() {
 	pipelineName := "simple-sum"
 
 	// wait for all the pods to come up
-	w.Expect().
-		VertexPodsRunning()
+	w.Expect().VertexPodsRunning()
 
 	done := make(chan struct{})
 	go func() {
@@ -161,12 +160,6 @@ func (r *ReduceSuite) TestSimpleReducePipelineFailOverUsingWAL() {
 
 	// wait for all the pods to come up
 	w.Expect().VertexPodsRunning()
-
-	w.Expect().
-		VertexPodLogContains("in", LogSourceVertexStarted).
-		VertexPodLogContains("atoi", LogUDFVertexStarted, PodLogCheckOptionWithContainer("numa")).
-		VertexPodLogContains("sink", SinkVertexStarted).
-		DaemonPodLogContains(pipelineName, LogDaemonStarted)
 
 	args := "kubectl delete po -n numaflow-system -l " +
 		"numaflow.numaproj.io/pipeline-name=even-odd-sum,numaflow.numaproj.io/vertex-name=compute-sum"
