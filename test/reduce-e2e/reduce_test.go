@@ -150,7 +150,7 @@ func (r *ReduceSuite) TestComplexReducePipelineKeyedNonKeyed() {
 }
 
 func (r *ReduceSuite) TestSimpleReducePipelineFailOverUsingWAL() {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	w := r.Given().Pipeline("@testdata/simple-reduce-pipeline-wal.yaml").
 		When().
