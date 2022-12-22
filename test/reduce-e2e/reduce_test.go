@@ -149,7 +149,7 @@ func (r *ReduceSuite) TestComplexReducePipelineKeyedNonKeyed() {
 	done <- struct{}{}
 }
 
-func (r *ReduceSuite) TestSimpleReducePipelineFailOverUsingWAL() {
+func (r *ReduceSuite) TestSimpleAeducePipelineFailOverUsingWAL() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	w := r.Given().Pipeline("@testdata/simple-reduce-pipeline-wal.yaml").
