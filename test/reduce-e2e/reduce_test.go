@@ -149,6 +149,55 @@ func (r *ReduceSuite) TestComplexReducePipelineKeyedNonKeyed() {
 	done <- struct{}{}
 }
 
+func (r *ReduceSuite) TestSimpleReducePipelineFailOverUsingWAL() {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	w := r.Given().Pipeline("@testdata/simple-reduce-pipeline-wal.yaml").
+		When().
+		CreatePipelineAndWait()
+	defer w.DeletePipelineAndWait()
+	pipelineName := "even-odd-sum"
+
+	// wait for all the pods to come up
+	w.Expect().VertexPodsRunning()
+
+	args := "kubectl delete po -n numaflow-system -l " +
+		"numaflow.numaproj.io/pipeline-name=even-odd-sum,numaflow.numaproj.io/vertex-name=compute-sum"
+
+	// Kill the reducer pods before processing to trigger failover.
+	w.Exec("/bin/sh", []string{"-c", args}, CheckPodKillSucceeded)
+	done := make(chan struct{})
+
+	go func() {
+		startTime := int(time.Unix(1000, 0).UnixMilli())
+		for i := 1; true; i++ {
+			select {
+			case <-ctx.Done():
+				return
+			case <-done:
+				return
+			default:
+				eventTime := strconv.Itoa(startTime + (i * 1000))
+				if i == 5 {
+					// Kill the reducer pods during processing to trigger failover.
+					w.Expect().VertexPodsRunning()
+					w.Exec("/bin/sh", []string{"-c", args}, CheckPodKillSucceeded)
+				}
+				w.SendMessageTo(pipelineName, "in", *NewRequestBuilder().WithBody([]byte("1")).WithHeader("X-Numaflow-Event-Time", eventTime).Build()).
+					SendMessageTo(pipelineName, "in", *NewRequestBuilder().WithBody([]byte("2")).WithHeader("X-Numaflow-Event-Time", eventTime).Build()).
+					SendMessageTo(pipelineName, "in", *NewRequestBuilder().WithBody([]byte("3")).WithHeader("X-Numaflow-Event-Time", eventTime).Build())
+			}
+		}
+	}()
+
+	w.Expect().
+		RedisContains("sink", "38").
+		RedisContains("sink", "76").
+		RedisContains("sink", "120").
+		RedisContains("sink", "240")
+	done <- struct{}{}
+}
+
 // two reduce vertex(keyed and non keyed) followed by a sliding window vertex
 func (r *ReduceSuite) TestComplexSlidingWindowPipeline() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
