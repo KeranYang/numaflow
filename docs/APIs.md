@@ -3616,6 +3616,15 @@ GeneratorSource </a> </em>
 <em>(Optional)</em>
 </td>
 </tr>
+<tr>
+<td>
+<code>transformer</code></br> <em>
+<a href="#numaflow.numaproj.io/v1alpha1.UDF"> UDF </a> </em>
+</td>
+<td>
+<em>(Optional)</em>
+</td>
+</tr>
 </tbody>
 </table>
 <h3 id="numaflow.numaproj.io/v1alpha1.Status">
@@ -3785,7 +3794,8 @@ UDF
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#numaflow.numaproj.io/v1alpha1.AbstractVertex">AbstractVertex</a>)
+<a href="#numaflow.numaproj.io/v1alpha1.AbstractVertex">AbstractVertex</a>,
+<a href="#numaflow.numaproj.io/v1alpha1.Source">Source</a>)
 </p>
 <p>
 </p>

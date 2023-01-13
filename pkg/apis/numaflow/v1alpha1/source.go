@@ -29,6 +29,8 @@ type Source struct {
 	HTTP *HTTPSource `json:"http,omitempty" protobuf:"bytes,3,opt,name=http"`
 	// +optional
 	Nats *NatsSource `json:"nats,omitempty" protobuf:"bytes,4,opt,name=nats"`
+	// +optional
+	Transformer *UDTransformer `json:"transformer,omitempty" protobuf:"bytes,5,opt,name=transformer"`
 }
 
 func (s Source) getContainers(req getContainerReq) ([]corev1.Container, error) {

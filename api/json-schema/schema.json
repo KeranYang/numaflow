@@ -18821,6 +18821,9 @@
         },
         "nats": {
           "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.NatsSource"
+        },
+        "transformer": {
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.UDF"
         }
       },
       "type": "object"
