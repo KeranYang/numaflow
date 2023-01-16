@@ -1,0 +1,29 @@
+apiVersion: numaflow.numaproj.io/v1alpha1
+kind: Pipeline
+metadata:
+  name: assign-event-time
+spec:
+  vertices:
+    - name: in
+      source:
+        http: {}
+        transformer:
+          container:
+            image: quay.io/numaio/numaflow-go/map-even-odd
+    - name: p1
+      scale:
+        min: 1
+      udf:
+        builtin:
+          name: cat
+    - name: even-sink
+      scale:
+        min: 1
+      sink:
+        # A simple log printing sink
+        log: {}
+  edges:
+    - from: in
+      to: p1
+    - from: p1
+      to: even-sink
