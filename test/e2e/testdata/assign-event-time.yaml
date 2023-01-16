@@ -25,8 +25,8 @@ spec:
   edges:
     - from: in
       to: p1
-    - from: p1
-      to: even-sink
       conditions:
         keyIn:
           - even
+    - from: p1
+      to: even-sink
