@@ -27,3 +27,6 @@ spec:
       to: p1
     - from: p1
       to: even-sink
+      conditions:
+        keyIn:
+          - even
