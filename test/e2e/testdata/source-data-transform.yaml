@@ -1,7 +1,7 @@
 apiVersion: numaflow.numaproj.io/v1alpha1
 kind: Pipeline
 metadata:
-  name: assign-event-time
+  name: source-data-transform
 spec:
   vertices:
     - name: in
