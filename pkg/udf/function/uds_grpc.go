@@ -19,6 +19,7 @@ package function
 import (
 	"context"
 	"fmt"
+	"log"
 	"strconv"
 	"sync"
 	"time"
@@ -65,6 +66,7 @@ func (u *UdsGRPCBasedUDF) CloseConn(ctx context.Context) error {
 
 // WaitUntilReady waits until the client is connected.
 func (u *UdsGRPCBasedUDF) WaitUntilReady(ctx context.Context) error {
+	log.Printf("reached here - 5")
 	for {
 		select {
 		case <-ctx.Done():
@@ -73,6 +75,7 @@ func (u *UdsGRPCBasedUDF) WaitUntilReady(ctx context.Context) error {
 			if _, err := u.client.IsReady(ctx, &emptypb.Empty{}); err == nil {
 				return nil
 			}
+			log.Printf("reached here - 6")
 			time.Sleep(1 * time.Second)
 		}
 	}
@@ -107,7 +110,10 @@ func (u *UdsGRPCBasedUDF) ApplyMap(ctx context.Context, readMessage *isb.ReadMes
 	for i, datum := range datumList {
 		key := datum.Key
 		// When ApplyMap is invoked by source user defined mapT function, message event time gets updated.
-		parentPaneInfo.EventTime = datum.EventTime.EventTime.AsTime()
+		if datum.EventTime != nil {
+			parentPaneInfo.EventTime = datum.EventTime.EventTime.AsTime()
+		}
+
 		writeMessage := &isb.Message{
 			Header: isb.Header{
 				PaneInfo: parentPaneInfo,

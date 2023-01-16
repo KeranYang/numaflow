@@ -23,6 +23,7 @@ import (
 	"github.com/numaproj/numaflow/pkg/shuffle"
 	"github.com/numaproj/numaflow/pkg/udf/function"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -316,6 +317,7 @@ func (h *httpSource) ForceStop() {
 }
 
 func (h *httpSource) Start() <-chan struct{} {
+	log.Printf("reached here - 3")
 	ctx := context.Background()
 	defer func() { h.ready = true }()
 
@@ -324,6 +326,8 @@ func (h *httpSource) Start() <-chan struct{} {
 		// TODO - how to better handle error here
 		panic("failed on UDF readiness check, %w")
 	}
+
+	log.Printf("reached here - 4")
 
 	return h.forwarder.Start()
 }
