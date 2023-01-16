@@ -34,7 +34,32 @@ type Source struct {
 }
 
 func (s Source) getContainers(req getContainerReq) ([]corev1.Container, error) {
-	return []corev1.Container{
-		containerBuilder{}.init(req).args("processor", "--type="+string(VertexTypeSource), "--isbsvc-type="+string(req.isbSvcType)).build(),
-	}, nil
+	containers := []corev1.Container{
+		s.getMainContainer(req),
+	}
+	if s.Transformer != nil {
+		containers = append(containers, s.getUDTransformerContainer(req))
+	}
+	return containers, nil
+}
+
+func (s Source) getMainContainer(req getContainerReq) corev1.Container {
+	return containerBuilder{}.init(req).args("processor", "--type="+string(VertexTypeSource), "--isbsvc-type="+string(req.isbSvcType)).build()
+}
+
+func (s Source) getUDTransformerContainer(req getContainerReq) corev1.Container {
+	c := containerBuilder{}.
+		init(req).
+		name(CtrUdtransformer)
+	c.Env = nil
+	x := s.Transformer.Container
+	c = c.image(x.Image)
+	if len(x.Command) > 0 {
+		c = c.command(x.Command...)
+	}
+	if len(x.Args) > 0 {
+		c = c.args(x.Args...)
+	}
+	c = c.appendEnv(x.Env...).appendVolumeMounts(x.VolumeMounts...).resources(x.Resources)
+	return c.build()
 }
