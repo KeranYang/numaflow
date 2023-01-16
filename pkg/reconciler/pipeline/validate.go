@@ -130,13 +130,6 @@ func ValidatePipeline(pl *dfv1.Pipeline) error {
 		if _, existing := sinks[e.From]; existing {
 			return fmt.Errorf("sink vertex %q can not be define as 'from'", e.To)
 		}
-		if e.Conditions != nil && len(e.Conditions.KeyIn) > 0 {
-			/*
-				if _, ok := sources[e.From]; ok { // Source vertex should not do conditional forwarding
-					return fmt.Errorf(`invalid edge, "conditions.keysIn" not allowed for %q`, e.From)
-				}
-			*/
-		}
 		if e.Parallelism != nil {
 			if _, ok := reduceUdfs[e.To]; !ok {
 				return fmt.Errorf(`invalid edge (%s - %s), "parallelism" is not allowed for an edge leading to a non-reduce vertex`, e.From, e.To)
