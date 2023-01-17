@@ -53,7 +53,8 @@ type httpSource struct {
 	messages     chan *isb.ReadMessage
 	logger       *zap.SugaredLogger
 
-	forwarder *forward.InterStepDataForward
+	forwarder     *forward.InterStepDataForward
+	udtransformer *function.UdsGRPCBasedUDF
 	// source watermark publisher
 	sourcePublishWM publish.Publisher
 	// context cancel function
@@ -198,7 +199,7 @@ func New(vertexInstance *dfv1.VertexInstance, writers []isb.BufferWriter, fetchW
 	}
 
 	if vertexInstance.Vertex.SpecifyUDTransformer() {
-		transformer, err := function.NewUDSGRPCBasedUDF()
+		h.udtransformer, err = function.NewUDSGRPCBasedUDF()
 		if err != nil {
 			return nil, fmt.Errorf("failed to create gRPC client, %w", err)
 		}
@@ -229,7 +230,7 @@ func New(vertexInstance *dfv1.VertexInstance, writers []isb.BufferWriter, fetchW
 			}
 			return result, nil
 		})
-		h.forwarder, err = forward.NewInterStepDataForward(vertexInstance.Vertex, h, destinations, conditionalForwarder, transformer, fetchWM, publishWM, forwardOpts...)
+		h.forwarder, err = forward.NewInterStepDataForward(vertexInstance.Vertex, h, destinations, conditionalForwarder, h.udtransformer, fetchWM, publishWM, forwardOpts...)
 	} else {
 		h.forwarder, err = forward.NewInterStepDataForward(vertexInstance.Vertex, h, destinations, forward.All, applier.Terminal, fetchWM, publishWM, forwardOpts...)
 	}
@@ -297,14 +298,11 @@ func (h *httpSource) Close() error {
 func (h *httpSource) Stop() {
 	h.logger.Info("Stopping http reader...")
 	defer func() { h.ready = false }()
-	/*
-		ctx := context.Background()
-		err := h.transformer.CloseConn(ctx)
-		if err != nil {
-			log.Printf("Failed to close gRPC client conn: %v", zap.Error(err))
-		}
-	*/
 
+	err := h.udtransformer.CloseConn(h.lifecycleCtx)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to close gRPC client conn: %v", zap.Error(err)))
+	}
 	h.forwarder.Stop()
 }
 
@@ -314,15 +312,9 @@ func (h *httpSource) ForceStop() {
 
 func (h *httpSource) Start() <-chan struct{} {
 	defer func() { h.ready = true }()
-
-	/*
-		ctx := context.Background()
-			// Readiness check
-			if err := h.transformer.WaitUntilReady(ctx); err != nil {
-				// TODO - how to better handle error here
-				panic("failed on UDF readiness check, %w")
-			}
-	*/
-
+	// Readiness check
+	if err := h.udtransformer.WaitUntilReady(h.lifecycleCtx); err != nil {
+		panic("failed on UDTransformer readiness check, %w")
+	}
 	return h.forwarder.Start()
 }

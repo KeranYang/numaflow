@@ -168,12 +168,12 @@ func (s *FunctionalSuite) TestSourceDataTransform() {
 	// wait for all the pods to come up
 	w.Expect().VertexPodsRunning()
 
-	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("888888"))).
-		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("888889"))).
+	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("88"))).
+		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("89"))).
 		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("not an integer")))
 
-	w.Expect().SinkContains("even-sink", "888888")
-	w.Expect().SinkNotContains("even-sink", "888889")
+	w.Expect().SinkContains("even-sink", "88")
+	w.Expect().SinkNotContains("even-sink", "89")
 	w.Expect().SinkNotContains("even-sink", "not an integer")
 }
 
