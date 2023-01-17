@@ -1,0 +1,24 @@
+apiVersion: numaflow.numaproj.io/v1alpha1
+kind: Pipeline
+metadata:
+  name: source-data-transform
+spec:
+  vertices:
+    - name: in
+      source:
+        http: {}
+        transformer:
+          container:
+            image: quay.io/numaio/numaflow-go/map-even-odd
+    - name: even-sink
+      scale:
+        min: 1
+      sink:
+        # A simple log printing sink
+        log: {}
+  edges:
+    - from: in
+      to: even-sink
+      conditions:
+        keyIn:
+          - even

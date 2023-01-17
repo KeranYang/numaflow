@@ -66,6 +66,8 @@ const (
 	CtrMain   = "numa"
 	CtrUdf    = "udf"
 	CtrUdsink = "udsink"
+	// TODO - update the spec to use udtransfomrer?
+	CtrUdtransformer = "transformer"
 
 	// components
 	ComponentISBSvc = "isbsvc"

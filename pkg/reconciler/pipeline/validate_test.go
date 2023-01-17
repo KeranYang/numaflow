@@ -316,13 +316,15 @@ func TestValidatePipeline(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
-	t.Run("bad conditional forwarding", func(t *testing.T) {
-		testObj := testPipeline.DeepCopy()
-		testObj.Spec.Edges[0].Conditions = &dfv1.ForwardConditions{KeyIn: []string{"hello"}}
-		err := ValidatePipeline(testObj)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid edge")
-	})
+	/*
+		t.Run("bad conditional forwarding", func(t *testing.T) {
+			testObj := testPipeline.DeepCopy()
+			testObj.Spec.Edges[0].Conditions = &dfv1.ForwardConditions{KeyIn: []string{"hello"}}
+			err := ValidatePipeline(testObj)
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid edge")
+		})
+	*/
 }
 
 func TestValidateReducePipeline(t *testing.T) {

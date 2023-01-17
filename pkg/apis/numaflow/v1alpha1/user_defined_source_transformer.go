@@ -14,18 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package cat
+package v1alpha1
 
-import (
-	"context"
-	"log"
-
-	functionsdk "github.com/numaproj/numaflow-go/pkg/function"
-)
-
-func New() functionsdk.MapFunc {
-	return func(ctx context.Context, key string, datum functionsdk.Datum) functionsdk.Messages {
-		log.Printf("Received key %s, payload %v", key, datum.Value())
-		return functionsdk.MessagesBuilder().Append(functionsdk.MessageTo(key, datum.Value()))
-	}
+type UDTransformer struct {
+	Container Container `json:"container" protobuf:"bytes,1,opt,name=container"`
 }
