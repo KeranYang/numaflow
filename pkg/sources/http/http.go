@@ -298,10 +298,11 @@ func (h *httpSource) Close() error {
 func (h *httpSource) Stop() {
 	h.logger.Info("Stopping http reader...")
 	defer func() { h.ready = false }()
-
-	err := h.udtransformer.CloseConn(h.lifecycleCtx)
-	if err != nil {
-		panic(fmt.Sprintf("Failed to close gRPC client conn: %v", zap.Error(err)))
+	if h.udtransformer != nil {
+		err := h.udtransformer.CloseConn(h.lifecycleCtx)
+		if err != nil {
+			h.logger.Warnw(fmt.Sprintf("Failed to close gRPC client conn: %v", zap.Error(err)))
+		}
 	}
 	h.forwarder.Stop()
 }
@@ -312,9 +313,11 @@ func (h *httpSource) ForceStop() {
 
 func (h *httpSource) Start() <-chan struct{} {
 	defer func() { h.ready = true }()
-	// Readiness check
-	if err := h.udtransformer.WaitUntilReady(h.lifecycleCtx); err != nil {
-		panic("failed on UDTransformer readiness check, %w")
+	if h.udtransformer != nil {
+		// Readiness check
+		if err := h.udtransformer.WaitUntilReady(h.lifecycleCtx); err != nil {
+			panic("failed on UDTransformer readiness check, %w")
+		}
 	}
 	return h.forwarder.Start()
 }
