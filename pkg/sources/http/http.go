@@ -24,7 +24,6 @@ import (
 	"github.com/numaproj/numaflow/pkg/udf/applier"
 	"github.com/numaproj/numaflow/pkg/udf/function"
 	"io"
-	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -296,13 +295,16 @@ func (h *httpSource) Close() error {
 }
 
 func (h *httpSource) Stop() {
-	ctx := context.Background()
 	h.logger.Info("Stopping http reader...")
 	defer func() { h.ready = false }()
-	err := h.transformer.CloseConn(ctx)
-	if err != nil {
-		log.Printf("Failed to close gRPC client conn: %v", zap.Error(err))
-	}
+	/*
+		ctx := context.Background()
+		err := h.transformer.CloseConn(ctx)
+		if err != nil {
+			log.Printf("Failed to close gRPC client conn: %v", zap.Error(err))
+		}
+	*/
+
 	h.forwarder.Stop()
 }
 
@@ -311,17 +313,16 @@ func (h *httpSource) ForceStop() {
 }
 
 func (h *httpSource) Start() <-chan struct{} {
-	log.Printf("reached here - 3")
-	ctx := context.Background()
 	defer func() { h.ready = true }()
 
-	// Readiness check
-	if err := h.transformer.WaitUntilReady(ctx); err != nil {
-		// TODO - how to better handle error here
-		panic("failed on UDF readiness check, %w")
-	}
-
-	log.Printf("reached here - 4")
+	/*
+		ctx := context.Background()
+			// Readiness check
+			if err := h.transformer.WaitUntilReady(ctx); err != nil {
+				// TODO - how to better handle error here
+				panic("failed on UDF readiness check, %w")
+			}
+	*/
 
 	return h.forwarder.Start()
 }
