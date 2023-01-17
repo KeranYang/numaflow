@@ -18,14 +18,12 @@ package cat
 
 import (
 	"context"
-	"log"
 
 	functionsdk "github.com/numaproj/numaflow-go/pkg/function"
 )
 
 func New() functionsdk.MapFunc {
 	return func(ctx context.Context, key string, datum functionsdk.Datum) functionsdk.Messages {
-		log.Printf("Received key %s, payload %v", key, datum.Value())
-		return functionsdk.MessagesBuilder().Append(functionsdk.MessageTo(key, datum.Value()))
+		return functionsdk.MessagesBuilder().Append(functionsdk.MessageToAll(datum.Value()))
 	}
 }
