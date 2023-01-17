@@ -20,9 +20,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"github.com/numaproj/numaflow/pkg/shuffle"
-	"github.com/numaproj/numaflow/pkg/udf/applier"
-	"github.com/numaproj/numaflow/pkg/udf/function"
 	"io"
 	"net/http"
 	"strconv"
@@ -38,6 +35,9 @@ import (
 	"github.com/numaproj/numaflow/pkg/shared/logging"
 	sharedtls "github.com/numaproj/numaflow/pkg/shared/tls"
 	sharedutil "github.com/numaproj/numaflow/pkg/shared/util"
+	"github.com/numaproj/numaflow/pkg/shuffle"
+	"github.com/numaproj/numaflow/pkg/udf/applier"
+	"github.com/numaproj/numaflow/pkg/udf/function"
 	"github.com/numaproj/numaflow/pkg/watermark/fetch"
 	"github.com/numaproj/numaflow/pkg/watermark/processor"
 	"github.com/numaproj/numaflow/pkg/watermark/publish"
@@ -196,7 +196,7 @@ func New(vertexInstance *dfv1.VertexInstance, writers []isb.BufferWriter, fetchW
 		}
 	}
 
-	if vertexInstance.Vertex.IsUDTransformer() {
+	if vertexInstance.Vertex.SpecifyUDTransformer() {
 		h.transformer, err = function.NewUDSGRPCBasedUDF()
 		if err != nil {
 			return nil, fmt.Errorf("failed to create gRPC client, %w", err)

@@ -3032,7 +3032,7 @@ func schema_pkg_apis_numaflow_v1alpha1_Source(ref common.ReferenceCallback) comm
 							Ref: ref("github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.NatsSource"),
 						},
 					},
-					"transformer": {
+					"udtransformer": {
 						SchemaProps: spec.SchemaProps{
 							Ref: ref("github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.UDTransformer"),
 						},
@@ -3202,8 +3202,7 @@ func schema_pkg_apis_numaflow_v1alpha1_UDTransformer(ref common.ReferenceCallbac
 				Properties: map[string]spec.Schema{
 					"container": {
 						SchemaProps: spec.SchemaProps{
-							Default: map[string]interface{}{},
-							Ref:     ref("github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.Container"),
+							Ref: ref("github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.Container"),
 						},
 					},
 				},

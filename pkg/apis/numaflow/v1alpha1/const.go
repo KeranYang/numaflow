@@ -62,12 +62,11 @@ const (
 	JetStreamConfigMapKey                = "nats-js"              // key for nats-js.conf in the configmap
 
 	// container names.
-	CtrInit   = "init"
-	CtrMain   = "numa"
-	CtrUdf    = "udf"
-	CtrUdsink = "udsink"
-	// TODO - update the spec to use udtransfomrer?
-	CtrUdtransformer = "transformer"
+	CtrInit          = "init"
+	CtrMain          = "numa"
+	CtrUdf           = "udf"
+	CtrUdsink        = "udsink"
+	CtrUdtransformer = "udtransformer"
 
 	// components
 	ComponentISBSvc = "isbsvc"

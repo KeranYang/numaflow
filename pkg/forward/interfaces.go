@@ -43,10 +43,7 @@ func (gw GoWhere) WhereTo(b string) ([]string, error) {
 
 // StarterStopper starts/stops the forwarding.
 type StarterStopper interface {
-	// TODO - do we need context here?
 	Start() <-chan struct{}
-	// TODO - do we need context here?
 	Stop()
-	// TODO - do we need context here?
 	ForceStop()
 }

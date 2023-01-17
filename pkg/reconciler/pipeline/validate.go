@@ -85,6 +85,12 @@ func ValidatePipeline(pl *dfv1.Pipeline) error {
 		return fmt.Errorf("pipeline has no sink, at least one vertex with 'sink' defined is required")
 	}
 
+	for k, s := range sources {
+		if s.Source.UdTransformer != nil && s.Source.UdTransformer.Container != nil && s.Source.UdTransformer.Container.Image == "" {
+			return fmt.Errorf("invalid vertex %q, a customized source data transformer image is required", k)
+		}
+	}
+
 	for k, u := range mapUdfs {
 		if u.UDF.Container != nil {
 			if u.UDF.Container.Image == "" && u.UDF.Builtin == nil {
@@ -250,5 +256,6 @@ func isReservedContainerName(name string) bool {
 	return name == dfv1.CtrInit ||
 		name == dfv1.CtrMain ||
 		name == dfv1.CtrUdf ||
-		name == dfv1.CtrUdsink
+		name == dfv1.CtrUdsink ||
+		name == dfv1.CtrUdtransformer
 }
