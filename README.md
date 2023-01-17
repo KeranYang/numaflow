@@ -37,7 +37,7 @@ full-featured stream processing platforms.
 
 ## Roadmap
 
-- User Defined Transformer at Source for better deserialization and filter for cost reduction (v0.8)
+- User Defined UdTransformer at Source for better deserialization and filter for cost reduction (v0.8)
 - Multi partitioned edges for higher throughput (v0.9)
 
 ## Resources

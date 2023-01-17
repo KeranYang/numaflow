@@ -18822,7 +18822,7 @@
         "nats": {
           "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.NatsSource"
         },
-        "transformer": {
+        "udtransformer": {
           "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.UDTransformer"
         }
       },

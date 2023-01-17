@@ -53,13 +53,14 @@ type httpSource struct {
 	messages     chan *isb.ReadMessage
 	logger       *zap.SugaredLogger
 
-	forwarder   *forward.InterStepDataForward
-	transformer *function.UdsGRPCBasedUDF
+	forwarder *forward.InterStepDataForward
 	// source watermark publisher
 	sourcePublishWM publish.Publisher
 	// context cancel function
 	cancelFunc context.CancelFunc
-	shutdown   func(context.Context) error
+	// lifecycleCtx context is used to control the lifecycle of this instance.
+	lifecycleCtx context.Context
+	shutdown     func(context.Context) error
 }
 
 type Option func(*httpSource) error
@@ -197,7 +198,7 @@ func New(vertexInstance *dfv1.VertexInstance, writers []isb.BufferWriter, fetchW
 	}
 
 	if vertexInstance.Vertex.SpecifyUDTransformer() {
-		h.transformer, err = function.NewUDSGRPCBasedUDF()
+		transformer, err := function.NewUDSGRPCBasedUDF()
 		if err != nil {
 			return nil, fmt.Errorf("failed to create gRPC client, %w", err)
 		}
@@ -228,7 +229,7 @@ func New(vertexInstance *dfv1.VertexInstance, writers []isb.BufferWriter, fetchW
 			}
 			return result, nil
 		})
-		h.forwarder, err = forward.NewInterStepDataForward(vertexInstance.Vertex, h, destinations, conditionalForwarder, h.transformer, fetchWM, publishWM, forwardOpts...)
+		h.forwarder, err = forward.NewInterStepDataForward(vertexInstance.Vertex, h, destinations, conditionalForwarder, transformer, fetchWM, publishWM, forwardOpts...)
 	} else {
 		h.forwarder, err = forward.NewInterStepDataForward(vertexInstance.Vertex, h, destinations, forward.All, applier.Terminal, fetchWM, publishWM, forwardOpts...)
 	}
@@ -238,11 +239,10 @@ func New(vertexInstance *dfv1.VertexInstance, writers []isb.BufferWriter, fetchW
 		return nil, err
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	h.cancelFunc = cancel
+	h.lifecycleCtx, h.cancelFunc = context.WithCancel(context.Background())
 	entityName := fmt.Sprintf("%s-%d", vertexInstance.Vertex.Name, vertexInstance.Replica)
 	processorEntity := processor.NewProcessorEntity(entityName)
-	h.sourcePublishWM = publish.NewPublish(ctx, processorEntity, publishWMStores, publish.IsSource(), publish.WithDelay(vertexInstance.Vertex.Spec.Watermark.GetMaxDelay()))
+	h.sourcePublishWM = publish.NewPublish(h.lifecycleCtx, processorEntity, publishWMStores, publish.IsSource(), publish.WithDelay(vertexInstance.Vertex.Spec.Watermark.GetMaxDelay()))
 	return h, nil
 }
 
