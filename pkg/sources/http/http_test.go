@@ -17,15 +17,15 @@ limitations under the License.
 package http
 
 import (
+	"testing"
+	"time"
+
 	dfv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaflow/pkg/isb"
 	"github.com/numaproj/numaflow/pkg/isb/stores/simplebuffer"
 	"github.com/numaproj/numaflow/pkg/watermark/generic"
 	"github.com/numaproj/numaflow/pkg/watermark/store"
 	"github.com/numaproj/numaflow/pkg/watermark/store/noop"
-	"testing"
-	"time"
-
 	"github.com/stretchr/testify/assert"
 )
 
