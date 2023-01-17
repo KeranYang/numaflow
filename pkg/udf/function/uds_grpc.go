@@ -106,11 +106,6 @@ func (u *UdsGRPCBasedUDF) ApplyMap(ctx context.Context, readMessage *isb.ReadMes
 	writeMessages := make([]*isb.Message, 0)
 	for i, datum := range datumList {
 		key := datum.Key
-		// When ApplyMap is invoked by source user defined transformer function, message event time gets updated.
-		if datum.EventTime != nil {
-			parentPaneInfo.EventTime = datum.EventTime.EventTime.AsTime()
-		}
-
 		writeMessage := &isb.Message{
 			Header: isb.Header{
 				PaneInfo: parentPaneInfo,

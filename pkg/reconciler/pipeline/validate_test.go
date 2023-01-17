@@ -231,7 +231,7 @@ func TestValidatePipeline(t *testing.T) {
 		}
 		err := ValidatePipeline(testObj)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "transformer image is required")
+		assert.Contains(t, err.Error(), "can not specify an empty image")
 	})
 
 	t.Run("udf no image and builtin specified", func(t *testing.T) {
