@@ -38,24 +38,25 @@ import (
 
 // UdsGRPCBasedUDF applies user defined function over gRPC (over Unix Domain Socket) client/server where server is the UDF.
 type UdsGRPCBasedUDF struct {
-	client functionsdk.Client
+	isSourceVertex bool
+	client         functionsdk.Client
 }
 
 var _ applier.MapApplier = (*UdsGRPCBasedUDF)(nil)
 var _ applier.ReduceApplier = (*UdsGRPCBasedUDF)(nil)
 
 // NewUDSGRPCBasedUDF returns a new udsGRPCBasedUDF object.
-func NewUDSGRPCBasedUDF() (*UdsGRPCBasedUDF, error) {
+func NewUDSGRPCBasedUDF(isSourceVertex bool) (*UdsGRPCBasedUDF, error) {
 	c, err := client.New() // Can we pass this as a parameter to the function?
 	if err != nil {
 		return nil, fmt.Errorf("failed to create a new gRPC client: %w", err)
 	}
-	return &UdsGRPCBasedUDF{c}, nil
+	return &UdsGRPCBasedUDF{isSourceVertex, c}, nil
 }
 
 // NewUdsGRPCBasedUDFWithClient need this for testing
-func NewUdsGRPCBasedUDFWithClient(client functionsdk.Client) *UdsGRPCBasedUDF {
-	return &UdsGRPCBasedUDF{client: client}
+func NewUdsGRPCBasedUDFWithClient(isSourceVertex bool, client functionsdk.Client) *UdsGRPCBasedUDF {
+	return &UdsGRPCBasedUDF{isSourceVertex: isSourceVertex, client: client}
 }
 
 // CloseConn closes the gRPC client connection.
@@ -91,7 +92,16 @@ func (u *UdsGRPCBasedUDF) ApplyMap(ctx context.Context, readMessage *isb.ReadMes
 	}
 
 	ctx = metadata.NewOutgoingContext(ctx, metadata.New(map[string]string{functionsdk.DatumKey: key}))
-	datumList, err := u.client.MapFn(ctx, d)
+
+	var datumList []*functionpb.Datum
+	var err error
+	if u.isSourceVertex {
+		datumList, err = u.client.MapFn(ctx, d)
+	} else {
+		// Source vertex data transformer uses MapTFn to perform both data transformation and event time assignment.
+		datumList, err = u.client.MapTFn(ctx, d)
+	}
+
 	if err != nil {
 		return nil, ApplyUDFErr{
 			UserUDFErr: false,
@@ -106,6 +116,10 @@ func (u *UdsGRPCBasedUDF) ApplyMap(ctx context.Context, readMessage *isb.ReadMes
 	writeMessages := make([]*isb.Message, 0)
 	for i, datum := range datumList {
 		key := datum.Key
+		if u.isSourceVertex && datum.EventTime != nil {
+			// Source data transformer assigns new event time to the messages.
+			parentPaneInfo.EventTime = datum.EventTime.EventTime.AsTime()
+		}
 		writeMessage := &isb.Message{
 			Header: isb.Header{
 				PaneInfo: parentPaneInfo,
