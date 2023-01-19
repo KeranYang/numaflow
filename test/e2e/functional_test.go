@@ -173,8 +173,8 @@ func (s *FunctionalSuite) TestSourceDataTransform() {
 		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("not an integer")))
 
 	w.Expect().SinkContains("even-sink", "88")
-	w.Expect().SinkNotContains("even-sink", "89")
-	w.Expect().SinkNotContains("even-sink", "not an integer")
+	w.Expect().SinkContains("even-sink", "89")
+	w.Expect().SinkContains("even-sink", "not an integer")
 }
 
 func (s *FunctionalSuite) TestWatermarkEnabled() {

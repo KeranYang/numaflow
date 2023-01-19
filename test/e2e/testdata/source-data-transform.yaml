@@ -9,7 +9,7 @@ spec:
         http: {}
         transformer:
           container:
-            image: quay.io/numaio/numaflow-go/map-even-odd
+            image: quay.io/numaio/numaflow-go/keran-test-assign-event-time:v2
     - name: even-sink
       scale:
         min: 1
