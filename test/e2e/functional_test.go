@@ -175,6 +175,7 @@ func (s *FunctionalSuite) TestSourceDataTransform() {
 	w.Expect().SinkContains("even-sink", "88")
 	w.Expect().SinkContains("even-sink", "89")
 	w.Expect().SinkContains("even-sink", "not an integer")
+	
 }
 
 func (s *FunctionalSuite) TestWatermarkEnabled() {
