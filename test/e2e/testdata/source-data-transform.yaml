@@ -20,6 +20,3 @@ spec:
   edges:
     - from: in
       to: even-sink
-      conditions:
-        keyIn:
-          - even
