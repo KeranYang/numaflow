@@ -30,7 +30,7 @@ type TransformerSuite struct {
 	E2ESuite
 }
 
-func (s *TransformerSuite) TestSourceDataTransform() {
+func (s *TransformerSuite) TestEventTimeFilter() {
 	w := s.Given().Pipeline("@testdata/event-time-filter.yaml").
 		When().
 		CreatePipelineAndWait()
@@ -60,12 +60,12 @@ func (s *TransformerSuite) TestSourceDataTransform() {
 	janFirst2023 := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	w.Expect().
-		VertexPodLogContains("sink-within-2022", fmt.Sprintf("EventTime - %d", janFirst2022.UnixMilli()), PodLogCheckOptionWithCount(1)).
-		VertexPodLogContains("sink-after-2022", fmt.Sprintf("EventTime - %d", janFirst2023.UnixMilli()), PodLogCheckOptionWithCount(2)).
-		VertexPodLogContains("sink-all", fmt.Sprintf("EventTime - %d", janFirst2022.UnixMilli()), PodLogCheckOptionWithCount(1)).
-		VertexPodLogContains("sink-all", fmt.Sprintf("EventTime - %d", janFirst2023.UnixMilli()), PodLogCheckOptionWithCount(2)).
-		VertexPodLogNotContains("sink-within-2022", fmt.Sprintf("EventTime - %d", janFirst2023.UnixMilli())).
-		VertexPodLogNotContains("sink-after-2022", fmt.Sprintf("EventTime - %d", janFirst2022.UnixMilli())).
+		VertexPodLogContains("sink-within-2022", fmt.Sprintf("EventTime -  %d", janFirst2022.UnixMilli()), PodLogCheckOptionWithCount(1)).
+		VertexPodLogContains("sink-after-2022", fmt.Sprintf("EventTime -  %d", janFirst2023.UnixMilli()), PodLogCheckOptionWithCount(2)).
+		VertexPodLogContains("sink-all", fmt.Sprintf("EventTime -  %d", janFirst2022.UnixMilli()), PodLogCheckOptionWithCount(1)).
+		VertexPodLogContains("sink-all", fmt.Sprintf("EventTime -  %d", janFirst2023.UnixMilli()), PodLogCheckOptionWithCount(2)).
+		VertexPodLogNotContains("sink-within-2022", fmt.Sprintf("EventTime -  %d", janFirst2023.UnixMilli())).
+		VertexPodLogNotContains("sink-after-2022", fmt.Sprintf("EventTime -  %d", janFirst2022.UnixMilli())).
 		VertexPodLogNotContains("sink-all", "Before2022").
 		VertexPodLogNotContains("sink-within-2022", "Before2022").
 		VertexPodLogNotContains("sink-after-2022", "Before2022")
