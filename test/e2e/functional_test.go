@@ -131,6 +131,141 @@ func (s *FunctionalSuite) TestFiltering() {
 	w.Expect().SinkNotContains("out", expect2)
 }
 
+func (s *FunctionalSuite) TestConditionalForwarding_6() {
+	w := s.Given().Pipeline("@testdata/even-odd.yaml").
+		When().
+		CreatePipelineAndWait()
+	defer w.DeletePipelineAndWait()
+	pipelineName := "even-odd"
+
+	// wait for all the pods to come up
+	w.Expect().VertexPodsRunning()
+
+	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("888888"))).
+		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("888889"))).
+		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("not an integer")))
+
+	w.Expect().SinkContains("even-sink", "888888")
+	w.Expect().SinkNotContains("even-sink", "888889")
+	w.Expect().SinkNotContains("even-sink", "not an integer")
+
+	w.Expect().SinkContains("odd-sink", "888889")
+	w.Expect().SinkNotContains("odd-sink", "888888")
+	w.Expect().SinkNotContains("odd-sink", "not an integer")
+
+	w.Expect().SinkContains("number-sink", "888888")
+	w.Expect().SinkContains("number-sink", "888889")
+	w.Expect().SinkNotContains("number-sink", "not an integer")
+}
+
+func (s *FunctionalSuite) TestConditionalForwarding_5() {
+	w := s.Given().Pipeline("@testdata/even-odd.yaml").
+		When().
+		CreatePipelineAndWait()
+	defer w.DeletePipelineAndWait()
+	pipelineName := "even-odd"
+
+	// wait for all the pods to come up
+	w.Expect().VertexPodsRunning()
+
+	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("888888"))).
+		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("888889"))).
+		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("not an integer")))
+
+	w.Expect().SinkContains("even-sink", "888888")
+	w.Expect().SinkNotContains("even-sink", "888889")
+	w.Expect().SinkNotContains("even-sink", "not an integer")
+
+	w.Expect().SinkContains("odd-sink", "888889")
+	w.Expect().SinkNotContains("odd-sink", "888888")
+	w.Expect().SinkNotContains("odd-sink", "not an integer")
+
+	w.Expect().SinkContains("number-sink", "888888")
+	w.Expect().SinkContains("number-sink", "888889")
+	w.Expect().SinkNotContains("number-sink", "not an integer")
+}
+
+func (s *FunctionalSuite) TestConditionalForwarding_4() {
+	w := s.Given().Pipeline("@testdata/even-odd.yaml").
+		When().
+		CreatePipelineAndWait()
+	defer w.DeletePipelineAndWait()
+	pipelineName := "even-odd"
+
+	// wait for all the pods to come up
+	w.Expect().VertexPodsRunning()
+
+	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("888888"))).
+		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("888889"))).
+		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("not an integer")))
+
+	w.Expect().SinkContains("even-sink", "888888")
+	w.Expect().SinkNotContains("even-sink", "888889")
+	w.Expect().SinkNotContains("even-sink", "not an integer")
+
+	w.Expect().SinkContains("odd-sink", "888889")
+	w.Expect().SinkNotContains("odd-sink", "888888")
+	w.Expect().SinkNotContains("odd-sink", "not an integer")
+
+	w.Expect().SinkContains("number-sink", "888888")
+	w.Expect().SinkContains("number-sink", "888889")
+	w.Expect().SinkNotContains("number-sink", "not an integer")
+}
+
+func (s *FunctionalSuite) TestConditionalForwarding_3() {
+	w := s.Given().Pipeline("@testdata/even-odd.yaml").
+		When().
+		CreatePipelineAndWait()
+	defer w.DeletePipelineAndWait()
+	pipelineName := "even-odd"
+
+	// wait for all the pods to come up
+	w.Expect().VertexPodsRunning()
+
+	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("888888"))).
+		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("888889"))).
+		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("not an integer")))
+
+	w.Expect().SinkContains("even-sink", "888888")
+	w.Expect().SinkNotContains("even-sink", "888889")
+	w.Expect().SinkNotContains("even-sink", "not an integer")
+
+	w.Expect().SinkContains("odd-sink", "888889")
+	w.Expect().SinkNotContains("odd-sink", "888888")
+	w.Expect().SinkNotContains("odd-sink", "not an integer")
+
+	w.Expect().SinkContains("number-sink", "888888")
+	w.Expect().SinkContains("number-sink", "888889")
+	w.Expect().SinkNotContains("number-sink", "not an integer")
+}
+
+func (s *FunctionalSuite) TestConditionalForwarding_2() {
+	w := s.Given().Pipeline("@testdata/even-odd.yaml").
+		When().
+		CreatePipelineAndWait()
+	defer w.DeletePipelineAndWait()
+	pipelineName := "even-odd"
+
+	// wait for all the pods to come up
+	w.Expect().VertexPodsRunning()
+
+	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("888888"))).
+		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("888889"))).
+		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("not an integer")))
+
+	w.Expect().SinkContains("even-sink", "888888")
+	w.Expect().SinkNotContains("even-sink", "888889")
+	w.Expect().SinkNotContains("even-sink", "not an integer")
+
+	w.Expect().SinkContains("odd-sink", "888889")
+	w.Expect().SinkNotContains("odd-sink", "888888")
+	w.Expect().SinkNotContains("odd-sink", "not an integer")
+
+	w.Expect().SinkContains("number-sink", "888888")
+	w.Expect().SinkContains("number-sink", "888889")
+	w.Expect().SinkNotContains("number-sink", "not an integer")
+}
+
 func (s *FunctionalSuite) TestConditionalForwarding() {
 	w := s.Given().Pipeline("@testdata/even-odd.yaml").
 		When().
