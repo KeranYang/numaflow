@@ -26,9 +26,6 @@ func TestGetExecutors(t *testing.T) {
 	t.Run("test good", func(t *testing.T) {
 		builtins := []Builtin{
 			{
-				Name: "cat",
-			},
-			{
 				Name:   "filter",
 				KWArgs: map[string]string{"expression": `json(payload).a=="b"`},
 			},
