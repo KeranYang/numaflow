@@ -106,7 +106,7 @@ func (s *FunctionalSuite) TestUDFFiltering() {
 		When().
 		CreatePipelineAndWait()
 	defer w.DeletePipelineAndWait()
-	pipelineName := "filtering"
+	pipelineName := "udf-filtering"
 
 	// wait for all the pods to come up
 	w.Expect().VertexPodsRunning()
@@ -135,7 +135,7 @@ func (s *FunctionalSuite) TestSourceFiltering() {
 		When().
 		CreatePipelineAndWait()
 	defer w.DeletePipelineAndWait()
-	pipelineName := "filtering"
+	pipelineName := "source-filtering"
 
 	// wait for all the pods to come up
 	w.Expect().VertexPodsRunning()
@@ -208,7 +208,7 @@ func (s *FunctionalSuite) TestWatermarkEnabled() {
 	w := s.Given().Pipeline("@testdata/watermark.yaml").
 		When().
 		CreatePipelineAndWait()
-	defer w.DeletePipelineAndWait()
+	// defer w.DeletePipelineAndWait()
 
 	pipelineName := "simple-pipeline-watermark"
 	// TODO: Any way to extract the list from suite
