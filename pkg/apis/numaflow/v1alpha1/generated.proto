@@ -964,7 +964,7 @@ message Templates {
 }
 
 message Transformer {
-  // +kubebuilder:validation:Enum=filter
+  // +kubebuilder:validation:Enum=eventTimeExtractor;filter
   optional string name = 1;
 
   // +optional

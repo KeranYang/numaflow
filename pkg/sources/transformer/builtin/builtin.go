@@ -25,6 +25,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/numaproj/numaflow/pkg/shared/logging"
+	eventtime "github.com/numaproj/numaflow/pkg/sources/transformer/builtin/event_time"
 	"github.com/numaproj/numaflow/pkg/sources/transformer/builtin/filter"
 )
 
@@ -51,6 +52,8 @@ func (b *Builtin) executor() (functionsdk.MapTFunc, error) {
 	switch b.Name {
 	case "filter":
 		return filter.New(b.KWArgs)
+	case "eventTimeExtractor":
+		return eventtime.New(b.KWArgs)
 	default:
 		return nil, fmt.Errorf("unrecognized transformer %q", b.Name)
 	}

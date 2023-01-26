@@ -1,5 +1,3 @@
-//go:build test
-
 /*
 Copyright 2022 The Numaproj Authors.
 
@@ -21,6 +19,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"testing"
 	"time"
 
@@ -158,6 +157,24 @@ func (s *FunctionalSuite) TestSourceFiltering() {
 	w.Expect().SinkNotContains("out", expect0)
 	w.Expect().SinkNotContains("out", expect1)
 	w.Expect().SinkNotContains("out", expect2)
+}
+
+func (s *FunctionalSuite) TestBuiltinEventTimeExtractor() {
+	w := s.Given().Pipeline("@testdata/extract-event-time-from-payload.yaml").
+		When().
+		CreatePipelineAndWait()
+	defer w.DeletePipelineAndWait()
+	pipelineName := "extract-event-time"
+
+	// wait for all the pods to come up
+	w.Expect().VertexPodsRunning()
+
+	timeNow := strconv.FormatInt(time.Now().UnixMilli(), 10)
+	testMsg := `{"test": 21, "item": [{"id": 1, "name": "bala", "time": "2022-02-18T21:54:42.123Z"},{"id": 2, "name": "bala", "time": "2021-02-18T21:54:42.123Z"}]}`
+
+	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte(testMsg)).WithHeader("X-Numaflow-Event-Time", timeNow))
+
+	w.Expect().VertexPodLogContains("out", fmt.Sprintf("EventTime -  %d", time.Date(2021, 2, 18, 21, 54, 42, 123, time.UTC).UnixMilli()), PodLogCheckOptionWithCount(1))
 }
 
 func (s *FunctionalSuite) TestConditionalForwarding() {

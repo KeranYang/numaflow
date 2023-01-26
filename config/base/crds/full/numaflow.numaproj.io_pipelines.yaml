@@ -3842,6 +3842,7 @@ spec:
                                   type: object
                                 name:
                                   enum:
+                                  - eventTimeExtractor
                                   - filter
                                   type: string
                               required:
