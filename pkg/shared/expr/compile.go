@@ -14,20 +14,27 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1alpha1
+package expr
 
-type UDTransformer struct {
-	// +optional
-	Container *Container `json:"container" protobuf:"bytes,1,opt,name=container"`
-	// +optional
-	Builtin *Transformer `json:"builtin" protobuf:"bytes,2,opt,name=builtin"`
-}
+import (
+	"fmt"
 
-type Transformer struct {
-	// +kubebuilder:validation:Enum=filter
-	Name string `json:"name" protobuf:"bytes,1,opt,name=name"`
-	// +optional
-	Args []string `json:"args,omitempty" protobuf:"bytes,2,rep,name=args"`
-	// +optional
-	KWArgs map[string]string `json:"kwargs,omitempty" protobuf:"bytes,3,rep,name=kwargs"`
+	"github.com/antonmedv/expr"
+)
+
+func Compile(expression string, msg []byte) (string, error) {
+	msgMap := map[string]interface{}{
+		root: string(msg),
+	}
+	env := getFuncMap(msgMap)
+	program, err := expr.Compile(expression, expr.Env(env))
+	if err != nil {
+		return "", fmt.Errorf("unable to compile expression '%s': %s", expression, err)
+	}
+
+	result, err := expr.Run(program, env)
+	if err != nil {
+		return "", fmt.Errorf("unable to execute compiled program %v", err)
+	}
+	return fmt.Sprintf("%v", result), nil
 }

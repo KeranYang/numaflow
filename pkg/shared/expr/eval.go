@@ -19,9 +19,10 @@ package expr
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
+
 	"github.com/Masterminds/sprig/v3"
 	"github.com/antonmedv/expr"
-	"strconv"
 )
 
 var sprigFuncMap = sprig.GenericFuncMap()
@@ -44,6 +45,7 @@ func EvalBool(expression string, msg []byte) (bool, error) {
 	return resultBool, nil
 }
 
+// TODO - all the functions below is used by compile.go as well - better move it to a shard utils file.
 func getFuncMap(m map[string]interface{}) map[string]interface{} {
 	env := Expand(m)
 	env["sprig"] = sprigFuncMap
