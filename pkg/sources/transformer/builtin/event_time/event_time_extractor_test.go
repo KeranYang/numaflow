@@ -42,7 +42,7 @@ func (h *testDatum) Watermark() time.Time {
 	return h.watermark
 }
 
-func TestExpression(t *testing.T) {
+func TestEventTimeExtractor(t *testing.T) {
 	t.Run("Missing expression, return error", func(t *testing.T) {
 		_, err := New(map[string]string{})
 		assert.Error(t, err)

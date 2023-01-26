@@ -102,8 +102,37 @@ func (s *FunctionalSuite) TestCreateSimplePipeline() {
 	assert.Equal(s.T(), pipelineName, *m.Pipeline)
 }
 
-func (s *FunctionalSuite) TestFiltering() {
-	w := s.Given().Pipeline("@testdata/filtering.yaml").
+func (s *FunctionalSuite) TestUDFFiltering() {
+	w := s.Given().Pipeline("@testdata/udf-filtering.yaml").
+		When().
+		CreatePipelineAndWait()
+	defer w.DeletePipelineAndWait()
+	pipelineName := "filtering"
+
+	// wait for all the pods to come up
+	w.Expect().VertexPodsRunning()
+
+	expect0 := `{"id": 180, "msg": "hello", "expect0": "fail", "desc": "A bad example"}`
+	expect1 := `{"id": 80, "msg": "hello1", "expect1": "fail", "desc": "A bad example"}`
+	expect2 := `{"id": 80, "msg": "hello", "expect2": "fail", "desc": "A bad example"}`
+	expect3 := `{"id": 80, "msg": "hello", "expect3": "succeed", "desc": "A good example"}`
+	expect4 := `{"id": 80, "msg": "hello", "expect4": "succeed", "desc": "A good example"}`
+
+	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte(expect0))).
+		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte(expect1))).
+		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte(expect2))).
+		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte(expect3))).
+		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte(expect4)))
+
+	w.Expect().SinkContains("out", expect3)
+	w.Expect().SinkContains("out", expect4)
+	w.Expect().SinkNotContains("out", expect0)
+	w.Expect().SinkNotContains("out", expect1)
+	w.Expect().SinkNotContains("out", expect2)
+}
+
+func (s *FunctionalSuite) TestSourceFiltering() {
+	w := s.Given().Pipeline("@testdata/source-filtering.yaml").
 		When().
 		CreatePipelineAndWait()
 	defer w.DeletePipelineAndWait()

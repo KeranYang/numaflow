@@ -52,6 +52,6 @@ func (b *Builtin) executor() (functionsdk.MapTFunc, error) {
 	case "filter":
 		return filter.New(b.KWArgs)
 	default:
-		return nil, fmt.Errorf("unrecognized function %q", b.Name)
+		return nil, fmt.Errorf("unrecognized transformer %q", b.Name)
 	}
 }

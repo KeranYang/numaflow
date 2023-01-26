@@ -28,8 +28,10 @@ import (
 )
 
 type eventTimeExtractor struct {
+	// expression is used to extract the string representation of the event time from message payload.
 	expression string
-	format     string
+	// format is used to translate the event time string representation to time.Time object
+	format string
 }
 
 func New(args map[string]string) (functionsdk.MapTFunc, error) {
@@ -58,15 +60,17 @@ func New(args map[string]string) (functionsdk.MapTFunc, error) {
 	}, nil
 }
 
-func (e eventTimeExtractor) apply(et time.Time, msg []byte) (functionsdk.MessageT, error) {
-	timeStr, err := expr.Compile(e.expression, msg)
+// apply compiles the payload to extract the new event time. If there is any error during extraction,
+// we pass on the default event time. Otherwise, we assign the new event time to the message.
+func (e eventTimeExtractor) apply(et time.Time, payload []byte) (functionsdk.MessageT, error) {
+	timeStr, err := expr.Compile(e.expression, payload)
 	if err != nil {
-		return functionsdk.MessageTToAll(et, msg), err
+		return functionsdk.MessageTToAll(et, payload), err
 	}
 	newEventTime, err := time.Parse(e.format, timeStr)
 	if err != nil {
-		return functionsdk.MessageTToAll(et, msg), err
+		return functionsdk.MessageTToAll(et, payload), err
 	} else {
-		return functionsdk.MessageTToAll(newEventTime, msg), nil
+		return functionsdk.MessageTToAll(newEventTime, payload), nil
 	}
 }

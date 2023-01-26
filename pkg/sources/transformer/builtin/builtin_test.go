@@ -43,7 +43,7 @@ func TestGetExecutors(t *testing.T) {
 		}
 		_, err := b.executor()
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "unrecognized function")
+		assert.Contains(t, err.Error(), "unrecognized transformer")
 	})
 }
 
