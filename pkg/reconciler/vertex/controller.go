@@ -23,11 +23,6 @@ import (
 	"strings"
 	"time"
 
-	dfv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaflow/pkg/reconciler"
-	"github.com/numaproj/numaflow/pkg/reconciler/vertex/scaling"
-	"github.com/numaproj/numaflow/pkg/shared/logging"
-	sharedutil "github.com/numaproj/numaflow/pkg/shared/util"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -39,6 +34,12 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	dfv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaflow/pkg/reconciler"
+	"github.com/numaproj/numaflow/pkg/reconciler/vertex/scaling"
+	"github.com/numaproj/numaflow/pkg/shared/logging"
+	sharedutil "github.com/numaproj/numaflow/pkg/shared/util"
 )
 
 // vertexReconciler reconciles a vertex object.
@@ -58,6 +59,7 @@ func NewReconciler(client client.Client, scheme *runtime.Scheme, config *reconci
 }
 
 func (r *vertexReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	r.logger.Info("KeranTest - it's k8s asking for looping reconcile.")
 	vertex := &dfv1.Vertex{}
 	if err := r.client.Get(ctx, req.NamespacedName, vertex); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -119,6 +121,7 @@ func (r *vertexReconciler) reconcile(ctx context.Context, vertex *dfv1.Vertex) (
 	}
 
 	desiredReplicas := vertex.GetReplicas()
+	log.Infof("DesiredReplica is %d", desiredReplicas)
 
 	if vertex.IsReduceUDF() {
 		if x := vertex.Spec.UDF.GroupBy.Storage; x != nil && x.PersistentVolumeClaim != nil {
@@ -156,6 +159,8 @@ func (r *vertexReconciler) reconcile(ctx context.Context, vertex *dfv1.Vertex) (
 	}
 
 	currentReplicas := int(vertex.Status.Replicas)
+	log.Infof("CurrentReplicas is %d", currentReplicas)
+
 	if currentReplicas != desiredReplicas || vertex.Status.Selector == "" {
 		log.Infow("Replicas changed", "currentReplicas", currentReplicas, "desiredReplicas", desiredReplicas)
 		vertex.Status.Replicas = uint32(desiredReplicas)
@@ -172,6 +177,7 @@ func (r *vertexReconciler) reconcile(ctx context.Context, vertex *dfv1.Vertex) (
 	}
 
 	existingPods, err := r.findExistingPods(ctx, vertex)
+	log.Infof("KeranTest - found %d existing pods.", len(existingPods))
 	if err != nil {
 		log.Errorw("Failed to find existing pods", zap.Error(err))
 		vertex.Status.MarkPhaseFailed("FindExistingPodFailed", err.Error())
@@ -185,11 +191,14 @@ func (r *vertexReconciler) reconcile(ctx context.Context, vertex *dfv1.Vertex) (
 			return ctrl.Result{}, err
 		}
 		hash := sharedutil.MustHash(podSpec)
+		log.Infof("KeranTest - pod spec hash is %s.", hash)
 		podNamePrefix := fmt.Sprintf("%s-%d-", vertex.Name, replica)
 		needToCreate := true
 		for existingPodName, existingPod := range existingPods {
 			if strings.HasPrefix(existingPodName, podNamePrefix) {
+				log.Info("KeranTest - found an existingPodName has expected podNamePrefix.")
 				if existingPod.GetAnnotations()[dfv1.KeyHash] == hash {
+					log.Info("KeranTest - hash matches, no need to create.")
 					needToCreate = false
 					delete(existingPods, existingPodName)
 				}
@@ -197,6 +206,7 @@ func (r *vertexReconciler) reconcile(ctx context.Context, vertex *dfv1.Vertex) (
 			}
 		}
 		if needToCreate {
+			log.Info("KeranTest - need to create")
 			labels := map[string]string{}
 			annotations := map[string]string{}
 			if x := vertex.Spec.Metadata; x != nil {
@@ -219,6 +229,7 @@ func (r *vertexReconciler) reconcile(ctx context.Context, vertex *dfv1.Vertex) (
 			} else if vertex.IsUDSink() {
 				annotations[dfv1.KeyDefaultContainer] = dfv1.CtrUdsink
 			} else if vertex.HasUDTransformer() {
+				log.Infof("KeranTest, default container is %s", dfv1.CtrUdtransformer)
 				// Once we have UDSource in place, replace it with UDSource?
 				annotations[dfv1.KeyDefaultContainer] = dfv1.CtrUdtransformer
 			}
