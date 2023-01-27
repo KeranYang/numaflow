@@ -174,7 +174,7 @@ func (s *FunctionalSuite) TestBuiltinEventTimeExtractor() {
 
 	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte(testMsg)).WithHeader("X-Numaflow-Event-Time", timeNow))
 
-	w.Expect().VertexPodLogContains("out", fmt.Sprintf("EventTime -  %d", time.Date(2021, 2, 18, 21, 54, 42, 123, time.UTC).UnixMilli()), PodLogCheckOptionWithCount(1))
+	w.Expect().VertexPodLogContains("out", fmt.Sprintf("EventTime -  %d", time.Date(2021, 2, 18, 21, 54, 42, 123000000, time.UTC).UnixMilli()), PodLogCheckOptionWithCount(1))
 }
 
 func (s *FunctionalSuite) TestConditionalForwarding() {

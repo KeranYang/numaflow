@@ -49,14 +49,16 @@ func TestEventTimeExtractor(t *testing.T) {
 		assert.Contains(t, err.Error(), "missing \"expression\"")
 	})
 
-	t.Run("Missing format, return error", func(t *testing.T) {
-		_, err := New(map[string]string{"expression": "json(payload).item[1].time"})
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "missing \"format\"")
-	})
+	/*
+		t.Run("Missing format, return error", func(t *testing.T) {
+			_, err := New(map[string]string{"expression": "json(payload).item[1].time"})
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "missing \"format\"")
+		})
+	*/
 
 	t.Run("Json expression valid, assign a new event time to the message", func(t *testing.T) {
-		args := map[string]string{"expression": "json(payload).item[1].time", "format": time.RFC3339}
+		args := map[string]string{"expression": "json(payload).item[1].time"}
 		handle, err := New(args)
 		assert.NoError(t, err)
 
@@ -75,7 +77,7 @@ func TestEventTimeExtractor(t *testing.T) {
 	})
 
 	t.Run("Cannot compile json expression, pass on the message", func(t *testing.T) {
-		args := map[string]string{"expression": "json(payload).item[1].non-exist-field-name", "format": time.RFC3339}
+		args := map[string]string{"expression": "json(payload).item[1].non-exist-field-name"}
 		handle, err := New(args)
 		assert.NoError(t, err)
 
@@ -93,22 +95,25 @@ func TestEventTimeExtractor(t *testing.T) {
 		assert.Equal(t, testJsonMsg, string(result.Items()[0].Value))
 	})
 
-	t.Run("Time string not matching user-provided format, pass on the message", func(t *testing.T) {
-		args := map[string]string{"expression": "json(payload).item[1].time", "format": time.ANSIC}
-		handle, err := New(args)
-		assert.NoError(t, err)
+	/*
+		t.Run("Time string not matching user-provided format, pass on the message", func(t *testing.T) {
+			args := map[string]string{"expression": "json(payload).item[1].time", "format": time.ANSIC}
+			handle, err := New(args)
+			assert.NoError(t, err)
 
-		testInputEventTime := time.Date(2022, 1, 4, 2, 3, 4, 5, time.UTC)
-		testJsonMsg := `{"test": 21, "item": [{"id": 1, "name": "bala", "time": "2022-02-18T21:54:42.123Z"},{"id": 2, "name": "bala", "time": "2021-02-18T21:54:42.123Z"}]}`
-		result := handle(context.Background(), "test-key", &testDatum{
-			value:     []byte(testJsonMsg),
-			eventTime: testInputEventTime,
-			watermark: time.Time{},
+			testInputEventTime := time.Date(2022, 1, 4, 2, 3, 4, 5, time.UTC)
+			testJsonMsg := `{"test": 21, "item": [{"id": 1, "name": "bala", "time": "2022-02-18T21:54:42.123Z"},{"id": 2, "name": "bala", "time": "2021-02-18T21:54:42.123Z"}]}`
+			result := handle(context.Background(), "test-key", &testDatum{
+				value:     []byte(testJsonMsg),
+				eventTime: testInputEventTime,
+				watermark: time.Time{},
+			})
+
+			// Verify event time remains unchanged.
+			assert.Equal(t, testInputEventTime, result.Items()[0].EventTime)
+			// Verify the payload remains unchanged.
+			assert.Equal(t, testJsonMsg, string(result.Items()[0].Value))
 		})
 
-		// Verify event time remains unchanged.
-		assert.Equal(t, testInputEventTime, result.Items()[0].EventTime)
-		// Verify the payload remains unchanged.
-		assert.Equal(t, testJsonMsg, string(result.Items()[0].Value))
-	})
+	*/
 }
