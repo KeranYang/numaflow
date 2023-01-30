@@ -32,7 +32,7 @@ type eventTimeExtractor struct {
 	// expression is used to extract the string representation of the event time from message payload.
 	expression string
 	// format is used to translate the event time string representation to time.Time object
-	// format string
+	format string
 }
 
 func New(args map[string]string) (functionsdk.MapTFunc, error) {
@@ -42,15 +42,14 @@ func New(args map[string]string) (functionsdk.MapTFunc, error) {
 		return nil, fmt.Errorf("missing \"expression\"")
 	}
 
-	/*
-		format, existing := args["format"]
-		if !existing {
-			return nil, fmt.Errorf("missing \"format\"")
-		}
-	*/
+	format, existing := args["format"]
+	if !existing {
+		return nil, fmt.Errorf("missing \"format\"")
+	}
+
 	e := eventTimeExtractor{
 		expression: expr,
-		// format:     format,
+		format:     format,
 	}
 
 	return func(ctx context.Context, key string, datum functionsdk.Datum) functionsdk.MessageTs {
@@ -70,8 +69,7 @@ func (e eventTimeExtractor) apply(et time.Time, payload []byte) (functionsdk.Mes
 	if err != nil {
 		return functionsdk.MessageTToAll(et, payload), err
 	}
-	// newEventTime, err := time.Parse(e.format, timeStr)
-	newEventTime, err := time.Parse(time.RFC3339, timeStr)
+	newEventTime, err := time.Parse(e.format, timeStr)
 	if err != nil {
 		return functionsdk.MessageTToAll(et, payload), err
 	} else {

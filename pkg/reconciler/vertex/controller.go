@@ -219,7 +219,7 @@ func (r *vertexReconciler) reconcile(ctx context.Context, vertex *dfv1.Vertex) (
 					// Remove the pod from the existingPods list such that we exclude it from being deleted later.
 					delete(existingPods, existingPodName)
 				}
-				// break
+				break
 			}
 		}
 		if needToCreate {

@@ -26,8 +26,11 @@ func TestGetExecutors(t *testing.T) {
 	t.Run("test good", func(t *testing.T) {
 		builtins := []Builtin{
 			{
-				Name:   "eventTimeExtractor",
-				KWArgs: map[string]string{"expression": "json(payload).item[1].time"},
+				Name: "eventTimeExtractor",
+				KWArgs: map[string]string{
+					"expression": "json(payload).item[1].time",
+					"format":     "2006-01-02T15:04:05Z07:00",
+				},
 			},
 			{
 				Name:   "filter",
