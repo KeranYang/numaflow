@@ -99,6 +99,7 @@ func TestEventTimeExtractor(t *testing.T) {
 		assert.NoError(t, err)
 
 		testInputEventTime := time.Date(2022, 1, 4, 2, 3, 4, 5, time.UTC)
+		// Handler receives format as time.ANSIC but in the message, we use time.RFC3339. Format is not matched.
 		testJsonMsg := `{"test": 21, "item": [{"id": 1, "name": "bala", "time": "2022-02-18T21:54:42.123Z"},{"id": 2, "name": "bala", "time": "2021-02-18T21:54:42.123Z"}]}`
 		result := handle(context.Background(), "test-key", &testDatum{
 			value:     []byte(testJsonMsg),

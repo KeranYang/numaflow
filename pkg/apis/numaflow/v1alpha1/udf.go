@@ -100,7 +100,6 @@ func (in UDF) getUDFContainer(req getContainerReq) corev1.Container {
 			// The order of the kwargs items is random because we construct it from an unordered map Builtin.KWArgs.
 			// We sort the kwargs first before converting it to a string argument to ensure consistency.
 			// This is important because in vertex controller we use hash on PodSpec to determine if a pod already exists, which requires the kwargs being consistent.
-			// TODO - Unit Test it
 			sort.Strings(kwargs)
 			args = append(args, "--kwargs="+strings.Join(kwargs, ","))
 		}

@@ -29,8 +29,10 @@ import (
 
 type eventTimeExtractor struct {
 	// expression is used to extract the string representation of the event time from message payload.
+	// e.g. `json(payload).metadata.time`
 	expression string
-	// format is used to translate the event time string representation to time.Time object
+	// format specifies the layout of extracted time string.
+	// With format, we use the time.Parse function to translate the event time string representation to time.Time object.
 	format string
 }
 

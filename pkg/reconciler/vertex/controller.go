@@ -157,7 +157,6 @@ func (r *vertexReconciler) reconcile(ctx context.Context, vertex *dfv1.Vertex) (
 	}
 
 	currentReplicas := int(vertex.Status.Replicas)
-
 	if currentReplicas != desiredReplicas || vertex.Status.Selector == "" {
 		log.Infow("Replicas changed", "currentReplicas", currentReplicas, "desiredReplicas", desiredReplicas)
 		vertex.Status.Replicas = uint32(desiredReplicas)
@@ -193,7 +192,6 @@ func (r *vertexReconciler) reconcile(ctx context.Context, vertex *dfv1.Vertex) (
 			if strings.HasPrefix(existingPodName, podNamePrefix) {
 				if existingPod.GetAnnotations()[dfv1.KeyHash] == hash {
 					needToCreate = false
-					// Remove the pod from the existingPods list such that we exclude it from being deleted later.
 					delete(existingPods, existingPodName)
 				}
 				break
@@ -244,7 +242,6 @@ func (r *vertexReconciler) reconcile(ctx context.Context, vertex *dfv1.Vertex) (
 			log.Infow("Succeeded to create a pod", zap.String("pod", pod.Name))
 		}
 	}
-
 	for _, v := range existingPods {
 		if err := r.client.Delete(ctx, &v); err != nil && !apierrors.IsNotFound(err) {
 			log.Errorw("Failed to delete pod", zap.String("pod", v.Name), zap.Error(err))

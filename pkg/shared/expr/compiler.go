@@ -22,6 +22,8 @@ import (
 	"github.com/antonmedv/expr"
 )
 
+// Compile uses the given input expression to evaluate input message and compile it to a string.
+// See examples in compile_test.go
 func Compile(expression string, msg []byte) (string, error) {
 	msgMap := map[string]interface{}{
 		root: string(msg),
