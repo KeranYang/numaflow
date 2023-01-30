@@ -53,8 +53,6 @@ func (s Source) getMainContainer(req getContainerReq) corev1.Container {
 }
 
 func (s Source) getUDTransformerContainer(req getContainerReq) corev1.Container {
-	// Keran's notes: here we got a getContainerReq, which contains the map
-	// We can consider ensuring the order here.
 	c := containerBuilder{}.
 		init(req).
 		name(CtrUdtransformer)
@@ -74,7 +72,6 @@ func (s Source) getUDTransformerContainer(req getContainerReq) corev1.Container 
 			args = append(args, "--args="+base64.StdEncoding.EncodeToString([]byte(a)))
 		}
 		var kwargs []string
-		// Keran bingo! Here - map to string.
 		for k, v := range s.UDTransformer.Builtin.KWArgs {
 			kwargs = append(kwargs, fmt.Sprintf("%s=%s", k, base64.StdEncoding.EncodeToString([]byte(v))))
 		}
@@ -82,11 +79,10 @@ func (s Source) getUDTransformerContainer(req getContainerReq) corev1.Container 
 			// The order of the kwargs items is random because we construct it from an unordered map Builtin.KWArgs.
 			// We sort the kwargs first before converting it to a string argument to ensure consistency.
 			// This is important because in vertex controller we use hash on PodSpec to determine if a pod already exists, which requires the kwargs being consistent.
+			// TODO - Unit Test it.
 			sort.Strings(kwargs)
 			args = append(args, "--kwargs="+strings.Join(kwargs, ","))
 		}
-
-		print("KeranTest - args are ", args)
 
 		c = c.image(req.image).args(args...)
 		if x := s.UDTransformer.Container; x != nil {

@@ -36,9 +36,9 @@ func Test_compile_expression(t *testing.T) {
 	})
 
 	t.Run("test nested json compile case, list of items", func(t *testing.T) {
-		id, err := Compile(`json(payload).item[1].id`, []byte(`{"test": 21, "item": [{"id": 1, "name": "bala", "time": "2021-02-18T21:54:42.123Z"},{"id": 2, "name": "bala", "time": "2021-02-18T21:54:42.123Z"}]}`))
+		time, err := Compile(`json(payload).item[1].time`, []byte(`{"test": 21, "item": [{"id": 1, "name": "bala", "time": "2021-02-18T21:54:42.123Z"},{"id": 2, "name": "bala", "time": "2021-02-18T21:54:42.123Z"}]}`))
 		assert.NoError(t, err)
-		assert.Equal(t, "2", id)
+		assert.Equal(t, "2021-02-18T21:54:42.123Z", time)
 	})
 
 	t.Run("test invalid expression", func(t *testing.T) {

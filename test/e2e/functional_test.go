@@ -1,3 +1,5 @@
+//go:build test
+
 /*
 Copyright 2022 The Numaproj Authors.
 
@@ -208,7 +210,7 @@ func (s *FunctionalSuite) TestWatermarkEnabled() {
 	w := s.Given().Pipeline("@testdata/watermark.yaml").
 		When().
 		CreatePipelineAndWait()
-	// defer w.DeletePipelineAndWait()
+	defer w.DeletePipelineAndWait()
 
 	pipelineName := "simple-pipeline-watermark"
 	// TODO: Any way to extract the list from suite

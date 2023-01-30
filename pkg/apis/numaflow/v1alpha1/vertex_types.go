@@ -170,8 +170,6 @@ func (v Vertex) GetPodSpec(req GetVertexPodSpecReq) (*corev1.PodSpec, error) {
 		},
 		Spec: v.Spec.WithOutReplicas(),
 	}
-	// Keran notes: here we use json.Marshal to translate vertexCopy to a vertex bytes.
-	// Does it retain order of the map? ->
 	vertexBytes, err := json.Marshal(vertexCopy)
 	if err != nil {
 		return nil, errors.New("failed to marshal vertex spec")
@@ -194,7 +192,6 @@ func (v Vertex) GetPodSpec(req GetVertexPodSpecReq) (*corev1.PodSpec, error) {
 	}
 	volumeMounts := []corev1.VolumeMount{{Name: varVolumeName, MountPath: PathVarRun}}
 
-	// Keran's note: here, the envVars still in map format -> not list of strings yet.
 	containers, err := v.Spec.getType().getContainers(getContainerReq{
 		isbSvcType:      req.ISBSvcType,
 		env:             envVars,
