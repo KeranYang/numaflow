@@ -18,6 +18,7 @@ package vertex
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -61,6 +62,7 @@ func NewReconciler(client client.Client, scheme *runtime.Scheme, config *reconci
 func (r *vertexReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.logger.Info("KeranTest - it's k8s asking for looping reconcile.")
 	vertex := &dfv1.Vertex{}
+	r.logger.Infof("KeranTest - This request is for namespaced name %s.", req.NamespacedName)
 	if err := r.client.Get(ctx, req.NamespacedName, vertex); err != nil {
 		if apierrors.IsNotFound(err) {
 			return reconcile.Result{}, nil
@@ -71,6 +73,7 @@ func (r *vertexReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	log := r.logger.With("namespace", vertex.Namespace).With("vertex", vertex.Name).With("pipeline", vertex.Spec.PipelineName)
 	ctx = logging.WithLogger(ctx, log)
 	vertexCopy := vertex.DeepCopy()
+	r.logger.Infof("KeranTest - This is how the vertex deep copy looks like %v, before reconciling", *vertexCopy)
 	result, err := r.reconcile(ctx, vertexCopy)
 	if err != nil {
 		log.Errorw("Reconcile error", zap.Error(err))
@@ -191,18 +194,32 @@ func (r *vertexReconciler) reconcile(ctx context.Context, vertex *dfv1.Vertex) (
 			return ctrl.Result{}, err
 		}
 		hash := sharedutil.MustHash(podSpec)
-		log.Infof("KeranTest - pod spec hash is %s.", hash)
+		log.Infof("KeranTest - I am looking for a hash match for hash %s.", hash)
+
+		out, err := json.Marshal(*podSpec)
+		if err != nil {
+			panic(err)
+		}
+		log.Infof("KeranTest - Corresponding podspec is %s.", string(out))
+
 		podNamePrefix := fmt.Sprintf("%s-%d-", vertex.Name, replica)
+		log.Infof("KeranTest - pod name prefix must be %s.", podNamePrefix)
 		needToCreate := true
+		log.Info("KeranTest - Existing pods have hash values as follow")
+		for existingPodName, existingPod := range existingPods {
+			log.Infof("KeranTest - pod name: %s, hash: %s", existingPodName, existingPod.GetAnnotations()[dfv1.KeyHash])
+		}
 		for existingPodName, existingPod := range existingPods {
 			if strings.HasPrefix(existingPodName, podNamePrefix) {
-				log.Info("KeranTest - found an existingPodName has expected podNamePrefix.")
+				log.Infof("KeranTest - found an existingPodName %s has expected podNamePrefix %s.", existingPodName, podNamePrefix)
 				if existingPod.GetAnnotations()[dfv1.KeyHash] == hash {
-					log.Info("KeranTest - hash matches, no need to create.")
+					log.Infof("KeranTest - hash matches, no need to create. We already have pod %s", existingPodName)
 					needToCreate = false
+					log.Infof("KeranTest - I am removing %s from existing pod list.", existingPodName)
+					// Remove the pod from the existingPods list such that we exclude it from being deleted later.
 					delete(existingPods, existingPodName)
 				}
-				break
+				// break
 			}
 		}
 		if needToCreate {
@@ -252,6 +269,12 @@ func (r *vertexReconciler) reconcile(ctx context.Context, vertex *dfv1.Vertex) (
 			log.Infow("Succeeded to create a pod", zap.String("pod", pod.Name))
 		}
 	}
+
+	log.Info("KeranTest - After reconciling, the existing pods list have hash values as follow, and I am deleting all of them.")
+	for existingPodName, existingPod := range existingPods {
+		log.Infof("KeranTest - pod name: %s, hash: %s", existingPodName, existingPod.GetAnnotations()[dfv1.KeyHash])
+	}
+
 	for _, v := range existingPods {
 		if err := r.client.Delete(ctx, &v); err != nil && !apierrors.IsNotFound(err) {
 			log.Errorw("Failed to delete pod", zap.String("pod", v.Name), zap.Error(err))

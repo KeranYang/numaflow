@@ -53,7 +53,9 @@ func NewBuiltinTransformerCommand() *cobra.Command {
 			decodedKWArgs := make(map[string]string, len(cmdKWArgs))
 
 			for k, v := range cmdKWArgs {
+				print("KeranTest - got key ", k, " value ", v)
 				decodeArg, err := base64.StdEncoding.DecodeString(v)
+				print("KeranTest - after decoding got key ", k, " value ", decodeArg)
 				if err != nil {
 					return err
 				}

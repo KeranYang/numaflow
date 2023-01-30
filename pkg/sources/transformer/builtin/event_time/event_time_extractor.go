@@ -19,6 +19,7 @@ package eventtime
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	functionsdk "github.com/numaproj/numaflow-go/pkg/function"
@@ -35,6 +36,7 @@ type eventTimeExtractor struct {
 }
 
 func New(args map[string]string) (functionsdk.MapTFunc, error) {
+	log.Printf("KeranTest - received arguments: %v", args)
 	expr, existing := args["expression"]
 	if !existing {
 		return nil, fmt.Errorf("missing \"expression\"")

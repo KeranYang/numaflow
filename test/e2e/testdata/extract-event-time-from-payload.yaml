@@ -5,6 +5,9 @@ metadata:
 spec:
   vertices:
     - name: in
+      scale:
+        min: 1
+        max: 2
       source:
         http: {}
         transformer:
@@ -12,9 +15,7 @@ spec:
             name: eventTimeExtractor
             kwargs:
               expression: json(payload).item[1].time
-              # RFC3339 time format.
-              # More types of format in https://cs.opensource.google/go/go/+/refs/tags/go1.19.5:src/time/format.go
-              # format: 2006-01-02T15:04:05Z07:00
+              format: ab
     - name: out
       sink:
         log: {}
