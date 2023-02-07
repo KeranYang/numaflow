@@ -127,9 +127,9 @@ func (s *SDKsSuite) TestSourceTransformer() {
 	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("Before2022")).WithHeader("X-Numaflow-Event-Time", eventTimeBefore2022_1)).
 		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("Before2022")).WithHeader("X-Numaflow-Event-Time", eventTimeBefore2022_2)).
 		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("Before2022")).WithHeader("X-Numaflow-Event-Time", eventTimeBefore2022_3)).
+		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("Within2022")).WithHeader("X-Numaflow-Event-Time", eventTimeWithin2022_1)).
 		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("After2022")).WithHeader("X-Numaflow-Event-Time", eventTimeAfter2022_1)).
-		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("After2022")).WithHeader("X-Numaflow-Event-Time", eventTimeAfter2022_2)).
-		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("Within2022")).WithHeader("X-Numaflow-Event-Time", eventTimeWithin2022_1))
+		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("After2022")).WithHeader("X-Numaflow-Event-Time", eventTimeAfter2022_2))
 
 	janFirst2022 := time.Date(2022, 1, 1, 0, 0, 0, 0, time.UTC)
 	janFirst2023 := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -150,7 +150,6 @@ func (s *SDKsSuite) TestSourceTransformer() {
 	printPipelineWatermarks(ctx, client, "event-time-filter", "sink-within-2022")
 	printPipelineWatermarks(ctx, client, "event-time-filter", "sink-after-2022")
 	printPipelineWatermarks(ctx, client, "event-time-filter", "sink-all")
-
 }
 
 func printPipelineWatermarks(ctx context.Context, client *daemonclient.DaemonClient, pipelineName string, vertexName string) (bool, error) {

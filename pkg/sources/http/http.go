@@ -248,8 +248,9 @@ loop:
 			break loop
 		}
 	}
-	h.logger.Debugf("Read %d messages.", len(msgs))
+	h.logger.Info("Read %d messages.", len(msgs))
 	if len(msgs) > 0 && !oldest.IsZero() {
+		h.logger.Infof("Publishing watermark %v to source, read offset %d", oldest, msgs[len(msgs)-1].ReadOffset)
 		h.sourcePublishWM.PublishWatermark(processor.Watermark(oldest), msgs[len(msgs)-1].ReadOffset)
 	}
 	return msgs, nil
