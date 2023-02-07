@@ -151,7 +151,7 @@ func (s *SDKsSuite) TestSourceTransformer() {
 
 func printPipelineWatermarks(ctx context.Context, client *daemonclient.DaemonClient, pipelineName string, vertexName string) (bool, error) {
 	wm, err := client.GetVertexWatermark(ctx, pipelineName, vertexName)
-	print("vertex watermark: ", wm)
+	print("vertex watermark: ", *wm)
 	if err != nil {
 		return false, err
 	}
