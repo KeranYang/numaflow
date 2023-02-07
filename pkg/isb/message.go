@@ -76,3 +76,7 @@ func (h *Header) UnmarshalBinary(data []byte) (err error) {
 func (b *Body) UnmarshalBinary(data []byte) (err error) {
 	return json.Unmarshal(data, &b)
 }
+
+func (m *Message) ToReadMessage(ot Offset, wm time.Time) *ReadMessage {
+	return &ReadMessage{*m, ot, wm}
+}

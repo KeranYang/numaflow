@@ -50,6 +50,7 @@ type httpSource struct {
 	bufferSize   int
 	messages     chan *isb.ReadMessage
 	logger       *zap.SugaredLogger
+	transformer  applier.MapApplier
 	forwarder    *forward.InterStepDataForward
 	// source watermark publisher
 	sourcePublishWM publish.Publisher
@@ -87,7 +88,7 @@ func New(
 	vertexInstance *dfv1.VertexInstance,
 	writers []isb.BufferWriter,
 	fsd forward.ToWhichStepDecider,
-	mapApplier applier.MapApplier,
+	transformer applier.MapApplier,
 	fetchWM fetch.Fetcher,
 	publishWM map[string]publish.Publisher,
 	publishWMStores store.WatermarkStorer,
@@ -99,6 +100,7 @@ func New(
 		ready:        false,
 		bufferSize:   1000,            // default size
 		readTimeout:  1 * time.Second, // default timeout
+		transformer:  transformer,
 	}
 	for _, o := range opts {
 		operr := o(h)
@@ -201,7 +203,7 @@ func New(
 		}
 	}
 
-	h.forwarder, err = forward.NewInterStepDataForward(vertexInstance.Vertex, h, destinations, fsd, mapApplier, fetchWM, publishWM, forwardOpts...)
+	h.forwarder, err = forward.NewInterStepDataForward(vertexInstance.Vertex, h, destinations, fsd, applier.Terminal, fetchWM, publishWM, forwardOpts...)
 	if err != nil {
 		h.logger.Errorw("Error instantiating the forwarder", zap.Error(err))
 		return nil, err
@@ -219,7 +221,7 @@ func (h *httpSource) GetName() string {
 	return h.name
 }
 
-func (h *httpSource) Read(_ context.Context, count int64) ([]*isb.ReadMessage, error) {
+func (h *httpSource) Read(ctx context.Context, count int64) ([]*isb.ReadMessage, error) {
 	msgs := []*isb.ReadMessage{}
 	var oldest time.Time
 	timeout := time.After(h.readTimeout)
@@ -227,12 +229,20 @@ loop:
 	for i := int64(0); i < count; i++ {
 		select {
 		case m := <-h.messages:
-			if oldest.IsZero() || m.EventTime.Before(oldest) {
-				oldest = m.EventTime
+			// TODO - send to GRPC transformer
+			tMessages, err := h.applyTransformer(ctx, m)
+			if err != nil {
+				// TODO - Error Handling.
+				fmt.Sprintf("got an error %v", err)
 			}
-			msgs = append(msgs, m)
-			fmt.Println("got a message to read")
-			httpSourceReadCount.With(map[string]string{metrics.LabelVertex: h.name, metrics.LabelPipeline: h.pipelineName}).Inc()
+			for _, tm := range tMessages {
+				if oldest.IsZero() || tm.EventTime.Before(oldest) {
+					oldest = tm.EventTime
+				}
+				msgs = append(msgs, tm.ToReadMessage(m.ReadOffset, m.Watermark))
+				fmt.Println("got a message to read")
+				httpSourceReadCount.With(map[string]string{metrics.LabelVertex: h.name, metrics.LabelPipeline: h.pipelineName}).Inc()
+			}
 		case <-timeout:
 			h.logger.Debugw("Timed out waiting for messages to read.", zap.Duration("waited", h.readTimeout), zap.Int("read", len(msgs)))
 			break loop
@@ -276,4 +286,27 @@ func (h *httpSource) ForceStop() {
 func (h *httpSource) Start() <-chan struct{} {
 	defer func() { h.ready = true }()
 	return h.forwarder.Start()
+}
+
+// applyUDF applies the UDF and will block if there is any InternalErr. On the other hand, if this is a UserError
+// the skip flag is set. ShutDown flag will only if there is an InternalErr and ForceStop has been invoked.
+// The UserError retry will be done on the ApplyUDF.
+func (h *httpSource) applyTransformer(ctx context.Context, readMessage *isb.ReadMessage) ([]*isb.Message, error) {
+	for {
+		writeMessages, err := h.transformer.ApplyMap(ctx, readMessage)
+		if err != nil {
+			h.logger.Errorw("Transformer.Apply error", zap.Error(err))
+			// TODO: implement retry with backoff etc.
+			time.Sleep(time.Minute)
+			continue
+		} else {
+			// if we do not get a time from transformer, we set it to the time from (N-1)th vertex
+			for _, m := range writeMessages {
+				if m.EventTime.IsZero() {
+					m.EventTime = readMessage.EventTime
+				}
+			}
+			return writeMessages, nil
+		}
+	}
 }
