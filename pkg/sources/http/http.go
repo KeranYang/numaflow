@@ -233,7 +233,7 @@ loop:
 			tMessages, err := h.applyTransformer(ctx, m)
 			if err != nil {
 				// TODO - Error Handling.
-				fmt.Sprintf("got an error %v", err)
+				fmt.Println(fmt.Sprintf("got an error %v", err))
 			}
 			for _, tm := range tMessages {
 				if oldest.IsZero() || tm.EventTime.Before(oldest) {

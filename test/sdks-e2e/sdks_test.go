@@ -1,5 +1,3 @@
-//go:build test
-
 /*
 Copyright 2022 The Numaproj Authors.
 
@@ -25,8 +23,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
+	dfv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	daemonclient "github.com/numaproj/numaflow/pkg/daemon/client"
 	. "github.com/numaproj/numaflow/test/fixtures"
 )
 
@@ -104,6 +105,16 @@ func (s *SDKsSuite) TestSourceTransformer() {
 	// wait for all the pods to come up
 	w.Expect().VertexPodsRunning()
 
+	defer w.DaemonPodPortForward(pipelineName, 1234, dfv1.DaemonServicePort).
+		TerminateAllPodPortForwards()
+
+	// Use daemon service to verify watermark propagation.
+	client, err := daemonclient.NewDaemonServiceClient("localhost:1234")
+	assert.NoError(s.T(), err)
+	defer func() {
+		_ = client.Close()
+	}()
+
 	eventTimeBefore2022_1 := strconv.FormatInt(time.Date(2021, 4, 2, 7, 4, 5, 2, time.UTC).UnixMilli(), 10)
 	eventTimeBefore2022_2 := strconv.FormatInt(time.Date(1998, 4, 2, 8, 4, 5, 2, time.UTC).UnixMilli(), 10)
 	eventTimeBefore2022_3 := strconv.FormatInt(time.Date(2013, 4, 4, 7, 4, 5, 2, time.UTC).UnixMilli(), 10)
@@ -132,6 +143,19 @@ func (s *SDKsSuite) TestSourceTransformer() {
 		VertexPodLogNotContains("sink-all", "Before2022", PodLogCheckOptionWithTimeout(1*time.Second)).
 		VertexPodLogNotContains("sink-within-2022", "Before2022", PodLogCheckOptionWithTimeout(1*time.Second)).
 		VertexPodLogNotContains("sink-after-2022", "Before2022", PodLogCheckOptionWithTimeout(1*time.Second))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	printPipelineWatermarks(ctx, client, "event-time-filter", "in")
+}
+
+func printPipelineWatermarks(ctx context.Context, client *daemonclient.DaemonClient, pipelineName string, vertexName string) (bool, error) {
+	wm, err := client.GetVertexWatermark(ctx, pipelineName, vertexName)
+	print("vertex watermark: ", wm)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func TestHTTPSuite(t *testing.T) {
