@@ -147,11 +147,15 @@ func (s *SDKsSuite) TestSourceTransformer() {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	printPipelineWatermarks(ctx, client, "event-time-filter", "in")
+	printPipelineWatermarks(ctx, client, "event-time-filter", "sink-within-2022")
+	printPipelineWatermarks(ctx, client, "event-time-filter", "sink-after-2022")
+	printPipelineWatermarks(ctx, client, "event-time-filter", "sink-all")
+
 }
 
 func printPipelineWatermarks(ctx context.Context, client *daemonclient.DaemonClient, pipelineName string, vertexName string) (bool, error) {
 	wm, err := client.GetVertexWatermark(ctx, pipelineName, vertexName)
-	print("vertex watermark: ", *wm)
+	print("vertex watermark: ", wm.Watermark)
 	if err != nil {
 		return false, err
 	}
