@@ -233,7 +233,7 @@ loop:
 			tMessages, err := h.applyTransformer(ctx, m)
 			if err != nil {
 				// TODO - Error Handling.
-				fmt.Println(fmt.Sprintf("got an error %v", err))
+				fmt.Printf("got an error %v\n", err)
 			}
 			for _, tm := range tMessages {
 				if oldest.IsZero() || tm.EventTime.Before(oldest) {
@@ -248,9 +248,9 @@ loop:
 			break loop
 		}
 	}
-	h.logger.Info("Read %d messages.", len(msgs))
+	h.logger.Debugf("Read %d messages.", len(msgs))
 	if len(msgs) > 0 && !oldest.IsZero() {
-		h.logger.Infof("Publishing watermark %v to source, read offset %d", oldest, msgs[len(msgs)-1].ReadOffset)
+		h.logger.Debugf("Publishing watermark %v to source, read offset %d\n", oldest, msgs[len(msgs)-1].ReadOffset)
 		h.sourcePublishWM.PublishWatermark(processor.Watermark(oldest), msgs[len(msgs)-1].ReadOffset)
 	}
 	return msgs, nil

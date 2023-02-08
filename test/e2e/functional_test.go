@@ -169,15 +169,67 @@ func (s *FunctionalSuite) TestBuiltinEventTimeExtractor() {
 	pipelineName := "extract-event-time"
 
 	// wait for all the pods to come up
-	w.Expect().VertexPodsRunning()
+	w.Expect().VertexPodsRunning().DaemonPodsRunning()
+
+	defer w.DaemonPodPortForward(pipelineName, 1234, dfv1.DaemonServicePort).
+		TerminateAllPodPortForwards()
+
+	// Test Daemon service with gRPC
+	client, err := daemonclient.NewDaemonServiceClient("localhost:1234")
+	assert.NoError(s.T(), err)
+	defer func() {
+		_ = client.Close()
+	}()
 
 	// In this test, we send a message with event time being now, apply event time extractor and verify from log that the message event time gets updated.
 	timeNow := strconv.FormatInt(time.Now().UnixMilli(), 10)
-	testMsg := `{"test": 21, "item": [{"id": 1, "name": "numa", "time": "2022-02-18T21:54:42.123Z"},{"id": 2, "name": "numa", "time": "2021-02-18T21:54:42.123Z"}]}`
-
-	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte(testMsg)).WithHeader("X-Numaflow-Event-Time", timeNow))
-
+	testMsgOne := `{"test": 21, "item": [{"id": 1, "name": "numa", "time": "2022-02-18T21:54:42.123Z"},{"id": 2, "name": "numa", "time": "2021-02-18T21:54:42.123Z"}]}`
+	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte(testMsgOne)).WithHeader("X-Numaflow-Event-Time", timeNow))
 	w.Expect().VertexPodLogContains("out", fmt.Sprintf("EventTime -  %d", time.Date(2021, 2, 18, 21, 54, 42, 123000000, time.UTC).UnixMilli()), PodLogCheckOptionWithCount(1))
+
+	// Verify watermark propagation.
+	testMsgTwo := `{"test": 21, "item": [{"id": 1, "name": "numa", "time": "2022-02-18T21:54:42.123Z"},{"id": 2, "name": "numa", "time": "2021-03-18T21:54:42.123Z"}]}`
+	testMsgThree := `{"test": 21, "item": [{"id": 1, "name": "numa", "time": "2022-02-18T21:54:42.123Z"},{"id": 2, "name": "numa", "time": "2021-04-18T21:54:42.123Z"}]}`
+	testMsgFour := `{"test": 21, "item": [{"id": 1, "name": "numa", "time": "2022-02-18T21:54:42.123Z"},{"id": 2, "name": "numa", "time": "2021-05-18T21:54:42.123Z"}]}`
+	testMsgFive := `{"test": 21, "item": [{"id": 1, "name": "numa", "time": "2022-02-18T21:54:42.123Z"},{"id": 2, "name": "numa", "time": "2021-06-18T21:54:42.123Z"}]}`
+	testMsgSix := `{"test": 21, "item": [{"id": 1, "name": "numa", "time": "2022-02-18T21:54:42.123Z"},{"id": 2, "name": "numa", "time": "2021-07-18T21:54:42.123Z"}]}`
+	testMsgSeven := `{"test": 21, "item": [{"id": 1, "name": "numa", "time": "2022-02-18T21:54:42.123Z"},{"id": 2, "name": "numa", "time": "2021-08-18T21:54:42.123Z"}]}`
+	testMsgEight := `{"test": 21, "item": [{"id": 1, "name": "numa", "time": "2022-02-18T21:54:42.123Z"},{"id": 2, "name": "numa", "time": "2021-09-18T21:54:42.123Z"}]}`
+
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	defer cancel()
+
+	time.Sleep(time.Second * 15)
+	printPipelineWatermarks(ctx, client, pipelineName, "in")
+	printPipelineWatermarks(ctx, client, pipelineName, "out")
+	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte(testMsgTwo)).WithHeader("X-Numaflow-Event-Time", timeNow))
+	time.Sleep(time.Second * 15)
+	printPipelineWatermarks(ctx, client, pipelineName, "in")
+	printPipelineWatermarks(ctx, client, pipelineName, "out")
+	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte(testMsgThree)).WithHeader("X-Numaflow-Event-Time", timeNow))
+	time.Sleep(time.Second * 15)
+	printPipelineWatermarks(ctx, client, pipelineName, "in")
+	printPipelineWatermarks(ctx, client, pipelineName, "out")
+	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte(testMsgFour)).WithHeader("X-Numaflow-Event-Time", timeNow))
+	time.Sleep(time.Second * 15)
+	printPipelineWatermarks(ctx, client, pipelineName, "in")
+	printPipelineWatermarks(ctx, client, pipelineName, "out")
+	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte(testMsgFive)).WithHeader("X-Numaflow-Event-Time", timeNow))
+	time.Sleep(time.Second * 15)
+	printPipelineWatermarks(ctx, client, pipelineName, "in")
+	printPipelineWatermarks(ctx, client, pipelineName, "out")
+	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte(testMsgSix)).WithHeader("X-Numaflow-Event-Time", timeNow))
+	time.Sleep(time.Second * 15)
+	printPipelineWatermarks(ctx, client, pipelineName, "in")
+	printPipelineWatermarks(ctx, client, pipelineName, "out")
+	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte(testMsgSeven)).WithHeader("X-Numaflow-Event-Time", timeNow))
+	time.Sleep(time.Second * 15)
+	printPipelineWatermarks(ctx, client, pipelineName, "in")
+	printPipelineWatermarks(ctx, client, pipelineName, "out")
+	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte(testMsgEight)).WithHeader("X-Numaflow-Event-Time", timeNow))
+	time.Sleep(time.Second * 15)
+	printPipelineWatermarks(ctx, client, pipelineName, "in")
+	printPipelineWatermarks(ctx, client, pipelineName, "out")
 }
 
 func (s *FunctionalSuite) TestConditionalForwarding() {
@@ -280,6 +332,14 @@ func isWatermarkProgressing(ctx context.Context, client *daemonclient.DaemonClie
 		prevWatermark = currentWatermark
 	}
 	return true, nil
+}
+
+func printPipelineWatermarks(ctx context.Context, client *daemonclient.DaemonClient, pipelineName string, vertexName string) {
+	wm, err := client.GetVertexWatermark(ctx, pipelineName, vertexName)
+	print("vertex watermark: ", *wm.Watermark, "\n")
+	if err != nil {
+		print(err)
+	}
 }
 
 func TestFunctionalSuite(t *testing.T) {

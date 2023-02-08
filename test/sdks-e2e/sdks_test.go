@@ -1,3 +1,5 @@
+//go:build test
+
 /*
 Copyright 2022 The Numaproj Authors.
 
@@ -108,7 +110,7 @@ func (s *SDKsSuite) TestSourceTransformer() {
 	defer w.DaemonPodPortForward(pipelineName, 1234, dfv1.DaemonServicePort).
 		TerminateAllPodPortForwards()
 
-	// Use daemon service to verify watermark propagation.
+	// Test Daemon service with gRPC
 	client, err := daemonclient.NewDaemonServiceClient("localhost:1234")
 	assert.NoError(s.T(), err)
 	defer func() {
@@ -127,12 +129,9 @@ func (s *SDKsSuite) TestSourceTransformer() {
 	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("Before2022")).WithHeader("X-Numaflow-Event-Time", eventTimeBefore2022_1)).
 		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("Before2022")).WithHeader("X-Numaflow-Event-Time", eventTimeBefore2022_2)).
 		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("Before2022")).WithHeader("X-Numaflow-Event-Time", eventTimeBefore2022_3)).
+		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("After2022")).WithHeader("X-Numaflow-Event-Time", eventTimeAfter2022_1)).
+		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("After2022")).WithHeader("X-Numaflow-Event-Time", eventTimeAfter2022_2)).
 		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("Within2022")).WithHeader("X-Numaflow-Event-Time", eventTimeWithin2022_1))
-
-	time.Sleep(time.Minute)
-
-	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("After2022")).WithHeader("X-Numaflow-Event-Time", eventTimeAfter2022_1))
-	SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("After2022")).WithHeader("X-Numaflow-Event-Time", eventTimeAfter2022_2))
 
 	janFirst2022 := time.Date(2022, 1, 1, 0, 0, 0, 0, time.UTC)
 	janFirst2023 := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -146,22 +145,6 @@ func (s *SDKsSuite) TestSourceTransformer() {
 		VertexPodLogNotContains("sink-all", "Before2022", PodLogCheckOptionWithTimeout(1*time.Second)).
 		VertexPodLogNotContains("sink-within-2022", "Before2022", PodLogCheckOptionWithTimeout(1*time.Second)).
 		VertexPodLogNotContains("sink-after-2022", "Before2022", PodLogCheckOptionWithTimeout(1*time.Second))
-
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	printPipelineWatermarks(ctx, client, "event-time-filter", "in")
-	printPipelineWatermarks(ctx, client, "event-time-filter", "sink-within-2022")
-	printPipelineWatermarks(ctx, client, "event-time-filter", "sink-after-2022")
-	printPipelineWatermarks(ctx, client, "event-time-filter", "sink-all")
-}
-
-func printPipelineWatermarks(ctx context.Context, client *daemonclient.DaemonClient, pipelineName string, vertexName string) (bool, error) {
-	wm, err := client.GetVertexWatermark(ctx, pipelineName, vertexName)
-	print("vertex watermark: ", *wm.Watermark)
-	if err != nil {
-		return false, err
-	}
-	return true, nil
 }
 
 func TestHTTPSuite(t *testing.T) {
