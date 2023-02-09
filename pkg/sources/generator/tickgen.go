@@ -35,6 +35,7 @@ import (
 	"github.com/numaproj/numaflow/pkg/isb"
 	"github.com/numaproj/numaflow/pkg/metrics"
 	"github.com/numaproj/numaflow/pkg/shared/logging"
+	"github.com/numaproj/numaflow/pkg/sources/transformer"
 	"github.com/numaproj/numaflow/pkg/watermark/fetch"
 	"github.com/numaproj/numaflow/pkg/watermark/processor"
 	"github.com/numaproj/numaflow/pkg/watermark/publish"
@@ -96,12 +97,13 @@ type memgen struct {
 	lifecycleCtx context.Context
 	// read timeout for the reader
 	readTimeout time.Duration
-
 	// vertex instance
 	vertexInstance *dfv1.VertexInstance
 	// source watermark publisher
 	sourcePublishWM publish.Publisher
-
+	// source data transformer
+	transformer *transformer.Impl
+	// logger
 	logger *zap.SugaredLogger
 }
 
@@ -167,6 +169,7 @@ func NewMemGen(
 	if gensrc.logger == nil {
 		gensrc.logger = logging.NewLogger()
 	}
+	gensrc.transformer = transformer.New(mapApplier, gensrc.logger)
 
 	// this context is to be used internally for controlling the lifecycle of generator
 	cctx, cancel := context.WithCancel(context.Background())
@@ -190,7 +193,7 @@ func NewMemGen(
 	gensrc.sourcePublishWM = gensrc.buildSourceWatermarkPublisher(publishWMStores)
 
 	// we pass in the context to forwarder as well so that it can shut down when we cancel the context
-	forwarder, err := forward.NewInterStepDataForward(vertexInstance.Vertex, gensrc, destinations, fsd, mapApplier, fetchWM, publishWM, forwardOpts...)
+	forwarder, err := forward.NewInterStepDataForward(vertexInstance.Vertex, gensrc, destinations, fsd, applier.Terminal, fetchWM, publishWM, forwardOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -232,17 +235,22 @@ loop:
 		}
 	}
 
-	if len(msgs) > 0 {
+	// Apply source data transformation.
+	// TODO - error handling
+	transformedMsgs := mg.transformer.Transform(ctx, msgs)
+
+	// Publish watermark to source.
+	if len(transformedMsgs) > 0 {
 		// publish the last message's offset with watermark, this is an optimization to avoid too many insert calls
 		// into the offset timeline store.
 		// Please note that we are inserting the watermark before the data has been persisted into ISB by the forwarder.
-		o := msgs[len(msgs)-1].ReadOffset
+		o := transformedMsgs[len(transformedMsgs)-1].ReadOffset
 		// use the first event time as watermark to make it conservative
-		nanos, _ := msgs[0].ReadOffset.Sequence()
+		nanos, _ := transformedMsgs[0].ReadOffset.Sequence()
 		// remove the nanosecond precision
 		mg.sourcePublishWM.PublishWatermark(processor.Watermark(time.Unix(0, nanos)), o)
 	}
-	return msgs, nil
+	return transformedMsgs, nil
 }
 
 // Ack acknowledges an array of offset.

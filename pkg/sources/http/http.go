@@ -51,10 +51,11 @@ type httpSource struct {
 	bufferSize   int
 	messages     chan *isb.ReadMessage
 	logger       *zap.SugaredLogger
-	transformer  *transformer.Impl
 	forwarder    *forward.InterStepDataForward
 	// source watermark publisher
 	sourcePublishWM publish.Publisher
+	// source data transformer
+	transformer *transformer.Impl
 	// context cancel function
 	cancelFunc context.CancelFunc
 	shutdown   func(context.Context) error
@@ -251,8 +252,8 @@ loop:
 		}
 	}
 	if len(transformedMsgs) > 0 && !oldest.IsZero() {
-		h.logger.Debugf("Publishing watermark %v to source, read offset %d\n", oldest, msgs[len(msgs)-1].ReadOffset)
-		h.sourcePublishWM.PublishWatermark(processor.Watermark(oldest), msgs[len(msgs)-1].ReadOffset)
+		h.logger.Debugf("Publishing watermark %v to source, read offset %d\n", oldest, transformedMsgs[len(transformedMsgs)-1].ReadOffset)
+		h.sourcePublishWM.PublishWatermark(processor.Watermark(oldest), transformedMsgs[len(transformedMsgs)-1].ReadOffset)
 	}
 
 	return transformedMsgs, nil

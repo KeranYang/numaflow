@@ -35,6 +35,7 @@ import (
 	"github.com/numaproj/numaflow/pkg/metrics"
 	"github.com/numaproj/numaflow/pkg/shared/logging"
 	sharedutil "github.com/numaproj/numaflow/pkg/shared/util"
+	"github.com/numaproj/numaflow/pkg/sources/transformer"
 	"github.com/numaproj/numaflow/pkg/watermark/fetch"
 	"github.com/numaproj/numaflow/pkg/watermark/processor"
 	"github.com/numaproj/numaflow/pkg/watermark/publish"
@@ -80,7 +81,9 @@ type KafkaSource struct {
 	watermarkMaxDelay time.Duration
 	// source watermark publisher stores
 	srcPublishWMStores store.WatermarkStorer
-	lock               *sync.RWMutex
+	// source data transformer
+	transformer *transformer.Impl
+	lock        *sync.RWMutex
 }
 
 type Option func(*KafkaSource) error
@@ -117,30 +120,132 @@ func WithGroupName(gn string) Option {
 	}
 }
 
+// NewKafkaSource returns a KafkaSource reader based on Kafka Consumer Group .
+func NewKafkaSource(
+	vertexInstance *dfv1.VertexInstance,
+	writers []isb.BufferWriter,
+	fsd forward.ToWhichStepDecider,
+	mapApplier applier.MapApplier,
+	fetchWM fetch.Fetcher,
+	publishWM map[string]publish.Publisher,
+	publishWMStores store.WatermarkStorer,
+	opts ...Option) (*KafkaSource, error) {
+
+	source := vertexInstance.Vertex.Spec.Source.Kafka
+	kafkasource := &KafkaSource{
+		name:               vertexInstance.Vertex.Spec.Name,
+		pipelineName:       vertexInstance.Vertex.Spec.PipelineName,
+		topic:              source.Topic,
+		brokers:            source.Brokers,
+		readTimeout:        1 * time.Second, // default timeout
+		handlerbuffer:      100,             // default buffer size for kafka reads
+		srcPublishWMStores: publishWMStores,
+		sourcePublishWMs:   make(map[int32]publish.Publisher, 0),
+		watermarkMaxDelay:  vertexInstance.Vertex.Spec.Watermark.GetMaxDelay(),
+		lock:               new(sync.RWMutex),
+		logger:             logging.NewLogger(), // default logger
+	}
+
+	for _, o := range opts {
+		operr := o(kafkasource)
+		if operr != nil {
+			return nil, operr
+		}
+	}
+
+	config, err := configFromOpts(source.Config)
+	if err != nil {
+		return nil, fmt.Errorf("error reading kafka source config, %w", err)
+	}
+
+	if t := source.TLS; t != nil {
+		config.Net.TLS.Enable = true
+		if c, err := sharedutil.GetTLSConfig(t); err != nil {
+			return nil, err
+		} else {
+			config.Net.TLS.Config = c
+		}
+	}
+	kafkasource.config = config
+	kafkasource.transformer = transformer.New(mapApplier, kafkasource.logger)
+	// Best effort to initialize the clients for pending messages calculation
+	adminClient, err := sarama.NewClusterAdmin(kafkasource.brokers, config)
+	if err != nil {
+		kafkasource.logger.Warnw("Problem initializing sarama admin client", zap.Error(err))
+	} else {
+		kafkasource.adminClient = adminClient
+	}
+	client, err := sarama.NewClient(kafkasource.brokers, config)
+	if err != nil {
+		kafkasource.logger.Warnw("Problem initializing sarama client", zap.Error(err))
+	} else {
+		kafkasource.saramaClient = client
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	kafkasource.cancelfn = cancel
+	kafkasource.lifecyclectx = ctx
+
+	kafkasource.stopch = make(chan struct{})
+
+	handler := newConsumerHandler(kafkasource.handlerbuffer)
+	kafkasource.handler = handler
+
+	destinations := make(map[string]isb.BufferWriter, len(writers))
+	for _, w := range writers {
+		destinations[w.GetName()] = w
+	}
+
+	forwardOpts := []forward.Option{forward.WithVertexType(dfv1.VertexTypeSource), forward.WithLogger(kafkasource.logger)}
+	if x := vertexInstance.Vertex.Spec.Limits; x != nil {
+		if x.ReadBatchSize != nil {
+			forwardOpts = append(forwardOpts, forward.WithReadBatchSize(int64(*x.ReadBatchSize)))
+		}
+	}
+	forwarder, err := forward.NewInterStepDataForward(vertexInstance.Vertex, kafkasource, destinations, fsd, applier.Terminal, fetchWM, publishWM, forwardOpts...)
+	if err != nil {
+		kafkasource.logger.Errorw("Error instantiating the forwarder", zap.Error(err))
+		return nil, err
+	}
+	kafkasource.forwarder = forwarder
+	return kafkasource, nil
+}
+
 func (r *KafkaSource) GetName() string {
 	return r.name
 }
 
-func (r *KafkaSource) Read(_ context.Context, count int64) ([]*isb.ReadMessage, error) {
-	// It stores latest timestamps for different partitions
-	oldestTimestamps := make(map[int32]time.Time)
+func (r *KafkaSource) Read(ctx context.Context, count int64) ([]*isb.ReadMessage, error) {
 	msgs := make([]*isb.ReadMessage, 0, count)
 	timeout := time.After(r.readTimeout)
 loop:
 	for i := int64(0); i < count; i++ {
 		select {
 		case m := <-r.handler.messages:
+			// TODO - make every source publish at beginning like this
 			kafkaSourceReadCount.With(map[string]string{metrics.LabelVertex: r.name, metrics.LabelPipeline: r.pipelineName}).Inc()
 			_m := toReadMessage(m)
 			msgs = append(msgs, _m)
-			// Get latest timestamps for different partitions
-			if t, ok := oldestTimestamps[m.Partition]; !ok || m.Timestamp.Before(t) {
-				oldestTimestamps[m.Partition] = m.Timestamp
-			}
 		case <-timeout:
 			// log that timeout has happened and don't return an error
 			r.logger.Debugw("Timed out waiting for messages to read.", zap.Duration("waited", r.readTimeout))
 			break loop
+		}
+	}
+	r.logger.Debugf("Read %d messages.", len(msgs))
+
+	// Apply source data transformation.
+	// TODO - error handling
+	transformedMsgs := r.transformer.Transform(ctx, msgs)
+
+	// Publish watermark to source.
+	// oldestTimestamps stores the latest timestamps for different partitions
+	oldestTimestamps := make(map[int32]time.Time)
+	for _, m := range transformedMsgs {
+		// Get latest timestamps for different partitions
+		_, partition, _, _ := offsetFrom(m.ReadOffset.String())
+		if t, ok := oldestTimestamps[partition]; !ok || m.EventTime.Before(t) {
+			oldestTimestamps[partition] = m.EventTime
 		}
 	}
 	for p, t := range oldestTimestamps {
@@ -254,96 +359,6 @@ func (r *KafkaSource) Pending(ctx context.Context) (int64, error) {
 		totalPending += partitionOffset - block.Offset
 	}
 	return totalPending, nil
-}
-
-// NewKafkaSource returns a KafkaSource reader based on Kafka Consumer Group .
-func NewKafkaSource(
-	vertexInstance *dfv1.VertexInstance,
-	writers []isb.BufferWriter,
-	fsd forward.ToWhichStepDecider,
-	mapApplier applier.MapApplier,
-	fetchWM fetch.Fetcher,
-	publishWM map[string]publish.Publisher,
-	publishWMStores store.WatermarkStorer,
-	opts ...Option) (*KafkaSource, error) {
-
-	source := vertexInstance.Vertex.Spec.Source.Kafka
-	kafkasource := &KafkaSource{
-		name:               vertexInstance.Vertex.Spec.Name,
-		pipelineName:       vertexInstance.Vertex.Spec.PipelineName,
-		topic:              source.Topic,
-		brokers:            source.Brokers,
-		readTimeout:        1 * time.Second, // default timeout
-		handlerbuffer:      100,             // default buffer size for kafka reads
-		srcPublishWMStores: publishWMStores,
-		sourcePublishWMs:   make(map[int32]publish.Publisher, 0),
-		watermarkMaxDelay:  vertexInstance.Vertex.Spec.Watermark.GetMaxDelay(),
-		lock:               new(sync.RWMutex),
-		logger:             logging.NewLogger(), // default logger
-	}
-
-	for _, o := range opts {
-		operr := o(kafkasource)
-		if operr != nil {
-			return nil, operr
-		}
-	}
-
-	config, err := configFromOpts(source.Config)
-	if err != nil {
-		return nil, fmt.Errorf("error reading kafka source config, %w", err)
-	}
-
-	if t := source.TLS; t != nil {
-		config.Net.TLS.Enable = true
-		if c, err := sharedutil.GetTLSConfig(t); err != nil {
-			return nil, err
-		} else {
-			config.Net.TLS.Config = c
-		}
-	}
-	kafkasource.config = config
-	// Best effort to initialize the clients for pending messages calculation
-	adminClient, err := sarama.NewClusterAdmin(kafkasource.brokers, config)
-	if err != nil {
-		kafkasource.logger.Warnw("Problem initializing sarama admin client", zap.Error(err))
-	} else {
-		kafkasource.adminClient = adminClient
-	}
-	client, err := sarama.NewClient(kafkasource.brokers, config)
-	if err != nil {
-		kafkasource.logger.Warnw("Problem initializing sarama client", zap.Error(err))
-	} else {
-		kafkasource.saramaClient = client
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	kafkasource.cancelfn = cancel
-	kafkasource.lifecyclectx = ctx
-
-	kafkasource.stopch = make(chan struct{})
-
-	handler := newConsumerHandler(kafkasource.handlerbuffer)
-	kafkasource.handler = handler
-
-	destinations := make(map[string]isb.BufferWriter, len(writers))
-	for _, w := range writers {
-		destinations[w.GetName()] = w
-	}
-
-	forwardOpts := []forward.Option{forward.WithVertexType(dfv1.VertexTypeSource), forward.WithLogger(kafkasource.logger)}
-	if x := vertexInstance.Vertex.Spec.Limits; x != nil {
-		if x.ReadBatchSize != nil {
-			forwardOpts = append(forwardOpts, forward.WithReadBatchSize(int64(*x.ReadBatchSize)))
-		}
-	}
-	forwarder, err := forward.NewInterStepDataForward(vertexInstance.Vertex, kafkasource, destinations, fsd, mapApplier, fetchWM, publishWM, forwardOpts...)
-	if err != nil {
-		kafkasource.logger.Errorw("Error instantiating the forwarder", zap.Error(err))
-		return nil, err
-	}
-	kafkasource.forwarder = forwarder
-	return kafkasource, nil
 }
 
 func configFromOpts(yamlconfig string) (*sarama.Config, error) {

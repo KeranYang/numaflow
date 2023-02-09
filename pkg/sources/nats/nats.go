@@ -32,6 +32,7 @@ import (
 	"github.com/numaproj/numaflow/pkg/metrics"
 	"github.com/numaproj/numaflow/pkg/shared/logging"
 	sharedutil "github.com/numaproj/numaflow/pkg/shared/util"
+	"github.com/numaproj/numaflow/pkg/sources/transformer"
 	"github.com/numaproj/numaflow/pkg/watermark/fetch"
 	"github.com/numaproj/numaflow/pkg/watermark/processor"
 	"github.com/numaproj/numaflow/pkg/watermark/publish"
@@ -54,6 +55,8 @@ type natsSource struct {
 	forwarder *forward.InterStepDataForward
 	// source watermark publisher
 	sourcePublishWM publish.Publisher
+	// source data transformer
+	transformer *transformer.Impl
 }
 
 func New(
@@ -82,6 +85,7 @@ func New(
 		n.logger = logging.NewLogger()
 	}
 	n.messages = make(chan *isb.ReadMessage, n.bufferSize)
+	n.transformer = transformer.New(mapApplier, n.logger)
 
 	destinations := make(map[string]isb.BufferWriter, len(writers))
 	for _, w := range writers {
@@ -93,7 +97,7 @@ func New(
 			forwardOpts = append(forwardOpts, forward.WithReadBatchSize(int64(*x.ReadBatchSize)))
 		}
 	}
-	forwarder, err := forward.NewInterStepDataForward(vertexInstance.Vertex, n, destinations, fsd, mapApplier, fetchWM, publishWM, forwardOpts...)
+	forwarder, err := forward.NewInterStepDataForward(vertexInstance.Vertex, n, destinations, fsd, applier.Terminal, fetchWM, publishWM, forwardOpts...)
 	if err != nil {
 		n.logger.Errorw("Error instantiating the forwarder", zap.Error(err))
 		return nil, err
@@ -217,17 +221,13 @@ func (ns *natsSource) GetName() string {
 	return ns.name
 }
 
-func (ns *natsSource) Read(_ context.Context, count int64) ([]*isb.ReadMessage, error) {
-	msgs := []*isb.ReadMessage{}
-	var oldest time.Time
+func (ns *natsSource) Read(ctx context.Context, count int64) ([]*isb.ReadMessage, error) {
+	var msgs []*isb.ReadMessage
 	timeout := time.After(ns.readTimeout)
 loop:
 	for i := int64(0); i < count; i++ {
 		select {
 		case m := <-ns.messages:
-			if oldest.IsZero() || m.EventTime.Before(oldest) {
-				oldest = m.EventTime
-			}
 			msgs = append(msgs, m)
 			natsSourceReadCount.With(map[string]string{metrics.LabelVertex: ns.name, metrics.LabelPipeline: ns.pipelineName}).Inc()
 		case <-timeout:
@@ -236,10 +236,22 @@ loop:
 		}
 	}
 	ns.logger.Debugf("Read %d messages.", len(msgs))
-	if len(msgs) > 0 && !oldest.IsZero() {
-		ns.sourcePublishWM.PublishWatermark(processor.Watermark(oldest), msgs[len(msgs)-1].ReadOffset)
+
+	// Apply source data transformation.
+	// TODO - error handling
+	transformedMsgs := ns.transformer.Transform(ctx, msgs)
+
+	// Publish watermark to source.
+	var oldest time.Time
+	for _, m := range transformedMsgs {
+		if oldest.IsZero() || m.EventTime.Before(oldest) {
+			oldest = m.EventTime
+		}
 	}
-	return msgs, nil
+	if len(transformedMsgs) > 0 && !oldest.IsZero() {
+		ns.sourcePublishWM.PublishWatermark(processor.Watermark(oldest), transformedMsgs[len(transformedMsgs)-1].ReadOffset)
+	}
+	return transformedMsgs, nil
 }
 
 func (ns *natsSource) Ack(_ context.Context, offsets []isb.Offset) []error {
