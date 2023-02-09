@@ -316,6 +316,7 @@ func NewKafkaSource(
 		}
 	}
 	kafkasource.config = config
+	kafkasource.transformer = transformer.New(mapApplier, kafkasource.logger)
 	// Best effort to initialize the clients for pending messages calculation
 	adminClient, err := sarama.NewClusterAdmin(kafkasource.brokers, config)
 	if err != nil {

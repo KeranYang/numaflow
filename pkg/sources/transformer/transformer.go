@@ -102,6 +102,7 @@ func (h *Impl) applyTransformer(ctx context.Context, readMessage *isb.ReadMessag
 			h.logger.Errorw("Transformer.Apply error", zap.Error(err))
 			// TODO: implement retry with backoff etc.
 			time.Sleep(time.Minute)
+			// TODO - if context canceled, return error.
 			continue
 		} else {
 			// if we do not get a time from transformer, we set it to the time from input readMessage
