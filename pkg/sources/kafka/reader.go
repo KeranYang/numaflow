@@ -360,6 +360,96 @@ func (r *KafkaSource) Pending(ctx context.Context) (int64, error) {
 	return totalPending, nil
 }
 
+/ NewKafkaSource returns a KafkaSource reader based on Kafka Consumer Group .
+func NewKafkaSource(
+	vertexInstance *dfv1.VertexInstance,
+	writers []isb.BufferWriter,
+	fsd forward.ToWhichStepDecider,
+	mapApplier applier.MapApplier,
+	fetchWM fetch.Fetcher,
+	publishWM map[string]publish.Publisher,
+	publishWMStores store.WatermarkStorer,
+	opts ...Option) (*KafkaSource, error) {
+
+	source := vertexInstance.Vertex.Spec.Source.Kafka
+	kafkasource := &KafkaSource{
+		name:               vertexInstance.Vertex.Spec.Name,
+		pipelineName:       vertexInstance.Vertex.Spec.PipelineName,
+		topic:              source.Topic,
+		brokers:            source.Brokers,
+		readTimeout:        1 * time.Second, // default timeout
+		handlerbuffer:      100,             // default buffer size for kafka reads
+		srcPublishWMStores: publishWMStores,
+		sourcePublishWMs:   make(map[int32]publish.Publisher, 0),
+		watermarkMaxDelay:  vertexInstance.Vertex.Spec.Watermark.GetMaxDelay(),
+		lock:               new(sync.RWMutex),
+		logger:             logging.NewLogger(), // default logger
+	}
+
+	for _, o := range opts {
+		operr := o(kafkasource)
+		if operr != nil {
+			return nil, operr
+		}
+	}
+
+	config, err := configFromOpts(source.Config)
+	if err != nil {
+		return nil, fmt.Errorf("error reading kafka source config, %w", err)
+	}
+
+	if t := source.TLS; t != nil {
+		config.Net.TLS.Enable = true
+		if c, err := sharedutil.GetTLSConfig(t); err != nil {
+			return nil, err
+		} else {
+			config.Net.TLS.Config = c
+		}
+	}
+	kafkasource.config = config
+	// Best effort to initialize the clients for pending messages calculation
+	adminClient, err := sarama.NewClusterAdmin(kafkasource.brokers, config)
+	if err != nil {
+		kafkasource.logger.Warnw("Problem initializing sarama admin client", zap.Error(err))
+	} else {
+		kafkasource.adminClient = adminClient
+	}
+	client, err := sarama.NewClient(kafkasource.brokers, config)
+	if err != nil {
+		kafkasource.logger.Warnw("Problem initializing sarama client", zap.Error(err))
+	} else {
+		kafkasource.saramaClient = client
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	kafkasource.cancelfn = cancel
+	kafkasource.lifecyclectx = ctx
+
+	kafkasource.stopch = make(chan struct{})
+
+	handler := newConsumerHandler(kafkasource.handlerbuffer)
+	kafkasource.handler = handler
+
+	destinations := make(map[string]isb.BufferWriter, len(writers))
+	for _, w := range writers {
+		destinations[w.GetName()] = w
+	}
+
+	forwardOpts := []forward.Option{forward.WithVertexType(dfv1.VertexTypeSource), forward.WithLogger(kafkasource.logger)}
+	if x := vertexInstance.Vertex.Spec.Limits; x != nil {
+		if x.ReadBatchSize != nil {
+			forwardOpts = append(forwardOpts, forward.WithReadBatchSize(int64(*x.ReadBatchSize)))
+		}
+	}
+	forwarder, err := forward.NewInterStepDataForward(vertexInstance.Vertex, kafkasource, destinations, fsd, mapApplier, fetchWM, publishWM, forwardOpts...)
+	if err != nil {
+		kafkasource.logger.Errorw("Error instantiating the forwarder", zap.Error(err))
+		return nil, err
+	}
+	kafkasource.forwarder = forwarder
+	return kafkasource, nil
+}
+
 func configFromOpts(yamlconfig string) (*sarama.Config, error) {
 	config, err := sharedutil.GetSaramaConfigFromYAMLString(yamlconfig)
 	if err != nil {
