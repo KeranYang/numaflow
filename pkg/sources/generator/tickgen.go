@@ -231,6 +231,7 @@ loop:
 			break loop
 		}
 	}
+
 	if len(msgs) > 0 {
 		// publish the last message's offset with watermark, this is an optimization to avoid too many insert calls
 		// into the offset timeline store.
