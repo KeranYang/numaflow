@@ -222,7 +222,6 @@ loop:
 	for i := int64(0); i < count; i++ {
 		select {
 		case m := <-r.handler.messages:
-			// TODO - make every source publish at beginning like this
 			kafkaSourceReadCount.With(map[string]string{metrics.LabelVertex: r.name, metrics.LabelPipeline: r.pipelineName}).Inc()
 			_m := toReadMessage(m)
 			msgs = append(msgs, _m)

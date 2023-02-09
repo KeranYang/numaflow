@@ -60,8 +60,6 @@ func (u *gRPCBasedTransformer) CloseConn(ctx context.Context) error {
 	return u.client.CloseConn(ctx)
 }
 
-// TODO - rename the file name - grpc
-
 // WaitUntilReady waits until the client is connected.
 func (u *gRPCBasedTransformer) WaitUntilReady(ctx context.Context) error {
 	for {

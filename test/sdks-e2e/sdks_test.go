@@ -25,11 +25,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
-	dfv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	daemonclient "github.com/numaproj/numaflow/pkg/daemon/client"
 	. "github.com/numaproj/numaflow/test/fixtures"
 )
 
@@ -106,16 +103,6 @@ func (s *SDKsSuite) TestSourceTransformer() {
 
 	// wait for all the pods to come up
 	w.Expect().VertexPodsRunning()
-
-	defer w.DaemonPodPortForward(pipelineName, 1234, dfv1.DaemonServicePort).
-		TerminateAllPodPortForwards()
-
-	// Test Daemon service with gRPC
-	client, err := daemonclient.NewDaemonServiceClient("localhost:1234")
-	assert.NoError(s.T(), err)
-	defer func() {
-		_ = client.Close()
-	}()
 
 	eventTimeBefore2022_1 := strconv.FormatInt(time.Date(2021, 4, 2, 7, 4, 5, 2, time.UTC).UnixMilli(), 10)
 	eventTimeBefore2022_2 := strconv.FormatInt(time.Date(1998, 4, 2, 8, 4, 5, 2, time.UTC).UnixMilli(), 10)

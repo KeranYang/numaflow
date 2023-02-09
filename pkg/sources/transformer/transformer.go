@@ -62,13 +62,13 @@ func (h *Impl) Transform(ctx context.Context, messages []*isb.ReadMessage) []*is
 	}
 	// let the go routines know that there is no more work
 	close(transformCh)
-	// wait till the processing is done. this will not be an infinite wait because the UDF processing will exit if
+	// wait till the processing is done. this will not be an infinite wait because the transformer processing will exit if
 	// context.Done() is closed.
 	wg.Wait()
 	h.logger.Debugw("concurrent applyTransformer completed", zap.Int("concurrency", 100), zap.Duration("took", time.Since(concurrentProcessingStart)))
 	// TODO - emit metrics on concurrent processing time
 
-	// UDF processing is done, construct return list.
+	// Transformer processing is done, construct return list.
 	for _, m := range transformTrackers {
 		// look for errors, if we see even 1 error let's return. Handling partial retrying is not worth ATM.
 		if m.transformError != nil {
@@ -77,9 +77,7 @@ func (h *Impl) Transform(ctx context.Context, messages []*isb.ReadMessage) []*is
 			// If error skip processing this particular message?
 			continue
 		}
-		for _, m := range m.transformedMessages {
-			rms = append(rms, m)
-		}
+		rms = append(rms, m.transformedMessages...)
 	}
 	return rms
 }
@@ -111,6 +109,14 @@ func (h *Impl) applyTransformer(ctx context.Context, readMessage *isb.ReadMessag
 				if m.EventTime.IsZero() {
 					m.EventTime = readMessage.EventTime
 				}
+
+				// Construct isb.ReadMessage from isb.Message by providing ReadOffset and Watermark.
+				// For ReadOffset, we inherit from parent ReadMessage for now. This will cause multiple ReadMessages sharing exact same ReadOffset.
+				// Should we append index to offset to make it unique?
+
+				// For Watermark, we also inherit from parent, which is ok because
+				// after transformer assigns new event time to messages, sourcer will accordingly publish new watermarks to fromBuffer and
+				// data forwarder will use source watermark fetcher to fetch watermark and reassign it to each of the ReadMessages.
 				transformedMessages = append(transformedMessages, m.ToReadMessage(readMessage.ReadOffset, readMessage.Watermark))
 			}
 			return transformedMessages

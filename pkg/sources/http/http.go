@@ -90,7 +90,7 @@ func New(
 	vertexInstance *dfv1.VertexInstance,
 	writers []isb.BufferWriter,
 	fsd forward.ToWhichStepDecider,
-	mapper applier.MapApplier,
+	mapApplier applier.MapApplier,
 	fetchWM fetch.Fetcher,
 	publishWM map[string]publish.Publisher,
 	publishWMStores store.WatermarkStorer,
@@ -113,7 +113,7 @@ func New(
 		h.logger = logging.NewLogger()
 	}
 	h.messages = make(chan *isb.ReadMessage, h.bufferSize)
-	h.transformer = transformer.New(mapper, h.logger)
+	h.transformer = transformer.New(mapApplier, h.logger)
 
 	auth := ""
 	if x := vertexInstance.Vertex.Spec.Source.HTTP.Auth; x != nil && x.Token != nil {
@@ -230,9 +230,9 @@ loop:
 	for i := int64(0); i < count; i++ {
 		select {
 		case m := <-h.messages:
-			msgs = append(msgs, m)
 			fmt.Println("got a message to read")
 			httpSourceReadCount.With(map[string]string{metrics.LabelVertex: h.name, metrics.LabelPipeline: h.pipelineName}).Inc()
+			msgs = append(msgs, m)
 		case <-timeout:
 			h.logger.Debugw("Timed out waiting for messages to read.", zap.Duration("waited", h.readTimeout), zap.Int("read", len(msgs)))
 			break loop

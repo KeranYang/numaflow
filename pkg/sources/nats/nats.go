@@ -228,8 +228,8 @@ loop:
 	for i := int64(0); i < count; i++ {
 		select {
 		case m := <-ns.messages:
-			msgs = append(msgs, m)
 			natsSourceReadCount.With(map[string]string{metrics.LabelVertex: ns.name, metrics.LabelPipeline: ns.pipelineName}).Inc()
+			msgs = append(msgs, m)
 		case <-timeout:
 			ns.logger.Debugw("Timed out waiting for messages to read.", zap.Duration("waited", ns.readTimeout), zap.Int("read", len(msgs)))
 			break loop
