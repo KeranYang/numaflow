@@ -2,6 +2,7 @@ package transformer
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -13,6 +14,16 @@ import (
 type Impl struct {
 	transformer applier.MapApplier
 	logger      *zap.SugaredLogger
+}
+
+// tracker tracks an execution of a data transformation.
+type tracker struct {
+	// readMessage is the message passed to the transformer.
+	readMessage *isb.ReadMessage
+	// transformedMessages are list of messages returned by transformer.
+	transformedMessages []*isb.ReadMessage
+	// transformError is the error thrown by transformer.
+	transformError error
 }
 
 func New(
@@ -28,18 +39,65 @@ func New(
 
 func (h *Impl) Transform(ctx context.Context, messages []*isb.ReadMessage) []*isb.ReadMessage {
 	var rms []*isb.ReadMessage
-	for _, m := range messages {
-		tMessages := h.applyTransformer(ctx, m)
-		for _, tm := range tMessages {
-			rms = append(rms, tm.ToReadMessage(m.ReadOffset, m.Watermark))
+	// Transformer concurrent processing request channel
+	transformCh := make(chan *tracker)
+	// transformTrackers stores the results after transformer processing for all read messages.
+	transformTrackers := make([]tracker, len(messages))
+
+	var wg sync.WaitGroup
+	// TODO - configurable concurrency number instead of 100
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			h.concurrentApplyTransformer(ctx, transformCh)
+		}()
+	}
+
+	concurrentProcessingStart := time.Now()
+	// send transformer processing work to the channel
+	for idx, readMessage := range messages {
+		transformTrackers[idx].readMessage = readMessage
+		transformCh <- &transformTrackers[idx]
+	}
+	// let the go routines know that there is no more work
+	close(transformCh)
+	// wait till the processing is done. this will not be an infinite wait because the UDF processing will exit if
+	// context.Done() is closed.
+	wg.Wait()
+	h.logger.Debugw("concurrent applyTransformer completed", zap.Int("concurrency", 100), zap.Duration("took", time.Since(concurrentProcessingStart)))
+	// TODO - emit metrics on concurrent processing time
+
+	// UDF processing is done, construct return list.
+	for _, m := range transformTrackers {
+		// look for errors, if we see even 1 error let's return. Handling partial retrying is not worth ATM.
+		if m.transformError != nil {
+			// TODO - emit transformer error metrics.
+			h.logger.Errorw("failed to applyTransformer", zap.Error(m.transformError))
+			// If error skip processing this particular message?
+			continue
+		}
+		for _, m := range m.transformedMessages {
+			rms = append(rms, m)
 		}
 	}
 	return rms
 }
 
-func (h *Impl) applyTransformer(ctx context.Context, readMessage *isb.ReadMessage) []*isb.Message {
+// concurrentApplyTransformer applies the transformer based on the request from the channel
+func (h *Impl) concurrentApplyTransformer(ctx context.Context, tracker <-chan *tracker) {
+	for t := range tracker {
+		// TODO - emit metrics on transformer.
+		transformedMessages := h.applyTransformer(ctx, t.readMessage)
+		t.transformedMessages = append(t.transformedMessages, transformedMessages...)
+		t.transformError = nil
+	}
+}
+
+func (h *Impl) applyTransformer(ctx context.Context, readMessage *isb.ReadMessage) []*isb.ReadMessage {
+	var transformedMessages []*isb.ReadMessage
 	for {
-		writeMessages, err := h.transformer.ApplyMap(ctx, readMessage)
+		msgs, err := h.transformer.ApplyMap(ctx, readMessage)
 		if err != nil {
 			// keep retrying, I cannot think of a use case where a user could say, errors are fine :-)
 			// as a platform we should not lose or corrupt data.
@@ -49,12 +107,13 @@ func (h *Impl) applyTransformer(ctx context.Context, readMessage *isb.ReadMessag
 			continue
 		} else {
 			// if we do not get a time from transformer, we set it to the time from input readMessage
-			for _, m := range writeMessages {
+			for _, m := range msgs {
 				if m.EventTime.IsZero() {
 					m.EventTime = readMessage.EventTime
 				}
+				transformedMessages = append(transformedMessages, m.ToReadMessage(readMessage.ReadOffset, readMessage.Watermark))
 			}
-			return writeMessages
+			return transformedMessages
 		}
 	}
 }
