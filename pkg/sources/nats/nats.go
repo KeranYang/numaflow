@@ -56,7 +56,7 @@ type natsSource struct {
 	// source watermark publisher
 	sourcePublishWM publish.Publisher
 	// source data transformer
-	transformer *transformer.Impl
+	transformer transformer.Transformer
 }
 
 func New(
@@ -236,22 +236,23 @@ loop:
 		}
 	}
 	ns.logger.Debugf("Read %d messages.", len(msgs))
-
 	// Apply source data transformation.
-	// TODO - error handling
 	transformedMsgs := ns.transformer.Transform(ctx, msgs)
-
 	// Publish watermark to source.
+	ns.PublishSourceWatermarks(transformedMsgs)
+	return transformedMsgs, nil
+}
+
+func (ns *natsSource) PublishSourceWatermarks(msgs []*isb.ReadMessage) {
 	var oldest time.Time
-	for _, m := range transformedMsgs {
+	for _, m := range msgs {
 		if oldest.IsZero() || m.EventTime.Before(oldest) {
 			oldest = m.EventTime
 		}
 	}
-	if len(transformedMsgs) > 0 && !oldest.IsZero() {
-		ns.sourcePublishWM.PublishWatermark(processor.Watermark(oldest), transformedMsgs[len(transformedMsgs)-1].ReadOffset)
+	if len(msgs) > 0 && !oldest.IsZero() {
+		ns.sourcePublishWM.PublishWatermark(processor.Watermark(oldest), msgs[len(msgs)-1].ReadOffset)
 	}
-	return transformedMsgs, nil
 }
 
 func (ns *natsSource) Ack(_ context.Context, offsets []isb.Offset) []error {

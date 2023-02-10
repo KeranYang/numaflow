@@ -55,7 +55,7 @@ type httpSource struct {
 	// source watermark publisher
 	sourcePublishWM publish.Publisher
 	// source data transformer
-	transformer *transformer.Impl
+	transformer transformer.Transformer
 	// context cancel function
 	cancelFunc context.CancelFunc
 	shutdown   func(context.Context) error
@@ -239,24 +239,24 @@ loop:
 		}
 	}
 	h.logger.Debugf("Read %d messages.", len(msgs))
-
 	// Apply source data transformation.
-	// TODO - error handling
 	transformedMsgs := h.transformer.Transform(ctx, msgs)
-
 	// Publish watermark to source.
+	h.PublishSourceWatermarks(transformedMsgs)
+	return transformedMsgs, nil
+}
+
+func (h *httpSource) PublishSourceWatermarks(msgs []*isb.ReadMessage) {
 	var oldest time.Time
-	for _, m := range transformedMsgs {
+	for _, m := range msgs {
 		if oldest.IsZero() || m.EventTime.Before(oldest) {
 			oldest = m.EventTime
 		}
 	}
-	if len(transformedMsgs) > 0 && !oldest.IsZero() {
-		h.logger.Debugf("Publishing watermark %v to source, read offset %d\n", oldest, transformedMsgs[len(transformedMsgs)-1].ReadOffset)
-		h.sourcePublishWM.PublishWatermark(processor.Watermark(oldest), transformedMsgs[len(transformedMsgs)-1].ReadOffset)
+	if len(msgs) > 0 && !oldest.IsZero() {
+		h.logger.Debugf("Publishing watermark %v to source, read offset %d\n", oldest, msgs[len(msgs)-1].ReadOffset)
+		h.sourcePublishWM.PublishWatermark(processor.Watermark(oldest), msgs[len(msgs)-1].ReadOffset)
 	}
-
-	return transformedMsgs, nil
 }
 
 func (h *httpSource) Ack(_ context.Context, offsets []isb.Offset) []error {

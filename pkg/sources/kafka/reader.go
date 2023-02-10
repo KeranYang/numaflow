@@ -82,7 +82,7 @@ type KafkaSource struct {
 	// source watermark publisher stores
 	srcPublishWMStores store.WatermarkStorer
 	// source data transformer
-	transformer *transformer.Impl
+	transformer transformer.Transformer
 	lock        *sync.RWMutex
 }
 
@@ -141,15 +141,17 @@ loop:
 		}
 	}
 	r.logger.Debugf("Read %d messages.", len(msgs))
-
-	// Apply source data transformation.
-	// TODO - error handling
+	// apply source data transformation.
 	transformedMsgs := r.transformer.Transform(ctx, msgs)
-
 	// Publish watermark to source.
+	r.PublishSourceWatermarks(transformedMsgs)
+	return transformedMsgs, nil
+}
+
+func (r *KafkaSource) PublishSourceWatermarks(msgs []*isb.ReadMessage) {
 	// oldestTimestamps stores the latest timestamps for different partitions
 	oldestTimestamps := make(map[int32]time.Time)
-	for _, m := range transformedMsgs {
+	for _, m := range msgs {
 		// Get latest timestamps for different partitions
 		_, partition, _, _ := offsetFrom(m.ReadOffset.String())
 		if t, ok := oldestTimestamps[partition]; !ok || m.EventTime.Before(t) {
@@ -160,7 +162,6 @@ loop:
 		publisher := r.loadSourceWatermarkPublisher(p)
 		publisher.PublishWatermark(processor.Watermark(t), nil) // Source publisher does not care about the offset
 	}
-	return msgs, nil
 }
 
 // loadSourceWatermarkPublisher does a lazy load on the wartermark publisher

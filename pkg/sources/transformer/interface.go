@@ -7,5 +7,5 @@ import (
 )
 
 type Transformer interface {
-	Transform(context.Context, []*isb.ReadMessage) ([]*isb.ReadMessage, error)
+	Transform(context.Context, []*isb.ReadMessage) []*isb.ReadMessage
 }

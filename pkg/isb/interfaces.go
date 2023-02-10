@@ -80,6 +80,7 @@ type BufferWriterInformation interface {
 // Offset is an interface used in the ReadMessage referencing offset information.
 type Offset interface {
 	// String return the offset identifier
+	// TODO - when ACK, use String to dedupe.
 	String() string
 	// Sequence returns a sequence id which can be used to index into the buffer (ISB)
 	Sequence() (int64, error)

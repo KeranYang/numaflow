@@ -102,7 +102,7 @@ type memgen struct {
 	// source watermark publisher
 	sourcePublishWM publish.Publisher
 	// source data transformer
-	transformer *transformer.Impl
+	transformer transformer.Transformer
 	// logger
 	logger *zap.SugaredLogger
 }
@@ -234,23 +234,24 @@ loop:
 			break loop
 		}
 	}
-
 	// Apply source data transformation.
-	// TODO - error handling
 	transformedMsgs := mg.transformer.Transform(ctx, msgs)
-
 	// Publish watermark to source.
-	if len(transformedMsgs) > 0 {
+	mg.PublishSourceWatermarks(transformedMsgs)
+	return transformedMsgs, nil
+}
+
+func (mg *memgen) PublishSourceWatermarks(msgs []*isb.ReadMessage) {
+	if len(msgs) > 0 {
 		// publish the last message's offset with watermark, this is an optimization to avoid too many insert calls
 		// into the offset timeline store.
 		// Please note that we are inserting the watermark before the data has been persisted into ISB by the forwarder.
-		o := transformedMsgs[len(transformedMsgs)-1].ReadOffset
+		o := msgs[len(msgs)-1].ReadOffset
 		// use the first event time as watermark to make it conservative
-		nanos, _ := transformedMsgs[0].ReadOffset.Sequence()
+		nanos, _ := msgs[0].ReadOffset.Sequence()
 		// remove the nanosecond precision
 		mg.sourcePublishWM.PublishWatermark(processor.Watermark(time.Unix(0, nanos)), o)
 	}
-	return transformedMsgs, nil
 }
 
 // Ack acknowledges an array of offset.

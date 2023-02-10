@@ -298,6 +298,8 @@ func (isdf *InterStepDataForward) forwardAChunk(ctx context.Context) {
 	for idx, m := range udfResults {
 		readOffsets[idx] = m.readMessage.ReadOffset
 	}
+	// TODO - duplicate offsets?
+	// readOffsets
 	err = isdf.ackFromBuffer(ctx, readOffsets)
 	// implicit return for posterity :-)
 	if err != nil {
