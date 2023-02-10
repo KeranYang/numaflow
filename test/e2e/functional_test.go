@@ -174,7 +174,7 @@ func (s *FunctionalSuite) TestBuiltinEventTimeExtractor() {
 	defer w.DaemonPodPortForward(pipelineName, 1234, dfv1.DaemonServicePort).
 		TerminateAllPodPortForwards()
 
-	// Test Daemon service with gRPC
+	// Use daemon client to verify watermark propagation.
 	client, err := daemonclient.NewDaemonServiceClient("localhost:1234")
 	assert.NoError(s.T(), err)
 	defer func() {

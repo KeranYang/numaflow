@@ -2,6 +2,7 @@ package transformer
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -70,12 +71,14 @@ func (h *Impl) Transform(ctx context.Context, messages []*isb.ReadMessage) []*is
 
 	// Transformer processing is done, construct return list.
 	for _, m := range transformTrackers {
-		// look for errors, if we see even 1 error let's return. Handling partial retrying is not worth ATM.
+		// Check for errors, if one of the messages failed being transformed, exclude it from returned slice.
+		// This way when sending the slice to forwarder, we exclude this message, hence forwarder won't ACK it's offset.
 		if m.transformError != nil {
 			// TODO - emit transformer error metrics.
 			h.logger.Errorw("failed to applyTransformer", zap.Error(m.transformError))
-			// If error skip processing this particular message?
 			continue
+			// Or should we skip the entire batch?
+			// return []*isb.ReadMessage{}
 		}
 		rms = append(rms, m.transformedMessages...)
 	}
@@ -86,41 +89,46 @@ func (h *Impl) Transform(ctx context.Context, messages []*isb.ReadMessage) []*is
 func (h *Impl) concurrentApplyTransformer(ctx context.Context, tracker <-chan *tracker) {
 	for t := range tracker {
 		// TODO - emit metrics on transformer.
-		transformedMessages := h.applyTransformer(ctx, t.readMessage)
+		transformedMessages, err := h.applyTransformer(ctx, t.readMessage)
 		t.transformedMessages = append(t.transformedMessages, transformedMessages...)
-		t.transformError = nil
+		t.transformError = err
 	}
 }
 
-func (h *Impl) applyTransformer(ctx context.Context, readMessage *isb.ReadMessage) []*isb.ReadMessage {
+func (h *Impl) applyTransformer(ctx context.Context, readMessage *isb.ReadMessage) ([]*isb.ReadMessage, error) {
 	var transformedMessages []*isb.ReadMessage
 	for {
-		msgs, err := h.transformer.ApplyMap(ctx, readMessage)
-		if err != nil {
-			// keep retrying, I cannot think of a use case where a user could say, errors are fine :-)
-			// as a platform we should not lose or corrupt data.
-			h.logger.Errorw("Transformer.Apply error", zap.Error(err))
-			// TODO: implement retry with backoff etc.
-			time.Sleep(time.Minute)
-			// TODO - if context canceled, return error.
-			continue
-		} else {
-			// if we do not get a time from transformer, we set it to the time from input readMessage
-			for _, m := range msgs {
-				if m.EventTime.IsZero() {
-					m.EventTime = readMessage.EventTime
+		select {
+		case <-ctx.Done():
+			return []*isb.ReadMessage{}, fmt.Errorf("context is done before applying transformer")
+		default:
+			msgs, err := h.transformer.ApplyMap(ctx, readMessage)
+			if err != nil {
+				// Need discussion - Error Handling: when should we retry? If it's an udf error, no. If platform error, yes.
+				h.logger.Errorw("Transformer.Apply error", zap.Error(err))
+				// TODO: implement retry with backoff etc.
+				// TODO: make sleep time configurable.
+				time.Sleep(time.Second)
+				continue
+			} else {
+				for _, m := range msgs {
+					if m.EventTime.IsZero() {
+						m.EventTime = readMessage.EventTime
+					}
+
+					// Construct isb.ReadMessage from isb.Message by providing ReadOffset and Watermark.
+
+					// For ReadOffset, we inherit from parent ReadMessage for now.
+					// This will cause multiple ReadMessages sharing exact same ReadOffset.
+					// Should we append index to offset to make it unique?
+
+					// For Watermark, we also inherit from parent, which is ok because
+					// after source data transformation, sourcer will publish new watermarks to fromBuffer and
+					// data forwarder will fetch new watermarks and override the old ones for each of the ReadMessages.
+					transformedMessages = append(transformedMessages, m.ToReadMessage(readMessage.ReadOffset, readMessage.Watermark))
 				}
-
-				// Construct isb.ReadMessage from isb.Message by providing ReadOffset and Watermark.
-				// For ReadOffset, we inherit from parent ReadMessage for now. This will cause multiple ReadMessages sharing exact same ReadOffset.
-				// Should we append index to offset to make it unique?
-
-				// For Watermark, we also inherit from parent, which is ok because
-				// after transformer assigns new event time to messages, sourcer will accordingly publish new watermarks to fromBuffer and
-				// data forwarder will use source watermark fetcher to fetch watermark and reassign it to each of the ReadMessages.
-				transformedMessages = append(transformedMessages, m.ToReadMessage(readMessage.ReadOffset, readMessage.Watermark))
+				return transformedMessages, nil
 			}
-			return transformedMessages
 		}
 	}
 }
