@@ -2,7 +2,6 @@ package transformer
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -42,11 +41,11 @@ func (h *Impl) Transform(ctx context.Context, messages []*isb.ReadMessage) []*is
 	var rms []*isb.ReadMessage
 	// Transformer concurrent processing request channel
 	transformCh := make(chan *tracker)
-	// transformTrackers stores the results after transformer processing for all read messages.
+	// transformTrackers stores the results after transformer finishes processing for all read messages.
 	transformTrackers := make([]tracker, len(messages))
 
 	var wg sync.WaitGroup
-	// TODO - configurable concurrency number instead of 100
+	// TODO - configurable concurrency number instead of hardcoded 100
 	for i := 0; i < 100; i++ {
 		wg.Add(1)
 		go func() {
@@ -100,16 +99,20 @@ func (h *Impl) applyTransformer(ctx context.Context, readMessage *isb.ReadMessag
 	for {
 		select {
 		case <-ctx.Done():
-			return []*isb.ReadMessage{}, fmt.Errorf("context is done before applying transformer")
+			return []*isb.ReadMessage{}, ctx.Err()
 		default:
 			msgs, err := h.transformer.ApplyMap(ctx, readMessage)
 			if err != nil {
 				// Need discussion - Error Handling: when should we retry? If it's an udf error, no. If platform error, yes.
 				h.logger.Errorw("Transformer.Apply error", zap.Error(err))
+				// Option 1: retry
 				// TODO: implement retry with backoff etc.
 				// TODO: make sleep time configurable.
-				time.Sleep(time.Second)
-				continue
+				// time.Sleep(time.Second)
+				// continue
+
+				// Option 2: return empty slice
+				return []*isb.ReadMessage{}, err
 			} else {
 				for _, m := range msgs {
 					if m.EventTime.IsZero() {
