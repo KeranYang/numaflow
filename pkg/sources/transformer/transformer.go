@@ -114,12 +114,12 @@ func (h *Impl) applyTransformer(ctx context.Context, readMessage *isb.ReadMessag
 
 					// construct isb.ReadMessage from isb.Message by providing ReadOffset and Watermark.
 
-					// for ReadOffset, we inherit from parent ReadMessage.
+					// we inherit ReadOffset from parent ReadMessage.
 					// this will cause multiple ReadMessages sharing exact same ReadOffset.
 					// we need to be careful about such case, because some sources might not support acknowledging same ReadOffset more than once.
 					// to mitigate such case, in data forwarder, we implement exact once ack for each distinct ReadOffset.
 
-					// for Watermark, we also inherit it from parent, which is ok because
+					// we also inherit Watermark from parent, which is ok because
 					// after source data transformation, sourcer will publish new watermarks to fromBuffer and
 					// data forwarder will fetch new watermarks and override the old ones for each of the ReadMessages.
 					transformedMessages = append(transformedMessages, m.ToReadMessage(readMessage.ReadOffset, readMessage.Watermark))
