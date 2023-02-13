@@ -208,7 +208,7 @@ func (s *FunctionalSuite) TestBuiltinEventTimeExtractor() {
 
 	wm, err := client.GetVertexWatermark(ctx, pipelineName, "in")
 	assert.NoError(s.T(), err)
-	// Watermark propagation can delay, we consider the test as passed as long as the retrieved watermark matches one of the assigned event times. Except for the last message's event time 2021-05-18.
+	// Watermark propagation can delay, we consider the test as passed as long as the retrieved watermark matches one of the assigned event times.
 	assert.True(s.T(), *wm.Watermark == time.Date(2021, 4, 18, 21, 54, 42, 123000000, time.UTC).UnixMilli() || *wm.Watermark == time.Date(2021, 3, 18, 21, 54, 42, 123000000, time.UTC).UnixMilli() || *wm.Watermark == time.Date(2021, 2, 18, 21, 54, 42, 123000000, time.UTC).UnixMilli())
 	print(*wm.Watermark)
 }
