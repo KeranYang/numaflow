@@ -101,9 +101,8 @@ func (h *Impl) applyTransformer(ctx context.Context, readMessage *isb.ReadMessag
 			msgs, err := h.transformer.ApplyMap(ctx, readMessage)
 			if err != nil {
 				h.logger.Errorw("Transformer.Apply error", zap.Error(err))
-				// we don't expect user defined transformer returns error.
-				// keep retrying.
-				// TODO: make retry interval configurable.
+				// we don't expect user defined transformer returns error. keep retrying.
+				// TODO - make retry interval configurable.
 				time.Sleep(time.Millisecond)
 				continue
 			} else {

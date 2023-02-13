@@ -298,8 +298,6 @@ func (isdf *InterStepDataForward) forwardAChunk(ctx context.Context) {
 	for idx, m := range udfResults {
 		readOffsets[idx] = m.readMessage.ReadOffset
 	}
-	// TODO - duplicate offsets?
-	// readOffsets
 	err = isdf.ackFromBuffer(ctx, readOffsets)
 	// implicit return for posterity :-)
 	if err != nil {
@@ -322,9 +320,8 @@ func (isdf *InterStepDataForward) ackFromBuffer(ctx context.Context, offsets []i
 		Duration: time.Millisecond * 10,
 	}
 
-	// at this moment, we don't force fromBuffer to implement Ack() in an idempotent way.
-	// in the future when we implement new BufferReaders, we should implement Ack() in a way that calling it multiple times with same offset have same effect as a single call.
-	// since we only need to acknowledge every distinct offset once, for now, we add de-duplication logics here to before sending to fromBuffer.Ack().
+	// we only need to acknowledge every distinct offset once, for now, we add de-duplication logics here before sending offsets to fromBuffer.Ack().
+	// as of now, we don't force fromBuffer to implement Ack() as an idempotent function, but we should for future implementations.
 	var ackOffsets = isb.DeduplicateOffsets(offsets)
 	attempt := 0
 
