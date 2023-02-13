@@ -246,9 +246,11 @@ func TestTransformer(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 			if tt.cancelledCtx {
 				cancel()
 			}
+
 			transformer := New(tt.mapper, logging.NewLogger())
 			got := transformer.Transform(ctx, tt.input)
 			assert.Equal(t, len(tt.expectOutput), len(got))
