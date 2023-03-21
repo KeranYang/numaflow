@@ -2377,6 +2377,7 @@ spec:
                       type: object
                     onFull:
                       enum:
+                      - ""
                       - retryUntilSuccess
                       - dropAndAckLatest
                       type: string
@@ -8172,6 +8173,7 @@ spec:
                       type: object
                     onFull:
                       enum:
+                      - ""
                       - retryUntilSuccess
                       - dropAndAckLatest
                       type: string
@@ -10346,6 +10348,7 @@ spec:
                       type: object
                     onFull:
                       enum:
+                      - ""
                       - retryUntilSuccess
                       - dropAndAckLatest
                       type: string
