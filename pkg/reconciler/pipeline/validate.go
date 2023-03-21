@@ -160,6 +160,9 @@ func ValidatePipeline(pl *dfv1.Pipeline) error {
 				return fmt.Errorf(`invalid edge (%s - %s), "parallelism" should not > 1 for non-keyed windowing`, e.From, e.To)
 			}
 		}
+		if e.OnFull != nil && *e.OnFull != "retryUntilSuccess" && *e.OnFull != "dropAndAckLatest" {
+			return fmt.Errorf(`invalid edge (%s - %s), onFull should be either retryUntilSuccess or dropAndAckLatest`, e.From, e.To)
+		}
 		namesInEdges[e.From] = true
 		namesInEdges[e.To] = true
 	}

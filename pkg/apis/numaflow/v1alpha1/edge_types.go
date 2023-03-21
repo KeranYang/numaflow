@@ -33,7 +33,7 @@ type Edge struct {
 	// OnFull specifies the behaviour for the write actions when the inter step buffer is full.
 	// if not provided, the default value is set to "retryUntilSuccess".
 	// +optional
-	OnFull string `json:"onFull" protobuf:"bytes,6,opt,name=onFull"`
+	OnFull *string `json:"onFull" protobuf:"bytes,6,opt,name=onFull"`
 }
 
 type ForwardConditions struct {
