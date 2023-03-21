@@ -23,6 +23,7 @@ import (
 
 	dfv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaflow/pkg/isb"
+	"github.com/numaproj/numaflow/pkg/shared/logging"
 )
 
 // options for forwarding the message
@@ -33,6 +34,9 @@ type options struct {
 	udfConcurrency int
 	// retryInterval is the time.Duration to sleep before retrying
 	retryInterval time.Duration
+	// onFull specifies the behaviour for the write actions when the inter step buffer is full
+	// TODO - Remove this - OnFull is an edge level attribute, not a forwarder level.
+	onFull string
 	// vertexType indicates the type of the vertex
 	vertexType dfv1.VertexType
 	// srcWatermarkPublisher is used to publish source watermark
@@ -42,6 +46,16 @@ type options struct {
 }
 
 type Option func(*options) error
+
+func DefaultOptions() *options {
+	return &options{
+		readBatchSize:  dfv1.DefaultReadBatchSize,
+		udfConcurrency: dfv1.DefaultReadBatchSize,
+		retryInterval:  time.Millisecond,
+		onFull:         dfv1.RetryUntilSuccess,
+		logger:         logging.NewLogger(),
+	}
+}
 
 // WithRetryInterval sets the retry interval
 func WithRetryInterval(f time.Duration) Option {
@@ -87,6 +101,14 @@ func WithVertexType(t dfv1.VertexType) Option {
 func WithSourceWatermarkPublisher(p isb.SourceWatermarkPublisher) Option {
 	return func(o *options) error {
 		o.srcWatermarkPublisher = p
+		return nil
+	}
+}
+
+// WithOnFull sets the onFull write actions
+func WithOnFull(of string) Option {
+	return func(o *options) error {
+		o.onFull = of
 		return nil
 	}
 }

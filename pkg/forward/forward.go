@@ -46,9 +46,11 @@ type InterStepDataForward struct {
 	ctx context.Context
 	// cancelFn cancels our new context, our cancellation is little more complex and needs to be well orchestrated, hence
 	// we need something more than a cancel().
-	cancelFn         context.CancelFunc
-	fromBuffer       isb.BufferReader
-	toBuffers        map[string]isb.BufferWriter
+	cancelFn   context.CancelFunc
+	fromBuffer isb.BufferReader
+	toBuffers  map[string]isb.BufferWriter
+	// key is the toBuffer name, value is the corresponding onFull action.
+	onFullActions    map[string]string
 	FSD              ToWhichStepDecider
 	UDF              applier.MapApplier
 	fetchWatermark   fetch.Fetcher
@@ -68,17 +70,13 @@ func NewInterStepDataForward(vertex *dfv1.Vertex,
 	fromStep isb.BufferReader,
 	toSteps map[string]isb.BufferWriter,
 	fsd ToWhichStepDecider,
+	onFullActions map[string]string,
 	applyUDF applier.MapApplier,
 	fetchWatermark fetch.Fetcher,
 	publishWatermark map[string]publish.Publisher,
 	opts ...Option) (*InterStepDataForward, error) {
 
-	options := &options{
-		retryInterval:  time.Millisecond,
-		readBatchSize:  dfv1.DefaultReadBatchSize,
-		udfConcurrency: dfv1.DefaultReadBatchSize,
-		logger:         logging.NewLogger(),
-	}
+	options := DefaultOptions()
 	for _, o := range opts {
 		if err := o(options); err != nil {
 			return nil, err
@@ -92,6 +90,7 @@ func NewInterStepDataForward(vertex *dfv1.Vertex,
 		cancelFn:         cancel,
 		fromBuffer:       fromStep,
 		toBuffers:        toSteps,
+		onFullActions:    onFullActions,
 		FSD:              fsd,
 		UDF:              applyUDF,
 		fetchWatermark:   fetchWatermark,
@@ -478,6 +477,14 @@ func (isdf *InterStepDataForward) writeToBuffers(ctx context.Context, messageToS
 
 // writeToBuffer forwards an array of messages to a single buffer and is a blocking call or until shutdown has been initiated.
 func (isdf *InterStepDataForward) writeToBuffer(ctx context.Context, toBuffer isb.BufferWriter, messages []isb.Message) (writeOffsets []isb.Offset, err error) {
+	if isdf.onFullActions[toBuffer.GetName()] == dfv1.DropAndAckLatest && toBuffer.IsFull() {
+		// TODO - Emit metrics for no. of dropped messages.
+		return nil, nil
+	}
+
+	// if the buffer is not full when we start writing the batch, we apply retryUntilSuccess strategy for the write.
+	// even if during the middle of the batch write, the buffer becomes full.
+
 	var totalBytes float64
 	for _, m := range messages {
 		totalBytes += float64(len(m.Payload))
@@ -487,9 +494,17 @@ retry:
 	needRetry := false
 	for {
 		_writeOffsets, errs := toBuffer.Write(ctx, messages)
+
 		// Note: this is an unwanted memory allocation during a happy path. We want only minimal allocation since using failedMessages is an unlikely path.
 		var failedMessages []isb.Message
 		for idx := range messages {
+			/*
+				if err is a buffer full error, we drop all the messages in the current for loop.
+				Not adding any of the messages to failedMessages, writeMessagesError metric increases size of the messages.
+				needRetry = false
+				Don't update writeOffsets.
+			*/
+
 			// use the messages index to index error, there is a 1:1 mapping
 			err := errs[idx]
 			// ATM there are no user defined errors during write, all are InternalErrors, and they require retry.
@@ -498,6 +513,7 @@ retry:
 				// we retry only failed messages
 				failedMessages = append(failedMessages, messages[idx])
 				writeMessagesError.With(map[string]string{metrics.LabelVertex: isdf.vertexName, metrics.LabelPipeline: isdf.pipelineName, "buffer": toBuffer.GetName()}).Inc()
+
 				// a shutdown can break the blocking loop caused due to InternalErr
 				if ok, _ := isdf.IsShuttingDown(); ok {
 					err := fmt.Errorf("writeToBuffer failed, Stop called while stuck on an internal error with failed messages:%d, %v", len(failedMessages), errs)

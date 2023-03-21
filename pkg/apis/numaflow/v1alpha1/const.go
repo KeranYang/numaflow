@@ -122,6 +122,10 @@ const (
 	DefaultBufferUsageLimit = 0.8
 	DefaultReadBatchSize    = 500
 
+	// Edge OnFull configurations
+	RetryUntilSuccess = "RetryUntilSuccess"
+	DropAndAckLatest  = "DropAndAckLatest"
+
 	// Auto scaling
 	DefaultLookbackSeconds          = 180 // Default lookback seconds for calculating avg rate and pending
 	DefaultCooldownSeconds          = 90  // Default cooldown seconds after a scaling operation
