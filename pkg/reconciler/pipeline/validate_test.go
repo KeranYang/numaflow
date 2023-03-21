@@ -198,14 +198,6 @@ func TestValidatePipeline(t *testing.T) {
 		assert.Contains(t, err.Error(), `"parallelism" is not allowed for an edge leading to a non-reduce vertex`)
 	})
 
-	t.Run("invalid onFull specification", func(t *testing.T) {
-		testObj := testPipeline.DeepCopy()
-		testObj.Spec.Edges[0].OnFull = pointer.String("invalid-onFull")
-		err := ValidatePipeline(testObj)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), `"onFull should be either retryUntilSuccess or dropAndAckLatest`)
-	})
-
 	t.Run("no type", func(t *testing.T) {
 		testObj := testPipeline.DeepCopy()
 		testObj.Spec.Vertices = append(testObj.Spec.Vertices, dfv1.AbstractVertex{Name: "abc"})
