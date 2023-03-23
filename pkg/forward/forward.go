@@ -475,20 +475,20 @@ func (isdf *InterStepDataForward) writeToBuffers(ctx context.Context, messageToS
 	return writeOffsetsEdge, nil
 }
 
-// writeToBuffer forwards an array of messages to a single buffer and is a blocking call or until shutdown has been initiated.
+// writeToBuffer forwards an array of messages to a single buffer.
 func (isdf *InterStepDataForward) writeToBuffer(ctx context.Context, toBuffer isb.BufferWriter, messages []isb.Message) (writeOffsets []isb.Offset, err error) {
-	var totalBytes float64
-	for _, m := range messages {
-		totalBytes += float64(len(m.Payload))
-	}
-	writeOffsets = make([]isb.Offset, 0, len(messages))
+	totalCount := len(messages)
+	writeOffsets = make([]isb.Offset, 0, totalCount)
+	var writeCount int
+	var writeBytes float64
+	var dropBytes float64
 retry:
 	needRetry := false
 	for {
 		_writeOffsets, errs := toBuffer.Write(ctx, messages)
 		// Note: this is an unwanted memory allocation during a happy path. We want only minimal allocation since using failedMessages is an unlikely path.
 		var failedMessages []isb.Message
-		for idx := range messages {
+		for idx, msg := range messages {
 			// use the messages index to index error, there is a 1:1 mapping
 			err := errs[idx]
 			// ATM there are no user defined errors during write, all are InternalErrors, and they require retry.
@@ -504,9 +504,13 @@ retry:
 						platformError.With(map[string]string{metrics.LabelVertex: isdf.vertexName, metrics.LabelPipeline: isdf.pipelineName}).Inc()
 						return writeOffsets, err
 					}
+				} else {
+					// drop the message
+					dropBytes += float64(len(msg.Payload))
 				}
-				// TODO - Else, emit the metric - no. of messages dropped on full
 			} else {
+				writeCount++
+				writeBytes += float64(len(msg.Payload))
 				// we support write offsets only for jetstream
 				if _writeOffsets != nil {
 					writeOffsets = append(writeOffsets, _writeOffsets[idx])
@@ -525,8 +529,10 @@ retry:
 		}
 	}
 
-	writeMessagesCount.With(map[string]string{metrics.LabelVertex: isdf.vertexName, metrics.LabelPipeline: isdf.pipelineName, "buffer": toBuffer.GetName()}).Add(float64(len(messages)))
-	writeBytesCount.With(map[string]string{metrics.LabelVertex: isdf.vertexName, metrics.LabelPipeline: isdf.pipelineName, "buffer": toBuffer.GetName()}).Add(totalBytes)
+	dropMessagesCount.With(map[string]string{metrics.LabelVertex: isdf.vertexName, metrics.LabelPipeline: isdf.pipelineName, "buffer": toBuffer.GetName()}).Add(float64(totalCount - writeCount))
+	dropBytesCount.With(map[string]string{metrics.LabelVertex: isdf.vertexName, metrics.LabelPipeline: isdf.pipelineName, "buffer": toBuffer.GetName()}).Add(dropBytes)
+	writeMessagesCount.With(map[string]string{metrics.LabelVertex: isdf.vertexName, metrics.LabelPipeline: isdf.pipelineName, "buffer": toBuffer.GetName()}).Add(float64(writeCount))
+	writeBytesCount.With(map[string]string{metrics.LabelVertex: isdf.vertexName, metrics.LabelPipeline: isdf.pipelineName, "buffer": toBuffer.GetName()}).Add(writeBytes)
 	return writeOffsets, nil
 }
 
