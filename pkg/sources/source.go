@@ -247,6 +247,7 @@ func (sp *SourceProcessor) getTransformerGoWhereDecider() forward.GoWhere {
 	return fsd
 }
 
+// getOnFullActions builds a mapping between the out-going buffers and their respective onFull action.
 func (sp *SourceProcessor) getOnFullActions() map[string]string {
 	onFullActions := make(map[string]string)
 	for _, edge := range sp.VertexInstance.Vertex.Spec.ToEdges {
