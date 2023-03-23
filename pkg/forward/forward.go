@@ -477,32 +477,34 @@ func (isdf *InterStepDataForward) writeToBuffers(ctx context.Context, messageToS
 
 // writeToBuffer forwards an array of messages to a single buffer.
 func (isdf *InterStepDataForward) writeToBuffer(ctx context.Context, toBuffer isb.BufferWriter, messages []isb.Message) (writeOffsets []isb.Offset, err error) {
-	totalCount := len(messages)
+	var (
+		totalCount int
+		writeCount int
+		writeBytes float64
+		dropBytes  float64
+	)
+	totalCount = len(messages)
 	writeOffsets = make([]isb.Offset, 0, totalCount)
-	var writeCount int
-	var writeBytes float64
-	var dropBytes float64
-retry:
-	needRetry := false
+
 	for {
 		_writeOffsets, errs := toBuffer.Write(ctx, messages)
 		// Note: this is an unwanted memory allocation during a happy path. We want only minimal allocation since using failedMessages is an unlikely path.
-		var failedMessages []isb.Message
+		failedMessages := make([]isb.Message, 0, len(messages))
+		needRetry := false
+
 		for idx, msg := range messages {
-			// use the messages index to index error, there is a 1:1 mapping
-			err := errs[idx]
-			// ATM there are no user defined errors during write, all are InternalErrors, and they require retry.
-			if err != nil {
+			if err := errs[idx]; err != nil {
+				// ATM there are no user defined errors during write, all are InternalErrors.
+				// TODO - && not buffer full error
 				needRetry = isdf.onFullActions[toBuffer.GetName()] != dfv1.DropAndAckLatest
 				if needRetry {
 					// we retry only failed messages
-					failedMessages = append(failedMessages, messages[idx])
+					failedMessages = append(failedMessages, msg)
 					writeMessagesError.With(map[string]string{metrics.LabelVertex: isdf.vertexName, metrics.LabelPipeline: isdf.pipelineName, "buffer": toBuffer.GetName()}).Inc()
 					// a shutdown can break the blocking loop caused due to InternalErr
 					if ok, _ := isdf.IsShuttingDown(); ok {
-						err := fmt.Errorf("writeToBuffer failed, Stop called while stuck on an internal error with failed messages:%d, %v", len(failedMessages), errs)
 						platformError.With(map[string]string{metrics.LabelVertex: isdf.vertexName, metrics.LabelPipeline: isdf.pipelineName}).Inc()
-						return writeOffsets, err
+						return writeOffsets, fmt.Errorf("writeToBuffer failed, Stop called while stuck on an internal error with failed messages:%d, %v", len(failedMessages), errs)
 					}
 				} else {
 					// drop the message
@@ -517,13 +519,17 @@ retry:
 				}
 			}
 		}
-		// set messages to failed for the retry
+
 		if needRetry {
-			isdf.opts.logger.Errorw("Retrying failed messages", zap.Any("errors", errorArrayToMap(errs)))
+			isdf.opts.logger.Errorw("Retrying failed messages",
+				zap.Any("errors", errorArrayToMap(errs)),
+				zap.String("pipeline", isdf.pipelineName),
+				zap.String("vertex", isdf.vertexName),
+				zap.String("buffer", toBuffer.GetName()),
+			)
 			messages = failedMessages
 			// TODO: implement retry with backoff etc.
 			time.Sleep(isdf.opts.retryInterval)
-			goto retry
 		} else {
 			break
 		}
