@@ -41,18 +41,18 @@ func (s *FunctionalSuite) TestDropOnFull() {
 	// wait for all the pods to come up
 	w.Expect().VertexPodsRunning()
 
-	for i := 1; i <= 100; i++ {
+	for i := 1; i <= 200; i++ {
 		w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("888888")))
 	}
 
-	time.Sleep(time.Minute * 2)
+	time.Sleep(time.Minute * 3)
 
 	// All messages should be written to retry-until-success sink.
-	w.Expect().SinkContains("retry-until-success", "888888", WithContainCount(100))
+	w.Expect().SinkContains("retry-until-success", "888888", WithContainCount(200))
 	// At least one message should be written to drop-and-ack-latest sink.
 	w.Expect().SinkContains("drop-and-ack-latest", "888888", WithContainCount(1))
 	// At least one message should be dropped before writing to drop-and-ack-latest sink.
-	w.Expect().SinkNotContains("drop-and-ack-latest", "888888", WithContainCount(100))
+	w.Expect().SinkNotContains("drop-and-ack-latest", "888888", WithContainCount(200))
 }
 
 func TestFunctionalSuite(t *testing.T) {
