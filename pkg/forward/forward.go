@@ -23,6 +23,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strings"
 	"sync"
 	"time"
 
@@ -495,8 +496,12 @@ func (isdf *InterStepDataForward) writeToBuffer(ctx context.Context, toBuffer is
 		for idx, msg := range messages {
 			if err := errs[idx]; err != nil {
 				// ATM there are no user defined errors during write, all are InternalErrors.
-				// TODO - && not buffer full error
-				needRetry = isdf.onFullActions[toBuffer.GetName()] != dfv1.DropAndAckLatest
+
+				// using `strings.Contains` to check BufferFull error type is not a good practice for two reasons:
+				// 1. it's an O(n) operation which, if being called frequently, can introduce performance issue.
+				// 2. it assumes that all the buffer implementations implement err.Error() to use "Buffer full" as error message content.
+				// TODO - a better way could be to declare a BufferFullError type and use type check instead of checking error message.
+				needRetry = !(isdf.onFullActions[toBuffer.GetName()] == dfv1.DropAndAckLatest && strings.Contains(err.Error(), "Buffer full"))
 				if needRetry {
 					// we retry only failed messages
 					failedMessages = append(failedMessages, msg)
