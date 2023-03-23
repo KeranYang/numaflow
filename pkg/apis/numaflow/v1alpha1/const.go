@@ -122,7 +122,7 @@ const (
 	DefaultBufferUsageLimit = 0.8
 	DefaultReadBatchSize    = 500
 
-	// Edge OnFull configurations
+	// Edge-level specification to define the writing behaviour when the ToBuffer is full
 	RetryUntilSuccess = "retryUntilSuccess"
 	DropAndAckLatest  = "dropAndAckLatest"
 

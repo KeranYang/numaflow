@@ -260,7 +260,7 @@ func (s *FunctionalSuite) TestDropOnFull() {
 		w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("888888")))
 	}
 
-	time.Sleep(time.Minute * 2)
+	time.Sleep(time.Minute * 3)
 
 	w.Expect().SinkContains("out", "888888", WithContainCount(200))
 	// At least one message is written to sink.

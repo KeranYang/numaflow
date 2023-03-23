@@ -1,0 +1,43 @@
+apiVersion: numaflow.numaproj.io/v1alpha1
+kind: Pipeline
+metadata:
+  name: drop-on-full
+spec:
+  limits:
+    readBatchSize: 1
+    bufferMaxLength: 1
+  vertices:
+    - name: in
+      source:
+        http: {}
+    # Using sleep udf to create a back pressure scenario.
+    - name: sleep-one
+      udf:
+        container:
+          image: quay.io/numaio/numaflow-go/sleep-one-sec-example:latest
+    - name: sleep-two
+      udf:
+        container:
+          image: quay.io/numaio/numaflow-go/sleep-one-sec-example:latest
+    - name: retry-until-success
+      sink:
+        udsink:
+          container:
+            image: quay.io/numaio/numaflow-sink/redis-e2e-test-sink:latest
+    - name: drop-and-ack-latest
+      sink:
+        udsink:
+          container:
+            image: quay.io/numaio/numaflow-sink/redis-e2e-test-sink:latest
+  edges:
+    - from: in
+      to: sleep-one
+    - from: in
+      to: sleep-two
+      onFull: dropAndAckLatest
+    - from: sleep-one
+      to: retry-until-success
+    - from: sleep-two
+      to: drop-and-ack-latest
+      onFull: dropAndAckLatest
+
