@@ -12,19 +12,27 @@ spec:
         http: {}
     # Using sleep udf to create a back pressure scenario.
     - name: sleep-one
+      scale:
+        max: 1
       udf:
         container:
           image: quay.io/numaio/numaflow-go/sleep-one-sec-example:latest
     - name: sleep-two
+      scale:
+        max: 1
       udf:
         container:
           image: quay.io/numaio/numaflow-go/sleep-one-sec-example:latest
     - name: retry-until-success
+      scale:
+        max: 1
       sink:
         udsink:
           container:
             image: quay.io/numaio/numaflow-sink/redis-e2e-test-sink:latest
     - name: drop-and-ack-latest
+      scale:
+        max: 1
       sink:
         udsink:
           container:

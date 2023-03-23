@@ -1,3 +1,5 @@
+//go:build test
+
 /*
 Copyright 2022 The Numaproj Authors.
 
@@ -244,29 +246,6 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 	w.Expect().SinkContains("number-sink", "888888")
 	w.Expect().SinkContains("number-sink", "888889")
 	w.Expect().SinkNotContains("number-sink", "not an integer")
-}
-
-func (s *FunctionalSuite) TestDropOnFull() {
-	w := s.Given().Pipeline("@testdata/drop-on-full.yaml").
-		When().
-		CreatePipelineAndWait()
-	defer w.DeletePipelineAndWait()
-	pipelineName := "drop-on-full"
-
-	// wait for all the pods to come up
-	w.Expect().VertexPodsRunning()
-
-	for i := 1; i <= 200; i++ {
-		w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("888888")))
-	}
-
-	time.Sleep(time.Minute * 3)
-
-	w.Expect().SinkContains("out", "888888", WithContainCount(200))
-	// At least one message is written to sink.
-	w.Expect().SinkContains("drop", "888888", WithContainCount(1))
-	// At least one message is dropped.
-	w.Expect().SinkNotContains("drop", "888888", WithContainCount(200))
 }
 
 func (s *FunctionalSuite) TestWatermarkEnabled() {
