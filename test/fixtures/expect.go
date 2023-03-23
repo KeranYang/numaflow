@@ -22,12 +22,13 @@ import (
 	"testing"
 	"time"
 
-	dfv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	flowpkg "github.com/numaproj/numaflow/pkg/client/clientset/versioned/typed/numaflow/v1alpha1"
 	apierr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+
+	dfv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	flowpkg "github.com/numaproj/numaflow/pkg/client/clientset/versioned/typed/numaflow/v1alpha1"
 )
 
 type Expect struct {
@@ -51,10 +52,10 @@ func (t *Expect) SinkContains(sinkName string, targetStr string, opts ...SinkChe
 	return t
 }
 
-func (t *Expect) SinkNotContains(sinkName string, targetStr string) *Expect {
+func (t *Expect) SinkNotContains(sinkName string, targetStr string, opts ...SinkCheckOption) *Expect {
 	t.t.Helper()
 	ctx := context.Background()
-	notContains := RedisNotContains(ctx, t.pipeline.Name, sinkName, targetStr)
+	notContains := RedisNotContains(ctx, t.pipeline.Name, sinkName, targetStr, opts...)
 	if !notContains {
 		t.t.Fatalf("Not expected redis contains target string %s written by pipeline %s, sink %s.", targetStr, t.pipeline.Name, sinkName)
 	}

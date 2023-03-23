@@ -123,8 +123,8 @@ const (
 	DefaultReadBatchSize    = 500
 
 	// Edge OnFull configurations
-	RetryUntilSuccess = "RetryUntilSuccess"
-	DropAndAckLatest  = "DropAndAckLatest"
+	RetryUntilSuccess = "retryUntilSuccess"
+	DropAndAckLatest  = "dropAndAckLatest"
 
 	// Auto scaling
 	DefaultLookbackSeconds          = 180 // Default lookback seconds for calculating avg rate and pending

@@ -477,13 +477,11 @@ func (isdf *InterStepDataForward) writeToBuffers(ctx context.Context, messageToS
 
 // writeToBuffer forwards an array of messages to a single buffer and is a blocking call or until shutdown has been initiated.
 func (isdf *InterStepDataForward) writeToBuffer(ctx context.Context, toBuffer isb.BufferWriter, messages []isb.Message) (writeOffsets []isb.Offset, err error) {
-	if isdf.onFullActions[toBuffer.GetName()] == dfv1.DropAndAckLatest && toBuffer.IsFull() {
-		// TODO - Emit metrics for no. of dropped messages.
-		return nil, nil
-	}
+	isdf.opts.logger.Warnw("KeranTest - I am in writeToBuffer, writing messages", zap.Any("size", len(messages)), zap.Any("buffer-name", toBuffer.GetName()), zap.Any("onFull", isdf.onFullActions[toBuffer.GetName()]))
 
-	// if the buffer is not full when we start writing the batch, we apply retryUntilSuccess strategy for the write.
+	// if the buffer is not full when we start writing the batch, we apply retryUntilSuccess strategy to write.
 	// even if during the middle of the batch write, the buffer becomes full.
+	// writing partial data can make it complicated.
 
 	var totalBytes float64
 	for _, m := range messages {
@@ -493,32 +491,40 @@ func (isdf *InterStepDataForward) writeToBuffer(ctx context.Context, toBuffer is
 retry:
 	needRetry := false
 	for {
+		// TODO - maybe move this one to the retry loop?
+		// TODO - log to see what the exact value is for isdf.onFullActions[toBuffer.GetName()]
+		/*
+			isdf.opts.logger.Warnw(fmt.Sprintf("KeranTest - toBuffer.GetName() is %s, OnFullAction is %s.", toBuffer.GetName(), isdf.onFullActions[toBuffer.GetName()]))
+			if isdf.onFullActions[toBuffer.GetName()] == dfv1.DropAndAckLatest && toBuffer.IsFull() {
+				isdf.opts.logger.Warnw(fmt.Sprintf("KeranTest - Buffer is full, onFull action is drop, so dropping messages, value is %s", string(messages[0].Payload)))
+				// TODO - Emit metrics for no. of dropped messages.
+				return writeOffsets, nil
+			}
+		*/
 		_writeOffsets, errs := toBuffer.Write(ctx, messages)
 
 		// Note: this is an unwanted memory allocation during a happy path. We want only minimal allocation since using failedMessages is an unlikely path.
 		var failedMessages []isb.Message
 		for idx := range messages {
-			/*
-				if err is a buffer full error, we drop all the messages in the current for loop.
-				Not adding any of the messages to failedMessages, writeMessagesError metric increases size of the messages.
-				needRetry = false
-				Don't update writeOffsets.
-			*/
-
 			// use the messages index to index error, there is a 1:1 mapping
 			err := errs[idx]
 			// ATM there are no user defined errors during write, all are InternalErrors, and they require retry.
 			if err != nil {
-				needRetry = true
-				// we retry only failed messages
-				failedMessages = append(failedMessages, messages[idx])
-				writeMessagesError.With(map[string]string{metrics.LabelVertex: isdf.vertexName, metrics.LabelPipeline: isdf.pipelineName, "buffer": toBuffer.GetName()}).Inc()
+				needRetry = isdf.onFullActions[toBuffer.GetName()] != dfv1.DropAndAckLatest
+				if needRetry {
+					// we retry only failed messages
+					failedMessages = append(failedMessages, messages[idx])
+					writeMessagesError.With(map[string]string{metrics.LabelVertex: isdf.vertexName, metrics.LabelPipeline: isdf.pipelineName, "buffer": toBuffer.GetName()}).Inc()
 
-				// a shutdown can break the blocking loop caused due to InternalErr
-				if ok, _ := isdf.IsShuttingDown(); ok {
-					err := fmt.Errorf("writeToBuffer failed, Stop called while stuck on an internal error with failed messages:%d, %v", len(failedMessages), errs)
-					platformError.With(map[string]string{metrics.LabelVertex: isdf.vertexName, metrics.LabelPipeline: isdf.pipelineName}).Inc()
-					return writeOffsets, err
+					// a shutdown can break the blocking loop caused due to InternalErr
+					if ok, _ := isdf.IsShuttingDown(); ok {
+						err := fmt.Errorf("writeToBuffer failed, Stop called while stuck on an internal error with failed messages:%d, %v", len(failedMessages), errs)
+						platformError.With(map[string]string{metrics.LabelVertex: isdf.vertexName, metrics.LabelPipeline: isdf.pipelineName}).Inc()
+						return writeOffsets, err
+					}
+				} else {
+					// Dropping this message.
+					isdf.opts.logger.Errorw("Got error, dropping", zap.Any("error", err.Error()))
 				}
 			} else {
 				// we support write offsets only for jetstream
@@ -529,9 +535,10 @@ retry:
 		}
 		// set messages to failed for the retry
 		if needRetry {
-			isdf.opts.logger.Errorw("Retrying failed msgs", zap.Any("errors", errorArrayToMap(errs)))
+			isdf.opts.logger.Errorw("Retrying failed messages", zap.Any("errors", errorArrayToMap(errs)))
 			messages = failedMessages
 			// TODO: implement retry with backoff etc.
+			// Keran - I think (maybe not ture) if we wait, when retry, buffer will always be NOT FULL, so line 496 will NEVER hold true.
 			time.Sleep(isdf.opts.retryInterval)
 			goto retry
 		} else {

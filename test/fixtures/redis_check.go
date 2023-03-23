@@ -36,7 +36,7 @@ func RedisNotContains(ctx context.Context, pipelineName, sinkName, targetStr str
 	defer cancel()
 
 	return runChecks(ctx, func() bool {
-		return !redisContains(pipelineName, sinkName, targetStr, 1)
+		return !redisContains(pipelineName, sinkName, targetStr, o.count)
 	})
 }
 
