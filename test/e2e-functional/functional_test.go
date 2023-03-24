@@ -1,5 +1,3 @@
-//go:build test
-
 /*
 Copyright 2022 The Numaproj Authors.
 
@@ -19,6 +17,7 @@ limitations under the License.
 package e2e
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
@@ -41,18 +40,31 @@ func (s *FunctionalSuite) TestDropOnFull() {
 	// wait for all the pods to come up
 	w.Expect().VertexPodsRunning()
 
-	for i := 1; i <= 200; i++ {
-		w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("888888")))
+	// Scale the sinks down to 0 pod to create a buffer full scenario.
+	scaleDownArgs := "kubectl scale vtx drop-on-full-drop-sink --replicas=0 -n numaflow-system"
+	w.Exec("/bin/sh", []string{"-c", scaleDownArgs}, CheckVertexScaled)
+	scaleDownArgs = "kubectl scale vtx drop-on-full-retry-sink --replicas=0 -n numaflow-system"
+	w.Exec("/bin/sh", []string{"-c", scaleDownArgs}, CheckVertexScaled)
+
+	// TODO - don't sleep
+	time.Sleep(time.Second * 5)
+
+	for i := 1; i <= 2; i++ {
+		w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte(strconv.Itoa(i))))
+		// Give buffer writer 2 seconds to update it's isFull attribute.
+		time.Sleep(time.Second * 2)
 	}
 
-	time.Sleep(time.Minute * 3)
+	// Scale sink up to 1 pod to process the messages from the buffer.
+	scaleUpArgs := "kubectl scale vtx drop-on-full-drop-sink --replicas=1 -n numaflow-system"
+	w.Exec("/bin/sh", []string{"-c", scaleUpArgs}, CheckVertexScaled)
+	scaleUpArgs = "kubectl scale vtx drop-on-full-retry-sink --replicas=1 -n numaflow-system"
+	w.Exec("/bin/sh", []string{"-c", scaleUpArgs}, CheckVertexScaled)
 
-	// All messages should be written to retry-until-success sink.
-	w.Expect().SinkContains("retry-until-success", "888888", WithContainCount(200))
-	// At least one message should be written to drop-and-ack-latest sink.
-	w.Expect().SinkContains("drop-and-ack-latest", "888888", WithContainCount(1))
-	// At least one message should be dropped before writing to drop-and-ack-latest sink.
-	w.Expect().SinkNotContains("drop-and-ack-latest", "888888", WithContainCount(200))
+	w.Expect().SinkContains("retry-sink", "1")
+	w.Expect().SinkContains("retry-sink", "2")
+	w.Expect().SinkContains("drop-sink", "1")
+	w.Expect().SinkNotContains("drop-sink", "2")
 }
 
 func TestFunctionalSuite(t *testing.T) {

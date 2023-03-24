@@ -4,40 +4,32 @@ metadata:
   name: drop-on-full
 spec:
   limits:
+    # I don't think we need to specify readBatchSize
     readBatchSize: 1
     bufferMaxLength: 1
+    bufferUsageLimit: 100
   vertices:
     - name: in
       source:
         http: {}
-    # Using sleep udf to create a back pressure scenario.
-    - name: sleep-one
-      udf:
-        container:
-          image: quay.io/numaio/numaflow-go/sleep-one-sec-example:latest
-    - name: sleep-two
-      udf:
-        container:
-          image: quay.io/numaio/numaflow-go/sleep-one-sec-example:latest
-    - name: retry-until-success
+    - name: drop-sink
+      scale:
+        disabled: true
       sink:
         udsink:
           container:
             image: quay.io/numaio/numaflow-sink/redis-e2e-test-sink:latest
-    - name: drop-and-ack-latest
+    - name: retry-sink
+      scale:
+        disabled: true
       sink:
         udsink:
           container:
             image: quay.io/numaio/numaflow-sink/redis-e2e-test-sink:latest
   edges:
     - from: in
-      to: sleep-one
+      to: drop-sink
+      onFull: dropAndAckLatest
     - from: in
-      to: sleep-two
-      onFull: dropAndAckLatest
-    - from: sleep-one
-      to: retry-until-success
-    - from: sleep-two
-      to: drop-and-ack-latest
-      onFull: dropAndAckLatest
-
+      to: retry-sink
+      onFull: retryUntilSuccess

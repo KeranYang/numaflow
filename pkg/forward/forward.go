@@ -502,6 +502,14 @@ func (isdf *InterStepDataForward) writeToBuffer(ctx context.Context, toBuffer is
 				// 2. it assumes that all the buffer implementations implement err.Error() to use "Buffer full" as error message content.
 				// TODO - a better way could be to declare a BufferFullError type and use type check instead of checking error message.
 				needRetry = !(isdf.onFullActions[toBuffer.GetName()] == dfv1.DropAndAckLatest && strings.Contains(err.Error(), "Buffer full"))
+				// KeranTest log
+				isdf.opts.logger.Errorw("Got an error",
+					zap.Any("needRetry", needRetry),
+					zap.String("error", err.Error()),
+					zap.String("pipeline", isdf.pipelineName),
+					zap.String("vertex", isdf.vertexName),
+					zap.String("buffer", toBuffer.GetName()),
+				)
 				if needRetry {
 					// we retry only failed messages
 					failedMessages = append(failedMessages, msg)
@@ -514,6 +522,13 @@ func (isdf *InterStepDataForward) writeToBuffer(ctx context.Context, toBuffer is
 				} else {
 					// drop the message
 					dropBytes += float64(len(msg.Payload))
+					// KeranTest log
+					isdf.opts.logger.Errorw("Dropping the message",
+						zap.Any("message", string(msg.Payload)),
+						zap.String("pipeline", isdf.pipelineName),
+						zap.String("vertex", isdf.vertexName),
+						zap.String("buffer", toBuffer.GetName()),
+					)
 				}
 			} else {
 				writeCount++

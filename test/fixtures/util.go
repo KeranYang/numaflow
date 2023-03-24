@@ -29,14 +29,15 @@ import (
 	"testing"
 	"time"
 
-	dfv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	flowpkg "github.com/numaproj/numaflow/pkg/client/clientset/versioned/typed/numaflow/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
+
+	dfv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	flowpkg "github.com/numaproj/numaflow/pkg/client/clientset/versioned/typed/numaflow/v1alpha1"
 )
 
 var OutputRegexp = func(rx string) func(t *testing.T, output string, err error) {
@@ -50,6 +51,11 @@ var OutputRegexp = func(rx string) func(t *testing.T, output string, err error) 
 
 var CheckPodKillSucceeded = func(t *testing.T, output string, err error) {
 	assert.Contains(t, output, "deleted")
+	assert.NoError(t, err)
+}
+
+var CheckVertexScaled = func(t *testing.T, output string, err error) {
+	assert.Contains(t, output, "scaled")
 	assert.NoError(t, err)
 }
 
