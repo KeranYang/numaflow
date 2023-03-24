@@ -532,6 +532,7 @@ func (isdf *InterStepDataForward) writeToBuffer(ctx context.Context, toBuffer is
 				zap.String("vertex", isdf.vertexName),
 				zap.String("buffer", toBuffer.GetName()),
 			)
+			// set messages to failed for the retry
 			messages = failedMessages
 			// TODO: implement retry with backoff etc.
 			time.Sleep(isdf.opts.retryInterval)

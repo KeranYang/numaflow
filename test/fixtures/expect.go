@@ -112,6 +112,21 @@ func (t *Expect) VertexPodsRunning() *Expect {
 	return t
 }
 
+func (t *Expect) VertexSizeScaledTo(v string, size int) *Expect {
+	t.t.Helper()
+	ctx := context.Background()
+	if _, err := t.vertexClient.Get(ctx, t.pipeline.Name+"-"+v, metav1.GetOptions{}); err != nil {
+		t.t.Fatalf("Expected vertex %s existing: %v", v, err)
+	}
+
+	// check expected number of pods running
+	timeout := 2 * time.Minute
+	if err := WaitForVertexPodScalingTo(t.kubeClient, t.vertexClient, Namespace, t.pipeline.Name, v, timeout, size); err != nil {
+		t.t.Fatalf("Expected %d pods running on vertex %s : %v", size, v, err)
+	}
+	return t
+}
+
 func (t *Expect) VertexPodLogContains(vertexName, regex string, opts ...PodLogCheckOption) *Expect {
 	t.t.Helper()
 	ctx := context.Background()
