@@ -46,20 +46,18 @@ func (s *FunctionalSuite) TestDropOnFull() {
 	scaleDownArgs = "kubectl scale vtx drop-on-full-retry-sink --replicas=0 -n numaflow-system"
 	w.Exec("/bin/sh", []string{"-c", scaleDownArgs}, CheckVertexScaled)
 
-	// TODO - don't sleep
-	time.Sleep(time.Second * 5)
-
 	for i := 1; i <= 2; i++ {
 		w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte(strconv.Itoa(i))))
 		// Give buffer writer 2 seconds to update it's isFull attribute.
 		time.Sleep(time.Second * 2)
 	}
 
-	// Scale sink up to 1 pod to process the messages from the buffer.
+	// Scale sink up to 1 pod to process the message from the buffer.
 	scaleUpArgs := "kubectl scale vtx drop-on-full-drop-sink --replicas=1 -n numaflow-system"
 	w.Exec("/bin/sh", []string{"-c", scaleUpArgs}, CheckVertexScaled)
 	scaleUpArgs = "kubectl scale vtx drop-on-full-retry-sink --replicas=1 -n numaflow-system"
 	w.Exec("/bin/sh", []string{"-c", scaleUpArgs}, CheckVertexScaled)
+	w.Expect().VertexPodsRunning()
 
 	w.Expect().SinkContains("retry-sink", "1")
 	w.Expect().SinkContains("retry-sink", "2")

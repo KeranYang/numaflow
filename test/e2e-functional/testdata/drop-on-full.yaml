@@ -4,8 +4,7 @@ metadata:
   name: drop-on-full
 spec:
   limits:
-    # I don't think we need to specify readBatchSize
-    readBatchSize: 1
+    # Using the following limits for generating a buffer full scenario.
     bufferMaxLength: 1
     bufferUsageLimit: 100
   vertices:
