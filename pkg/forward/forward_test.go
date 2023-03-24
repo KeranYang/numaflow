@@ -721,8 +721,8 @@ func TestWriteToBufferError_ActionOnFullIsDropAndAckLatest(t *testing.T) {
 	messageToStep["to1"] = make([]isb.Message, 0)
 	messageToStep["to1"] = append(messageToStep["to1"], writeMessages[0:11]...)
 	_, err = f.writeToBuffers(ctx, messageToStep)
-	// although we are writing 11 messages to a buffer of size 10, because we specify actionOnFull as DropAndAckLatest.
-	// writeToBuffers should return no error.
+	// although we are writing 11 messages to a buffer of size 10, since we specify actionOnFull as DropAndAckLatest,
+	// the writeToBuffers() call should return no error.
 	assert.Nil(t, err)
 	// stop will cancel the contexts and therefore the forwarder stops without waiting
 	f.Stop()

@@ -31,7 +31,7 @@ type Edge struct {
 	// +optional
 	Parallelism *int32 `json:"parallelism" protobuf:"bytes,5,opt,name=parallelism"`
 	// OnFull specifies the behaviour for the write actions when the inter step buffer is full.
-	// if not provided, the default value is set to "retryUntilSuccess".
+	// if not provided, the default value is set to "", which currently has the same effect as "retryUntilSuccess".
 	// +kubebuilder:validation:Enum="";retryUntilSuccess;dropAndAckLatest
 	// +optional
 	OnFull string `json:"onFull" protobuf:"bytes,6,opt,name=onFull"`

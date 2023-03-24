@@ -1,3 +1,5 @@
+//go:build test
+
 /*
 Copyright 2022 The Numaproj Authors.
 
@@ -17,7 +19,6 @@ limitations under the License.
 package e2e
 
 import (
-	"strconv"
 	"testing"
 	"time"
 
@@ -46,13 +47,14 @@ func (s *FunctionalSuite) TestDropOnFull() {
 	scaleDownArgs = "kubectl scale vtx drop-on-full-retry-sink --replicas=0 -n numaflow-system"
 	w.Exec("/bin/sh", []string{"-c", scaleDownArgs}, CheckVertexScaled)
 
-	for i := 1; i <= 2; i++ {
-		w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte(strconv.Itoa(i))))
-		// Give buffer writer 2 seconds to update it's isFull attribute.
-		time.Sleep(time.Second * 2)
-	}
+	time.Sleep(time.Second * 5)
 
-	// Scale sink up to 1 pod to process the message from the buffer.
+	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("1")))
+	// Give buffer writer 2 seconds to update it's isFull attribute.
+	time.Sleep(time.Second * 2)
+	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("2")))
+
+	// Scale the sinks up to 1 pod to process the message from the buffer.
 	scaleUpArgs := "kubectl scale vtx drop-on-full-drop-sink --replicas=1 -n numaflow-system"
 	w.Exec("/bin/sh", []string{"-c", scaleUpArgs}, CheckVertexScaled)
 	scaleUpArgs = "kubectl scale vtx drop-on-full-retry-sink --replicas=1 -n numaflow-system"

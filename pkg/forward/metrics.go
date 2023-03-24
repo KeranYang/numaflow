@@ -76,7 +76,7 @@ var dropMessagesCount = promauto.NewCounterVec(prometheus.CounterOpts{
 var dropBytesCount = promauto.NewCounterVec(prometheus.CounterOpts{
 	Subsystem: "forwarder",
 	Name:      "drop_bytes_total",
-	Help:      "Total number of bytes dropped",
+	Help:      "Total number of Bytes Dropped",
 }, []string{metrics.LabelVertex, metrics.LabelPipeline, "buffer"})
 
 // ackMessagesCount is used to indicate the number of  messages acknowledged

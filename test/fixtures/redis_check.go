@@ -24,8 +24,7 @@ import (
 // Retry checking redis every 5 seconds.
 const retryInterval = time.Second * 5
 
-// RedisNotContains verifies that the number of occurrences of targetStr, in redis that is written by pipelineName, sinkName,
-// is less than the specified sink check option count.
+// RedisNotContains verifies that there is no occurrence of targetStr in redis that is written by pipelineName, sinkName.
 func RedisNotContains(ctx context.Context, pipelineName, sinkName, targetStr string, opts ...SinkCheckOption) bool {
 	o := defaultRedisCheckOptions()
 	for _, opt := range opts {
@@ -37,12 +36,11 @@ func RedisNotContains(ctx context.Context, pipelineName, sinkName, targetStr str
 	defer cancel()
 
 	return runChecks(ctx, func() bool {
-		return !redisContains(pipelineName, sinkName, targetStr, o.count)
+		return !redisContains(pipelineName, sinkName, targetStr, 1)
 	})
 }
 
-// RedisContains verifies that the number of occurrences of targetStr, in redis written by pipelineName, sinkName,
-// is greater than or equal to the specified sink check option count.
+// RedisContains verifies that there are targetStr in redis written by pipelineName, sinkName.
 func RedisContains(ctx context.Context, pipelineName, sinkName, targetStr string, opts ...SinkCheckOption) bool {
 	o := defaultRedisCheckOptions()
 	for _, opt := range opts {
