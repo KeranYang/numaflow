@@ -41,7 +41,7 @@ func (s *FunctionalSuite) TestDropOnFull() {
 	// wait for all the pods to come up
 	w.Expect().VertexPodsRunning()
 
-	// Scale the sinks down to 0 pod to create a buffer full scenario.
+	// scale the sinks down to 0 pod to create a buffer full scenario.
 	scaleDownArgs := "kubectl scale vtx drop-on-full-drop-sink --replicas=0 -n numaflow-system"
 	w.Exec("/bin/sh", []string{"-c", scaleDownArgs}, CheckVertexScaled)
 	scaleDownArgs = "kubectl scale vtx drop-on-full-retry-sink --replicas=0 -n numaflow-system"
@@ -51,11 +51,11 @@ func (s *FunctionalSuite) TestDropOnFull() {
 		VertexSizeScaledTo("drop-sink", 0)
 
 	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("1")))
-	// Give buffer writer 2 seconds to update it's isFull attribute.
+	// give buffer writer 2 seconds to update it's isFull attribute.
 	time.Sleep(time.Second * 2)
 	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("2")))
 
-	// Scale the sinks up to 1 pod to process the message from the buffer.
+	// scale the sinks up to 1 pod to process the message from the buffer.
 	scaleUpArgs := "kubectl scale vtx drop-on-full-drop-sink --replicas=1 -n numaflow-system"
 	w.Exec("/bin/sh", []string{"-c", scaleUpArgs}, CheckVertexScaled)
 	scaleUpArgs = "kubectl scale vtx drop-on-full-retry-sink --replicas=1 -n numaflow-system"
