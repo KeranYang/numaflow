@@ -689,15 +689,15 @@ func TestWriteToBufferError_ActionOnFullIsRetryUntilSuccess(t *testing.T) {
 	<-stopped
 }
 
-// TestWriteToBufferError_ActionOnFullIsDropAndAckLatest explicitly tests the case of dropping messages when buffer is full
-func TestWriteToBufferError_ActionOnFullIsDropAndAckLatest(t *testing.T) {
+// TestWriteToBufferError_ActionOnFullIsDiscardLatest explicitly tests the case of dropping messages when buffer is full
+func TestWriteToBufferError_ActionOnFullIsDiscardLatest(t *testing.T) {
 	fromStep := simplebuffer.NewInMemoryBuffer("from", 25)
 	to1 := simplebuffer.NewInMemoryBuffer("to1", 10)
 	toSteps := map[string]isb.BufferWriter{
 		"to1": to1,
 	}
 	actionsOnFull := map[string]dfv1.OnFullWritingOption{
-		"to1": dfv1.DropAndAckLatest,
+		"to1": dfv1.DiscardLatest,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
@@ -721,7 +721,7 @@ func TestWriteToBufferError_ActionOnFullIsDropAndAckLatest(t *testing.T) {
 	messageToStep["to1"] = make([]isb.Message, 0)
 	messageToStep["to1"] = append(messageToStep["to1"], writeMessages[0:11]...)
 	_, err = f.writeToBuffers(ctx, messageToStep)
-	// although we are writing 11 messages to a buffer of size 10, since we specify actionOnFull as DropAndAckLatest,
+	// although we are writing 11 messages to a buffer of size 10, since we specify actionOnFull as DiscardLatest,
 	// the writeToBuffers() call should return no error.
 	assert.Nil(t, err)
 	// stop will cancel the contexts and therefore the forwarder stops without waiting

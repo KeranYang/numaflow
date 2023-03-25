@@ -127,7 +127,7 @@ const (
 
 	// Edge-level specification to define the writing behaviour when the ToBuffer is full
 	RetryUntilSuccess OnFullWritingOption = "retryUntilSuccess"
-	DropAndAckLatest  OnFullWritingOption = "dropAndAckLatest"
+	DiscardLatest     OnFullWritingOption = "discardLatest"
 
 	// Auto scaling
 	DefaultLookbackSeconds          = 180 // Default lookback seconds for calculating avg rate and pending
