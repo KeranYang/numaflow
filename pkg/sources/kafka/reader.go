@@ -267,7 +267,7 @@ func NewKafkaSource(
 	vertexInstance *dfv1.VertexInstance,
 	writers []isb.BufferWriter,
 	fsd forward.ToWhichStepDecider,
-	onFullActions map[string]string,
+	onFullActions map[string]dfv1.OnFullWritingOption,
 	mapApplier applier.MapApplier,
 	fetchWM fetch.Fetcher,
 	publishWM map[string]publish.Publisher,

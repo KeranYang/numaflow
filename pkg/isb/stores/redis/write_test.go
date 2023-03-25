@@ -343,7 +343,7 @@ func TestNewInterStepDataForwardRedis(t *testing.T) {
 	toSteps := map[string]isb.BufferWriter{
 		"to1": to1,
 	}
-	actionsOnFull := map[string]string{
+	actionsOnFull := map[string]dfv1.OnFullWritingOption{
 		"to1": dfv1.RetryUntilSuccess,
 	}
 
@@ -395,7 +395,7 @@ func TestReadTimeout(t *testing.T) {
 	toSteps := map[string]isb.BufferWriter{
 		"to1": to1,
 	}
-	actionsOnFull := map[string]string{
+	actionsOnFull := map[string]dfv1.OnFullWritingOption{
 		"to1": dfv1.RetryUntilSuccess,
 	}
 

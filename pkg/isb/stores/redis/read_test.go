@@ -130,7 +130,7 @@ func TestRedisCheckBacklog(t *testing.T) {
 	toSteps := map[string]isb.BufferWriter{
 		"to1": rqw,
 	}
-	actionsOnFull := map[string]string{
+	actionsOnFull := map[string]dfv1.OnFullWritingOption{
 		"to1": dfv1.RetryUntilSuccess,
 	}
 	fetchWatermark, publishWatermark := generic.BuildNoOpWatermarkProgressorsFromBufferMap(toSteps)
@@ -317,7 +317,7 @@ func (suite *ReadWritePerformance) SetupSuite() {
 	toSteps := map[string]isb.BufferWriter{
 		"to1": rqw,
 	}
-	actionsOnFull := map[string]string{
+	actionsOnFull := map[string]dfv1.OnFullWritingOption{
 		"to1": dfv1.RetryUntilSuccess,
 	}
 
@@ -416,7 +416,7 @@ func (suite *ReadWritePerformance) TestReadWriteLatencyPipelining() {
 	toSteps := map[string]isb.BufferWriter{
 		"to1": suite.rqw,
 	}
-	actionsOnFull := map[string]string{
+	actionsOnFull := map[string]dfv1.OnFullWritingOption{
 		"to1": dfv1.RetryUntilSuccess,
 	}
 	fetchWatermark, publishWatermark := generic.BuildNoOpWatermarkProgressorsFromBufferMap(toSteps)

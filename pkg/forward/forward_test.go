@@ -96,7 +96,7 @@ func TestNewInterStepDataForward(t *testing.T) {
 	toSteps := map[string]isb.BufferWriter{
 		"to1": to1,
 	}
-	actionsOnFull := map[string]string{
+	actionsOnFull := map[string]dfv1.OnFullWritingOption{
 		"to1": dfv1.RetryUntilSuccess,
 	}
 
@@ -229,7 +229,7 @@ func TestNewInterStepDataForwardIdleWatermark(t *testing.T) {
 	toSteps := map[string]isb.BufferWriter{
 		"to1": to1,
 	}
-	actionsOnFull := map[string]string{
+	actionsOnFull := map[string]dfv1.OnFullWritingOption{
 		"to1": dfv1.RetryUntilSuccess,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
@@ -397,7 +397,7 @@ func TestNewInterStepDataForwardIdleWatermark_Reset(t *testing.T) {
 	toSteps := map[string]isb.BufferWriter{
 		"to1": to1,
 	}
-	actionsOnFull := map[string]string{
+	actionsOnFull := map[string]dfv1.OnFullWritingOption{
 		"to1": dfv1.RetryUntilSuccess,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
@@ -581,7 +581,7 @@ func TestSourceInterStepDataForward(t *testing.T) {
 	toSteps := map[string]isb.BufferWriter{
 		"to1": to1,
 	}
-	actionsOnFull := map[string]string{
+	actionsOnFull := map[string]dfv1.OnFullWritingOption{
 		"to1": dfv1.RetryUntilSuccess,
 	}
 	vertex := &dfv1.Vertex{Spec: dfv1.VertexSpec{
@@ -641,7 +641,7 @@ func TestWriteToBufferError_ActionOnFullIsRetryUntilSuccess(t *testing.T) {
 	toSteps := map[string]isb.BufferWriter{
 		"to1": to1,
 	}
-	actionsOnFull := map[string]string{
+	actionsOnFull := map[string]dfv1.OnFullWritingOption{
 		"to1": dfv1.RetryUntilSuccess,
 	}
 
@@ -696,7 +696,7 @@ func TestWriteToBufferError_ActionOnFullIsDropAndAckLatest(t *testing.T) {
 	toSteps := map[string]isb.BufferWriter{
 		"to1": to1,
 	}
-	actionsOnFull := map[string]string{
+	actionsOnFull := map[string]dfv1.OnFullWritingOption{
 		"to1": dfv1.DropAndAckLatest,
 	}
 
@@ -738,7 +738,7 @@ func TestNewInterStepDataForwardToOneStep(t *testing.T) {
 		"to1": to1,
 		"to2": to2,
 	}
-	actionsOnFull := map[string]string{
+	actionsOnFull := map[string]dfv1.OnFullWritingOption{
 		"to1": dfv1.RetryUntilSuccess,
 		"to2": dfv1.RetryUntilSuccess,
 	}
@@ -839,7 +839,7 @@ func TestNewInterStepDataForward_dropAll(t *testing.T) {
 		"to1": to1,
 		"to2": to2,
 	}
-	actionsOnFull := map[string]string{
+	actionsOnFull := map[string]dfv1.OnFullWritingOption{
 		"to1": dfv1.RetryUntilSuccess,
 		"to2": dfv1.RetryUntilSuccess,
 	}
@@ -937,7 +937,7 @@ func TestNewInterStepData_forwardToAll(t *testing.T) {
 		"to1": to1,
 		"to2": to2,
 	}
-	actionsOnFull := map[string]string{
+	actionsOnFull := map[string]dfv1.OnFullWritingOption{
 		"to1": dfv1.RetryUntilSuccess,
 		"to2": dfv1.RetryUntilSuccess,
 	}
@@ -1039,7 +1039,7 @@ func TestNewInterStepDataForward_WithInternalError(t *testing.T) {
 	toSteps := map[string]isb.BufferWriter{
 		"to1": to1,
 	}
-	actionsOnFull := map[string]string{
+	actionsOnFull := map[string]dfv1.OnFullWritingOption{
 		"to1": dfv1.RetryUntilSuccess,
 	}
 
@@ -1089,7 +1089,7 @@ func TestNewInterStepDataForward_WhereToError(t *testing.T) {
 	toSteps := map[string]isb.BufferWriter{
 		"to1": to1,
 	}
-	actionsOnFull := map[string]string{
+	actionsOnFull := map[string]dfv1.OnFullWritingOption{
 		"to1": dfv1.RetryUntilSuccess,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
@@ -1139,7 +1139,7 @@ func TestNewInterStepDataForward_UDFError(t *testing.T) {
 	toSteps := map[string]isb.BufferWriter{
 		"to1": to1,
 	}
-	actionsOnFull := map[string]string{
+	actionsOnFull := map[string]dfv1.OnFullWritingOption{
 		"to1": dfv1.RetryUntilSuccess,
 	}
 

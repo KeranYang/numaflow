@@ -116,7 +116,7 @@ func TestToLog_ForwardToTwoVertex(t *testing.T) {
 		"to1": to1,
 		"to2": to2,
 	}
-	actionsOnFull := map[string]string{
+	actionsOnFull := map[string]dfv1.OnFullWritingOption{
 		"to1": dfv1.RetryUntilSuccess,
 		"to2": dfv1.RetryUntilSuccess,
 	}

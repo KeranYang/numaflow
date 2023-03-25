@@ -179,7 +179,7 @@ func (sp *SourceProcessor) Start(ctx context.Context) error {
 func (sp *SourceProcessor) getSourcer(
 	writers []isb.BufferWriter,
 	fsd forward.ToWhichStepDecider,
-	onFullActions map[string]string,
+	onFullActions map[string]dfv1.OnFullWritingOption,
 	mapApplier applier.MapApplier,
 	fetchWM fetch.Fetcher,
 	publishWM map[string]publish.Publisher,
@@ -248,12 +248,16 @@ func (sp *SourceProcessor) getTransformerGoWhereDecider() forward.GoWhere {
 }
 
 // getOnFullActions builds a mapping between the out-going buffers and their respective onFull action.
-func (sp *SourceProcessor) getOnFullActions() map[string]string {
-	onFullActions := make(map[string]string)
+func (sp *SourceProcessor) getOnFullActions() map[string]dfv1.OnFullWritingOption {
+	onFullActions := make(map[string]dfv1.OnFullWritingOption)
 	for _, edge := range sp.VertexInstance.Vertex.Spec.ToEdges {
 		bufferNames := dfv1.GenerateEdgeBufferNames(sp.VertexInstance.Vertex.Namespace, sp.VertexInstance.Vertex.Spec.PipelineName, edge)
 		for _, bn := range bufferNames {
-			onFullActions[bn] = edge.OnFull
+			if action := edge.OnFull; action != nil {
+				onFullActions[bn] = dfv1.OnFullWritingOption(*action)
+			} else {
+				onFullActions[bn] = dfv1.RetryUntilSuccess
+			}
 		}
 	}
 	return onFullActions

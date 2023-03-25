@@ -51,7 +51,7 @@ type InterStepDataForward struct {
 	fromBuffer isb.BufferReader
 	toBuffers  map[string]isb.BufferWriter
 	// key is the toBuffer name, value is the corresponding onFull action.
-	onFullActions    map[string]string
+	onFullActions    map[string]dfv1.OnFullWritingOption
 	FSD              ToWhichStepDecider
 	UDF              applier.MapApplier
 	fetchWatermark   fetch.Fetcher
@@ -71,7 +71,7 @@ func NewInterStepDataForward(vertex *dfv1.Vertex,
 	fromStep isb.BufferReader,
 	toSteps map[string]isb.BufferWriter,
 	fsd ToWhichStepDecider,
-	onFullActions map[string]string,
+	onFullActions map[string]dfv1.OnFullWritingOption,
 	applyUDF applier.MapApplier,
 	fetchWatermark fetch.Fetcher,
 	publishWatermark map[string]publish.Publisher,
