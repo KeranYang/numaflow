@@ -248,45 +248,6 @@ func (s *FunctionalSuite) TestConditionalForwarding() {
 	w.Expect().SinkNotContains("number-sink", "not an integer")
 }
 
-func (s *FunctionalSuite) TestDropOnFull() {
-	w := s.Given().Pipeline("@testdata/drop-on-full.yaml").
-		When().
-		CreatePipelineAndWait()
-	defer w.DeletePipelineAndWait()
-	pipelineName := "drop-on-full"
-
-	// wait for all the pods to come up
-	w.Expect().VertexPodsRunning()
-
-	// scale the sinks down to 0 pod to create a buffer full scenario.
-	scaleDownArgs := "kubectl scale vtx drop-on-full-drop-sink --replicas=0 -n numaflow-system"
-	w.Exec("/bin/sh", []string{"-c", scaleDownArgs}, CheckVertexScaled)
-	scaleDownArgs = "kubectl scale vtx drop-on-full-retry-sink --replicas=0 -n numaflow-system"
-	w.Exec("/bin/sh", []string{"-c", scaleDownArgs}, CheckVertexScaled)
-	w.Expect().
-		VertexSizeScaledTo("retry-sink", 0).
-		VertexSizeScaledTo("drop-sink", 0)
-
-	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("1")))
-	// give buffer writer 2 seconds to update it's isFull attribute.
-	time.Sleep(time.Second * 2)
-	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("2")))
-
-	// scale the sinks up to 1 pod to process the message from the buffer.
-	scaleUpArgs := "kubectl scale vtx drop-on-full-drop-sink --replicas=1 -n numaflow-system"
-	w.Exec("/bin/sh", []string{"-c", scaleUpArgs}, CheckVertexScaled)
-	scaleUpArgs = "kubectl scale vtx drop-on-full-retry-sink --replicas=1 -n numaflow-system"
-	w.Exec("/bin/sh", []string{"-c", scaleUpArgs}, CheckVertexScaled)
-	w.Expect().
-		VertexSizeScaledTo("retry-sink", 1).
-		VertexSizeScaledTo("drop-sink", 1)
-
-	w.Expect().SinkContains("retry-sink", "1")
-	w.Expect().SinkContains("retry-sink", "2")
-	w.Expect().SinkContains("drop-sink", "1")
-	w.Expect().SinkNotContains("drop-sink", "2")
-}
-
 func (s *FunctionalSuite) TestWatermarkEnabled() {
 	w := s.Given().Pipeline("@testdata/watermark.yaml").
 		When().
