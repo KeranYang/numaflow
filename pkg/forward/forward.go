@@ -490,9 +490,8 @@ func (isdf *InterStepDataForward) writeToBuffer(ctx context.Context, toBuffer is
 	for {
 		_writeOffsets, errs := toBuffer.Write(ctx, messages)
 		// Note: this is an unwanted memory allocation during a happy path. We want only minimal allocation since using failedMessages is an unlikely path.
-		failedMessages := make([]isb.Message, 0, len(messages))
+		var failedMessages []isb.Message
 		needRetry := false
-
 		for idx, msg := range messages {
 			if err := errs[idx]; err != nil {
 				// ATM there are no user defined errors during write, all are InternalErrors.
