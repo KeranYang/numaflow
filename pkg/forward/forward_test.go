@@ -622,8 +622,8 @@ func TestSourceInterStepDataForward(t *testing.T) {
 	<-stopped
 }
 
-// TestWriteToBufferError_ActionOnFullIsRetryUntilSuccess explicitly tests the case of retrying failed messages
-func TestWriteToBufferError_ActionOnFullIsRetryUntilSuccess(t *testing.T) {
+// TestWriteToBufferError_OnFullWritingStrategyIsRetryUntilSuccess explicitly tests the case of retrying failed messages
+func TestWriteToBufferError_OnFullWritingStrategyIsRetryUntilSuccess(t *testing.T) {
 	fromStep := simplebuffer.NewInMemoryBuffer("from", 25)
 	to1 := simplebuffer.NewInMemoryBuffer("to1", 10)
 	toSteps := map[string]isb.BufferWriter{
@@ -674,11 +674,10 @@ func TestWriteToBufferError_ActionOnFullIsRetryUntilSuccess(t *testing.T) {
 	<-stopped
 }
 
-/*
-// TestWriteToBufferError_ActionOnFullIsDiscardLatest explicitly tests the case of dropping messages when buffer is full
-func TestWriteToBufferError_ActionOnFullIsDiscardLatest(t *testing.T) {
+// TestWriteToBufferError_OnFullWritingStrategyIsDiscardLatest explicitly tests the case of dropping messages when buffer is full
+func TestWriteToBufferError_OnFullWritingStrategyIsDiscardLatest(t *testing.T) {
 	fromStep := simplebuffer.NewInMemoryBuffer("from", 25)
-	to1 := simplebuffer.NewInMemoryBuffer("to1", 10)
+	to1 := simplebuffer.NewInMemoryBuffer("to1", 10, simplebuffer.WithOnFullWritingStrategy(dfv1.DiscardLatest))
 	toSteps := map[string]isb.BufferWriter{
 		"to1": to1,
 	}
@@ -711,7 +710,6 @@ func TestWriteToBufferError_ActionOnFullIsDiscardLatest(t *testing.T) {
 	f.Stop()
 	<-stopped
 }
-*/
 
 // TestNewInterStepDataForwardToOneStep explicitly tests the case where we forward to only one buffer
 func TestNewInterStepDataForwardToOneStep(t *testing.T) {

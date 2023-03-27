@@ -206,15 +206,14 @@ func (jw *jetStreamWriter) Write(ctx context.Context, messages []isb.Message) ([
 			for i := 0; i < len(errs); i++ {
 				errs[i] = isb.NoRetryableBufferWriteErr{Name: jw.name, Message: "Buffer full!"}
 			}
-			return nil, errs
 		default:
 			// Default behavior is to return a BufferWriteErr.
 			for i := 0; i < len(errs); i++ {
 				errs[i] = isb.BufferWriteErr{Name: jw.name, Full: true, Message: "Buffer full!"}
 			}
-			isbWriteErrors.With(labels).Inc()
-			return nil, errs
 		}
+		isbWriteErrors.With(labels).Inc()
+		return nil, errs
 	}
 	// TODO: temp env flag for sync/async writing, revisit this later.
 	if sharedutil.LookupEnvStringOr("ISB_ASYNC_WRITE", "false") == "true" {
