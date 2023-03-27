@@ -2719,14 +2719,14 @@ Auth information
 </tr>
 </tbody>
 </table>
-<h3 id="numaflow.numaproj.io/v1alpha1.OnFullWritingOption">
-OnFullWritingOption (<code>string</code> alias)
+<h3 id="numaflow.numaproj.io/v1alpha1.OnFullWritingStrategy">
+OnFullWritingStrategy (<code>string</code> alias)
 </p>
 </h3>
 <p>
 <p>
-OnFullWritingOption is an edge-level specification to define the writing
-behaviour when the ToBuffer is full
+OnFullWritingStrategy is an edge-level specification to define the
+writing behaviour when the ToBuffer is full
 </p>
 </p>
 <h3 id="numaflow.numaproj.io/v1alpha1.PBQStorage">

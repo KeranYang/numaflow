@@ -118,7 +118,7 @@ func TestBlackhole_ForwardToTwoVertex(t *testing.T) {
 		},
 	}}
 	fetchWatermark, publishWatermark := generic.BuildNoOpWatermarkProgressorsFromBufferMap(toSteps)
-	actionsOnFull := map[string]dfv1.OnFullWritingOption{
+	actionsOnFull := map[string]dfv1.OnFullWritingStrategy{
 		"to1": dfv1.RetryUntilSuccess,
 		"to2": dfv1.RetryUntilSuccess,
 	}

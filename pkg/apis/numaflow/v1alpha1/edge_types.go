@@ -52,3 +52,17 @@ type EdgeLimits struct {
 	// +optional
 	BufferUsageLimit *uint32 `json:"bufferUsageLimit,omitempty" protobuf:"varint,2,opt,name=bufferUsageLimit"`
 }
+
+func (e Edge) OnFullWritingStrategy() OnFullWritingStrategy {
+	if e.OnFull == nil {
+		return RetryUntilSuccess
+	}
+	switch *e.OnFull {
+	case "retryUntilSuccess":
+		return RetryUntilSuccess
+	case "discardLatest":
+		return DiscardLatest
+	default:
+		return RetryUntilSuccess
+	}
+}

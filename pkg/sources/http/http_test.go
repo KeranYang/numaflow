@@ -69,7 +69,7 @@ func Test_NewHTTP(t *testing.T) {
 	dest := []isb.BufferWriter{simplebuffer.NewInMemoryBuffer("test", 100)}
 	publishWMStores := store.BuildWatermarkStore(noop.NewKVNoOpStore(), noop.NewKVNoOpStore())
 	fetchWatermark, publishWatermark := generic.BuildNoOpWatermarkProgressorsFromBufferMap(map[string]isb.BufferWriter{})
-	h, err := New(vi, dest, forward.All, map[string]dfv1.OnFullWritingOption{"test": dfv1.RetryUntilSuccess}, applier.Terminal, fetchWatermark, publishWatermark, publishWMStores)
+	h, err := New(vi, dest, forward.All, map[string]dfv1.OnFullWritingStrategy{"test": dfv1.RetryUntilSuccess}, applier.Terminal, fetchWatermark, publishWatermark, publishWMStores)
 	assert.NoError(t, err)
 	assert.False(t, h.ready)
 	assert.Equal(t, v.Spec.Name, h.GetName())

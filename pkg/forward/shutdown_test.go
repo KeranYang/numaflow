@@ -47,7 +47,7 @@ func TestInterStepDataForward_Stop(t *testing.T) {
 	toSteps := map[string]isb.BufferWriter{
 		"to1": to1,
 	}
-	actionsOnFull := map[string]dfv1.OnFullWritingOption{
+	actionsOnFull := map[string]dfv1.OnFullWritingStrategy{
 		"to1": dfv1.RetryUntilSuccess,
 	}
 
@@ -84,7 +84,7 @@ func TestInterStepDataForward_ForceStop(t *testing.T) {
 	toSteps := map[string]isb.BufferWriter{
 		"to1": to1,
 	}
-	actionsOnFull := map[string]dfv1.OnFullWritingOption{
+	actionsOnFull := map[string]dfv1.OnFullWritingStrategy{
 		"to1": dfv1.RetryUntilSuccess,
 	}
 

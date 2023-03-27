@@ -51,14 +51,14 @@ type InterStepDataForward struct {
 	fromBuffer isb.BufferReader
 	toBuffers  map[string]isb.BufferWriter
 	// key is the toBuffer name, value is the corresponding onFull action.
-	onFullActions    map[string]dfv1.OnFullWritingOption
-	FSD              ToWhichStepDecider
-	UDF              applier.MapApplier
-	fetchWatermark   fetch.Fetcher
-	publishWatermark map[string]publish.Publisher
-	opts             options
-	vertexName       string
-	pipelineName     string
+	onFullWritingStrategies map[string]dfv1.OnFullWritingStrategy
+	FSD                     ToWhichStepDecider
+	UDF                     applier.MapApplier
+	fetchWatermark          fetch.Fetcher
+	publishWatermark        map[string]publish.Publisher
+	opts                    options
+	vertexName              string
+	pipelineName            string
 	// wmbOffset is a toBufferName to the write offset of the idle watermark map.
 	wmbOffset map[string]isb.Offset
 	// wmbChecker checks if the idle watermark is valid.
@@ -71,7 +71,7 @@ func NewInterStepDataForward(vertex *dfv1.Vertex,
 	fromStep isb.BufferReader,
 	toSteps map[string]isb.BufferWriter,
 	fsd ToWhichStepDecider,
-	onFullActions map[string]dfv1.OnFullWritingOption,
+	onFullWritingStrategies map[string]dfv1.OnFullWritingStrategy,
 	applyUDF applier.MapApplier,
 	fetchWatermark fetch.Fetcher,
 	publishWatermark map[string]publish.Publisher,
@@ -87,15 +87,15 @@ func NewInterStepDataForward(vertex *dfv1.Vertex,
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var isdf = InterStepDataForward{
-		ctx:              ctx,
-		cancelFn:         cancel,
-		fromBuffer:       fromStep,
-		toBuffers:        toSteps,
-		onFullActions:    onFullActions,
-		FSD:              fsd,
-		UDF:              applyUDF,
-		fetchWatermark:   fetchWatermark,
-		publishWatermark: publishWatermark,
+		ctx:                     ctx,
+		cancelFn:                cancel,
+		fromBuffer:              fromStep,
+		toBuffers:               toSteps,
+		onFullWritingStrategies: onFullWritingStrategies,
+		FSD:                     fsd,
+		UDF:                     applyUDF,
+		fetchWatermark:          fetchWatermark,
+		publishWatermark:        publishWatermark,
 		// should we do a check here for the values not being null?
 		vertexName:   vertex.Spec.Name,
 		pipelineName: vertex.Spec.PipelineName,
@@ -500,7 +500,7 @@ func (isdf *InterStepDataForward) writeToBuffer(ctx context.Context, toBuffer is
 				// 1. it's an O(n) operation which, if being called frequently, can introduce performance issue.
 				// 2. it assumes that all the buffer implementations implement err.Error() to use "Buffer full" as error message content.
 				// TODO - a better way could be to declare a BufferFullError type and use type check instead of checking error message.
-				needRetry = !(isdf.onFullActions[toBuffer.GetName()] == dfv1.DiscardLatest && strings.Contains(err.Error(), "Buffer full"))
+				needRetry = !(isdf.onFullWritingStrategies[toBuffer.GetName()] == dfv1.DiscardLatest && strings.Contains(err.Error(), "Buffer full"))
 				if needRetry {
 					// we retry only failed messages
 					failedMessages = append(failedMessages, msg)

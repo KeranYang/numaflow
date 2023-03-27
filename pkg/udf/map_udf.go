@@ -75,7 +75,7 @@ func (u *MapUDFProcessor) Start(ctx context.Context) error {
 
 	// Populate shuffle function map and onFull actions map
 	shuffleFuncMap := make(map[string]*shuffle.Shuffle)
-	onFullActions := make(map[string]dfv1.OnFullWritingOption)
+	onFullWritingStrategies := make(map[string]dfv1.OnFullWritingStrategy)
 	for _, edge := range u.VertexInstance.Vertex.Spec.ToEdges {
 		bufferNames := dfv1.GenerateEdgeBufferNames(u.VertexInstance.Vertex.Namespace, u.VertexInstance.Vertex.Spec.PipelineName, edge)
 		if edge.Parallelism != nil && *edge.Parallelism > 1 {
@@ -83,11 +83,7 @@ func (u *MapUDFProcessor) Start(ctx context.Context) error {
 			shuffleFuncMap[fmt.Sprintf("%s:%s", edge.From, edge.To)] = s
 		}
 		for _, bn := range bufferNames {
-			if action := edge.OnFull; action != nil {
-				onFullActions[bn] = dfv1.OnFullWritingOption(*action)
-			} else {
-				onFullActions[bn] = dfv1.RetryUntilSuccess
-			}
+			onFullWritingStrategies[bn] = edge.OnFullWritingStrategy()
 		}
 	}
 
@@ -140,7 +136,7 @@ func (u *MapUDFProcessor) Start(ctx context.Context) error {
 		}
 	}
 
-	forwarder, err := forward.NewInterStepDataForward(u.VertexInstance.Vertex, reader, writers, conditionalForwarder, onFullActions, udfHandler, fetchWatermark, publishWatermark, opts...)
+	forwarder, err := forward.NewInterStepDataForward(u.VertexInstance.Vertex, reader, writers, conditionalForwarder, onFullWritingStrategies, udfHandler, fetchWatermark, publishWatermark, opts...)
 	if err != nil {
 		return err
 	}
