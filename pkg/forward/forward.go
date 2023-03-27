@@ -23,7 +23,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"strings"
 	"sync"
 	"time"
 
@@ -47,18 +46,16 @@ type InterStepDataForward struct {
 	ctx context.Context
 	// cancelFn cancels our new context, our cancellation is little more complex and needs to be well orchestrated, hence
 	// we need something more than a cancel().
-	cancelFn   context.CancelFunc
-	fromBuffer isb.BufferReader
-	toBuffers  map[string]isb.BufferWriter
-	// key is the toBuffer name, value is the corresponding onFull action.
-	onFullWritingStrategies map[string]dfv1.OnFullWritingStrategy
-	FSD                     ToWhichStepDecider
-	UDF                     applier.MapApplier
-	fetchWatermark          fetch.Fetcher
-	publishWatermark        map[string]publish.Publisher
-	opts                    options
-	vertexName              string
-	pipelineName            string
+	cancelFn         context.CancelFunc
+	fromBuffer       isb.BufferReader
+	toBuffers        map[string]isb.BufferWriter
+	FSD              ToWhichStepDecider
+	UDF              applier.MapApplier
+	fetchWatermark   fetch.Fetcher
+	publishWatermark map[string]publish.Publisher
+	opts             options
+	vertexName       string
+	pipelineName     string
 	// wmbOffset is a toBufferName to the write offset of the idle watermark map.
 	wmbOffset map[string]isb.Offset
 	// wmbChecker checks if the idle watermark is valid.
@@ -71,7 +68,6 @@ func NewInterStepDataForward(vertex *dfv1.Vertex,
 	fromStep isb.BufferReader,
 	toSteps map[string]isb.BufferWriter,
 	fsd ToWhichStepDecider,
-	onFullWritingStrategies map[string]dfv1.OnFullWritingStrategy,
 	applyUDF applier.MapApplier,
 	fetchWatermark fetch.Fetcher,
 	publishWatermark map[string]publish.Publisher,
@@ -87,15 +83,14 @@ func NewInterStepDataForward(vertex *dfv1.Vertex,
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var isdf = InterStepDataForward{
-		ctx:                     ctx,
-		cancelFn:                cancel,
-		fromBuffer:              fromStep,
-		toBuffers:               toSteps,
-		onFullWritingStrategies: onFullWritingStrategies,
-		FSD:                     fsd,
-		UDF:                     applyUDF,
-		fetchWatermark:          fetchWatermark,
-		publishWatermark:        publishWatermark,
+		ctx:              ctx,
+		cancelFn:         cancel,
+		fromBuffer:       fromStep,
+		toBuffers:        toSteps,
+		FSD:              fsd,
+		UDF:              applyUDF,
+		fetchWatermark:   fetchWatermark,
+		publishWatermark: publishWatermark,
 		// should we do a check here for the values not being null?
 		vertexName:   vertex.Spec.Name,
 		pipelineName: vertex.Spec.PipelineName,
@@ -495,13 +490,11 @@ func (isdf *InterStepDataForward) writeToBuffer(ctx context.Context, toBuffer is
 		for idx, msg := range messages {
 			if err := errs[idx]; err != nil {
 				// ATM there are no user defined errors during write, all are InternalErrors.
-
-				// using `strings.Contains` to check BufferFull error type is not a good practice for two reasons:
-				// 1. it's an O(n) operation which, if being called frequently, can introduce performance issue.
-				// 2. it assumes that all the buffer implementations implement err.Error() to use "Buffer full" as error message content.
-				// TODO - a better way could be to declare a BufferFullError type and use type check instead of checking error message.
-				needRetry = !(isdf.onFullWritingStrategies[toBuffer.GetName()] == dfv1.DiscardLatest && strings.Contains(err.Error(), "Buffer full"))
-				if needRetry {
+				if _, ok := err.(isb.NoRetryableBufferWriteErr); ok {
+					// If toBuffer returns us a NoRetryableBufferWriteErr, we drop the message.
+					dropBytes += float64(len(msg.Payload))
+				} else {
+					needRetry = true
 					// we retry only failed messages
 					failedMessages = append(failedMessages, msg)
 					writeMessagesError.With(map[string]string{metrics.LabelVertex: isdf.vertexName, metrics.LabelPipeline: isdf.pipelineName, "buffer": toBuffer.GetName()}).Inc()
@@ -510,9 +503,6 @@ func (isdf *InterStepDataForward) writeToBuffer(ctx context.Context, toBuffer is
 						platformError.With(map[string]string{metrics.LabelVertex: isdf.vertexName, metrics.LabelPipeline: isdf.pipelineName}).Inc()
 						return writeOffsets, fmt.Errorf("writeToBuffer failed, Stop called while stuck on an internal error with failed messages:%d, %v", len(failedMessages), errs)
 					}
-				} else {
-					// drop the message
-					dropBytes += float64(len(msg.Payload))
 				}
 			} else {
 				writeCount++

@@ -73,7 +73,9 @@ func buildJetStreamBufferIO(ctx context.Context, fromBufferName string, vertexIn
 	}
 
 	for _, e := range vertexInstance.Vertex.Spec.ToEdges {
-		writeOpts := []jetstreamisb.WriteOption{}
+		writeOpts := []jetstreamisb.WriteOption{
+			jetstreamisb.WithOnFullWritingStrategy(e.OnFullWritingStrategy()),
+		}
 		if x := e.Limits; x != nil && x.BufferMaxLength != nil {
 			writeOpts = append(writeOpts, jetstreamisb.WithMaxLength(int64(*x.BufferMaxLength)))
 		}

@@ -343,9 +343,6 @@ func TestNewInterStepDataForwardRedis(t *testing.T) {
 	toSteps := map[string]isb.BufferWriter{
 		"to1": to1,
 	}
-	actionsOnFull := map[string]dfv1.OnFullWritingStrategy{
-		"to1": dfv1.RetryUntilSuccess,
-	}
 
 	writeMessages, internalKeys := buildTestWriteMessages(fromStepWrite, int64(20), testStartTime)
 
@@ -359,7 +356,7 @@ func TestNewInterStepDataForwardRedis(t *testing.T) {
 	}}
 
 	fetchWatermark, publishWatermark := generic.BuildNoOpWatermarkProgressorsFromBufferMap(toSteps)
-	f, err := forward.NewInterStepDataForward(vertex, fromStep, toSteps, myForwardRedisTest{}, actionsOnFull, myForwardRedisTest{}, fetchWatermark, publishWatermark)
+	f, err := forward.NewInterStepDataForward(vertex, fromStep, toSteps, myForwardRedisTest{}, myForwardRedisTest{}, fetchWatermark, publishWatermark)
 	assert.NoError(t, err)
 	assert.False(t, to1.IsFull())
 
@@ -395,9 +392,6 @@ func TestReadTimeout(t *testing.T) {
 	toSteps := map[string]isb.BufferWriter{
 		"to1": to1,
 	}
-	actionsOnFull := map[string]dfv1.OnFullWritingStrategy{
-		"to1": dfv1.RetryUntilSuccess,
-	}
 
 	vertex := &dfv1.Vertex{Spec: dfv1.VertexSpec{
 		PipelineName: "testPipeline",
@@ -407,7 +401,7 @@ func TestReadTimeout(t *testing.T) {
 	}}
 
 	fetchWatermark, publishWatermark := generic.BuildNoOpWatermarkProgressorsFromBufferMap(toSteps)
-	f, err := forward.NewInterStepDataForward(vertex, fromStep, toSteps, myForwardRedisTest{}, actionsOnFull, myForwardRedisTest{}, fetchWatermark, publishWatermark)
+	f, err := forward.NewInterStepDataForward(vertex, fromStep, toSteps, myForwardRedisTest{}, myForwardRedisTest{}, fetchWatermark, publishWatermark)
 	assert.NoError(t, err)
 	stopped := f.Start()
 	// Call stop to end the test as we have a blocking read. The forwarder is up and running with no messages written
