@@ -198,6 +198,7 @@ func (jw *jetStreamWriter) Write(ctx context.Context, messages []isb.Message) ([
 	if jw.isFull.Load() {
 		jw.log.Debugw("Is full")
 		isbFull.With(map[string]string{"buffer": jw.GetName()}).Inc()
+		// when buffer is full, we need to decide whether to discard the message or not.
 		switch jw.opts.onFullWritingStrategy {
 		case v1alpha1.DiscardLatest:
 			// user explicitly wants to discard the message when buffer if full.

@@ -392,7 +392,6 @@ func TestReadTimeout(t *testing.T) {
 	toSteps := map[string]isb.BufferWriter{
 		"to1": to1,
 	}
-
 	vertex := &dfv1.Vertex{Spec: dfv1.VertexSpec{
 		PipelineName: "testPipeline",
 		AbstractVertex: dfv1.AbstractVertex{

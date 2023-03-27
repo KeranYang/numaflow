@@ -76,9 +76,8 @@ func (u *MapUDFProcessor) Start(ctx context.Context) error {
 	// Populate shuffle function map
 	shuffleFuncMap := make(map[string]*shuffle.Shuffle)
 	for _, edge := range u.VertexInstance.Vertex.Spec.ToEdges {
-		bufferNames := dfv1.GenerateEdgeBufferNames(u.VertexInstance.Vertex.Namespace, u.VertexInstance.Vertex.Spec.PipelineName, edge)
 		if edge.Parallelism != nil && *edge.Parallelism > 1 {
-			s := shuffle.NewShuffle(u.VertexInstance.Vertex.GetName(), bufferNames)
+			s := shuffle.NewShuffle(u.VertexInstance.Vertex.GetName(), dfv1.GenerateEdgeBufferNames(u.VertexInstance.Vertex.Namespace, u.VertexInstance.Vertex.Spec.PipelineName, edge))
 			shuffleFuncMap[fmt.Sprintf("%s:%s", edge.From, edge.To)] = s
 		}
 	}

@@ -722,7 +722,6 @@ func TestNewInterStepDataForwardToOneStep(t *testing.T) {
 		"to1": to1,
 		"to2": to2,
 	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
@@ -819,7 +818,6 @@ func TestNewInterStepDataForward_dropAll(t *testing.T) {
 		"to1": to1,
 		"to2": to2,
 	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
@@ -913,7 +911,6 @@ func TestNewInterStepData_forwardToAll(t *testing.T) {
 		"to1": to1,
 		"to2": to2,
 	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
@@ -1012,7 +1009,6 @@ func TestNewInterStepDataForward_WithInternalError(t *testing.T) {
 	toSteps := map[string]isb.BufferWriter{
 		"to1": to1,
 	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 

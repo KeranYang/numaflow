@@ -47,7 +47,6 @@ func TestInterStepDataForward_Stop(t *testing.T) {
 	toSteps := map[string]isb.BufferWriter{
 		"to1": to1,
 	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -81,7 +80,6 @@ func TestInterStepDataForward_ForceStop(t *testing.T) {
 	toSteps := map[string]isb.BufferWriter{
 		"to1": to1,
 	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
