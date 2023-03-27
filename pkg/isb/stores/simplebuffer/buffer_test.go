@@ -80,7 +80,7 @@ func TestNewSimpleBuffer(t *testing.T) {
 	assert.Equal(t, true, sb.IsFull())
 }
 
-func TestNewSimpleBuffer_DropOnFull(t *testing.T) {
+func TestNewSimpleBuffer_DiscardOnFull(t *testing.T) {
 	count := int64(3)
 	sb := NewInMemoryBuffer("test", 2, WithOnFullWritingStrategy(v1alpha1.DiscardLatest))
 	ctx := context.Background()
@@ -91,7 +91,7 @@ func TestNewSimpleBuffer_DropOnFull(t *testing.T) {
 	writeMessages := testutils.BuildTestWriteMessages(count, startTime)
 
 	// try to write 3 messages, it should fail (we have only space for 2)
-	// the first 2 messages should be written, the last one should be dropped and returns us a NoRetryableError.
+	// the first 2 messages should be written, the last one should be discarded and returns us a NoRetryableError.
 	_, errors := sb.Write(ctx, writeMessages[0:3])
 	assert.NoError(t, errors[0])
 	assert.NoError(t, errors[1])

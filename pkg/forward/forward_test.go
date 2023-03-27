@@ -629,7 +629,6 @@ func TestWriteToBufferError_OnFullWritingStrategyIsRetryUntilSuccess(t *testing.
 	toSteps := map[string]isb.BufferWriter{
 		"to1": to1,
 	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
@@ -1100,7 +1099,6 @@ func TestNewInterStepDataForward_UDFError(t *testing.T) {
 	toSteps := map[string]isb.BufferWriter{
 		"to1": to1,
 	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 

@@ -41,7 +41,9 @@ func buildRedisBufferIO(ctx context.Context, fromBufferName string, vertexInstan
 	reader := redisisb.NewBufferRead(ctx, redisClient, fromBufferName, fromGroup, consumer, readerOpts...)
 	for _, e := range vertexInstance.Vertex.Spec.ToEdges {
 
-		writeOpts := []redisisb.Option{}
+		writeOpts := []redisisb.Option{
+			redisisb.WithOnFullWritingStrategy(e.OnFullWritingStrategy()),
+		}
 		if x := e.Limits; x != nil && x.BufferMaxLength != nil {
 			writeOpts = append(writeOpts, redisisb.WithMaxLength(int64(*x.BufferMaxLength)))
 		}

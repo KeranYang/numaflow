@@ -69,7 +69,9 @@ func (sp *SourceProcessor) Start(ctx context.Context) error {
 	switch sp.ISBSvcType {
 	case dfv1.ISBSvcTypeRedis:
 		for _, e := range sp.VertexInstance.Vertex.Spec.ToEdges {
-			writeOpts := []redisisb.Option{}
+			writeOpts := []redisisb.Option{
+				redisisb.WithOnFullWritingStrategy(e.OnFullWritingStrategy()),
+			}
 			if x := e.Limits; x != nil && x.BufferMaxLength != nil {
 				writeOpts = append(writeOpts, redisisb.WithMaxLength(int64(*x.BufferMaxLength)))
 			}
