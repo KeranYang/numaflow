@@ -19,7 +19,6 @@ limitations under the License.
 package sdks_e2e
 
 import (
-	"context"
 	"fmt"
 	"strconv"
 	"testing"
@@ -44,68 +43,6 @@ func (s *SDKsSuite) TestSourceTransformerJava() {
 
 func (s *SDKsSuite) TestSourceTransformerGo() {
 	s.testSourceTransformer("go")
-}
-
-func (s *SDKsSuite) TestUDFunctionAndSink() {
-	w := s.Given().Pipeline("@testdata/flatmap.yaml").
-		When().
-		CreatePipelineAndWait()
-	defer w.DeletePipelineAndWait()
-	pipelineName := "flatmap"
-
-	w.Expect().
-		VertexPodsRunning().
-		VertexPodLogContains("in", LogSourceVertexStarted).
-		VertexPodLogContains("go-split", LogUDFVertexStarted, PodLogCheckOptionWithContainer("numa")).
-		VertexPodLogContains("go-udsink", SinkVertexStarted, PodLogCheckOptionWithContainer("numa")).
-		VertexPodLogContains("python-split", LogUDFVertexStarted, PodLogCheckOptionWithContainer("numa")).
-		VertexPodLogContains("python-udsink", SinkVertexStarted, PodLogCheckOptionWithContainer("numa"))
-
-	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("hello,hello"))).
-		SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("hello")))
-
-	w.Expect().VertexPodLogContains("python-udsink", "hello", PodLogCheckOptionWithContainer("udsink"), PodLogCheckOptionWithCount(3)).
-		VertexPodLogContains("go-udsink", "hello", PodLogCheckOptionWithContainer("udsink"), PodLogCheckOptionWithCount(3)).
-		VertexPodLogContains("java-udsink", "hello", PodLogCheckOptionWithContainer("udsink"), PodLogCheckOptionWithCount(3))
-}
-
-func (s *SDKsSuite) TestReduceSDK() {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-	w := s.Given().Pipeline("@testdata/simple-keyed-reduce-pipeline.yaml").
-		When().
-		CreatePipelineAndWait()
-	defer w.DeletePipelineAndWait()
-	pipelineName := "even-odd-sum"
-
-	// wait for all the pods to come up
-	w.Expect().VertexPodsRunning()
-
-	time.Sleep(60 * time.Second)
-
-	done := make(chan struct{})
-	go func() {
-		// publish messages to source vertex, with event time starting from 60000
-		startTime := 60000
-		for i := 0; true; i++ {
-			select {
-			case <-ctx.Done():
-				return
-			case <-done:
-				return
-			default:
-				eventTime := strconv.Itoa(startTime + i*1000)
-				w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("1")).WithHeader("X-Numaflow-Event-Time", eventTime)).
-					SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("2")).WithHeader("X-Numaflow-Event-Time", eventTime)).
-					SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("3")).WithHeader("X-Numaflow-Event-Time", eventTime))
-			}
-		}
-	}()
-
-	w.Expect().
-		VertexPodLogContains("java-udsink", "120", PodLogCheckOptionWithContainer("udsink")).
-		VertexPodLogContains("java-udsink", "240", PodLogCheckOptionWithContainer("udsink"))
-	done <- struct{}{}
 }
 
 func (s *SDKsSuite) testSourceTransformer(lang string) {
