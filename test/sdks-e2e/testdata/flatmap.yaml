@@ -31,7 +31,7 @@ spec:
             - python
             - example.py
           # Split input message into an array with comma, https://github.com/numaproj/numaflow-python/tree/main/examples/function/flatmap
-          image: quay.io/numaio/numaflow-python/map-flatmap:latest
+          image: quay.io/numaio/numaflow-python/map-flatmap:keran
     - name: python-udsink
       scale:
         min: 1
@@ -42,14 +42,14 @@ spec:
             - python
             - example.py
             # https://github.com/numaproj/numaflow-python/tree/main/examples/sink/log
-            image: quay.io/numaio/numaflow-python/sink-log:latest
+            image: quay.io/numaio/numaflow-python/sink-log:keran
     - name: java-split
       scale:
         min: 1
       udf:
         container:
           # Split input message into an array with comma, see https://github.com/numaproj/numaflow-java/tree/main/examples/src/main/java/io/numaproj/numaflow/examples/function/flatmap
-          image: quay.io/numaio/numaflow-java/map-flatmap
+          image: quay.io/numaio/numaflow-java/map-flatmap:keran
     - name: java-udsink
       scale:
         min: 1
