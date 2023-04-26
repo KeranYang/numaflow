@@ -32,7 +32,7 @@ spec:
         udsink:
           container:
             # https://github.com/numaproj/numaflow-java/tree/main/examples/src/main/java/io/numaproj/numaflow/examples/sink/simple
-            image: quay.io/numaio/numaflow-java/simple-sink
+            image: quay.io/numaio/numaflow-java/simple-sink:slf4j
   edges:
     - from: in
       to: atoi
