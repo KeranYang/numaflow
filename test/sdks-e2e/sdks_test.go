@@ -34,6 +34,18 @@ type SDKsSuite struct {
 	E2ESuite
 }
 
+func (s *SDKsSuite) TestSourceTransformerPython() {
+	s.testSourceTransformer("python")
+}
+
+func (s *SDKsSuite) TestSourceTransformerJava() {
+	s.testSourceTransformer("java")
+}
+
+func (s *SDKsSuite) TestSourceTransformerGo() {
+	s.testSourceTransformer("go")
+}
+
 func (s *SDKsSuite) TestUDFunctionAndSink() {
 	w := s.Given().Pipeline("@testdata/flatmap.yaml").
 		When().
@@ -94,18 +106,6 @@ func (s *SDKsSuite) TestReduceSDK() {
 		VertexPodLogContains("java-udsink", "120", PodLogCheckOptionWithContainer("udsink")).
 		VertexPodLogContains("java-udsink", "240", PodLogCheckOptionWithContainer("udsink"))
 	done <- struct{}{}
-}
-
-func (s *SDKsSuite) TestSourceTransformerPython() {
-	s.testSourceTransformer("python")
-}
-
-func (s *SDKsSuite) TestSourceTransformerJava() {
-	s.testSourceTransformer("java")
-}
-
-func (s *SDKsSuite) TestSourceTransformerGo() {
-	s.testSourceTransformer("go")
 }
 
 func (s *SDKsSuite) testSourceTransformer(lang string) {
