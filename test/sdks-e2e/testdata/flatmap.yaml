@@ -57,7 +57,7 @@ spec:
         udsink:
           container:
             # https://github.com/numaproj/numaflow-java/tree/main/examples/src/main/java/io/numaproj/numaflow/examples/sink/simple
-            image: quay.io/numaio/numaflow-java/simple-sink:latest
+            image: quay.io/numaio/numaflow-java/simple-sink:keran
   edges:
     - from: in
       to: go-split
