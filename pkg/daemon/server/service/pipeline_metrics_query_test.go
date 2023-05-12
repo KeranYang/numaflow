@@ -29,6 +29,7 @@ import (
 
 	"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaflow/pkg/apis/proto/daemon"
+	"github.com/numaproj/numaflow/pkg/daemon/server/service/util"
 	"github.com/numaproj/numaflow/pkg/isbsvc"
 	"github.com/numaproj/numaflow/pkg/watermark/fetch"
 )
@@ -78,7 +79,7 @@ func TestGetVertexMetrics(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: pipelineName},
 	}
 	client, _ := isbsvc.NewISBJetStreamSvc(pipelineName)
-	pipelineMetricsQueryService, err := NewPipelineMetadataQuery(client, pipeline, nil, nil, false)
+	pipelineMetricsQueryService, err := NewPipelineMetadataQuery(client, pipeline, nil, nil, nil, util.ISB)
 	assert.NoError(t, err)
 
 	metricsResponse := `# HELP vertex_processing_rate Message processing rate in the last period of seconds, tps. It represents the rate of a vertex instead of a pod.
@@ -153,7 +154,7 @@ func TestGetBuffer(t *testing.T) {
 	}
 
 	ms := &mockIsbSvcClient{}
-	pipelineMetricsQueryService, err := NewPipelineMetadataQuery(ms, pipeline, nil, nil, false)
+	pipelineMetricsQueryService, err := NewPipelineMetadataQuery(ms, pipeline, nil, nil, nil, util.ISB)
 	assert.NoError(t, err)
 
 	bufferName := "numaflow-system-simple-pipeline-in-cat"
@@ -195,7 +196,7 @@ func TestListBuffers(t *testing.T) {
 	}
 
 	ms := &mockIsbSvcClient{}
-	pipelineMetricsQueryService, err := NewPipelineMetadataQuery(ms, pipeline, nil, nil, false)
+	pipelineMetricsQueryService, err := NewPipelineMetadataQuery(ms, pipeline, nil, nil, nil, util.ISB)
 	assert.NoError(t, err)
 
 	req := &daemon.ListBuffersRequest{Pipeline: &pipelineName}
@@ -218,7 +219,7 @@ func TestGetPipelineStatus(t *testing.T) {
 		},
 	}
 	client, _ := isbsvc.NewISBJetStreamSvc(pipelineName)
-	pipelineMetricsQueryService, err := NewPipelineMetadataQuery(client, pipeline, nil, nil, false)
+	pipelineMetricsQueryService, err := NewPipelineMetadataQuery(client, pipeline, nil, nil, nil, util.ISB)
 	assert.NoError(t, err)
 
 	OKPipelineResponse := daemon.PipelineStatus{Status: pointer.String("OK"), Message: pointer.String("Pipeline has no issue.")}

@@ -30,6 +30,8 @@ import (
 	"k8s.io/utils/pointer"
 
 	server "github.com/numaproj/numaflow/pkg/daemon/server/service/rate"
+	server2 "github.com/numaproj/numaflow/pkg/daemon/server/service/rate_v2"
+	"github.com/numaproj/numaflow/pkg/daemon/server/service/util"
 
 	"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaflow/pkg/apis/proto/daemon"
@@ -52,10 +54,11 @@ type pipelineMetadataQuery struct {
 	httpClient        metricsHttpClient
 	watermarkFetchers map[string][]fetch.Fetcher
 	// rateCalculators is a map of vertex name to rate calculator
-	rateCalculators map[string]*server.RateCalculator
+	rateCalculators         map[string]*server.RateCalculator
+	optimizedRateCalculator *server2.OptimizedRateCalculator
 
 	// temporary flag to help with testing new rate calculation approach
-	useNewRateCalculation bool
+	approach util.Rater
 }
 
 const (
@@ -70,7 +73,8 @@ func NewPipelineMetadataQuery(
 	pipeline *v1alpha1.Pipeline,
 	wmFetchers map[string][]fetch.Fetcher,
 	rateCalculators map[string]*server.RateCalculator,
-	useNewRateCalculation bool) (*pipelineMetadataQuery, error) {
+	optimizedRateCalculator *server2.OptimizedRateCalculator,
+	approach util.Rater) (*pipelineMetadataQuery, error) {
 	// TODO - there is never an error thrown here, so this can be removed.
 	var err error
 	ps := pipelineMetadataQuery{
@@ -82,9 +86,10 @@ func NewPipelineMetadataQuery(
 			},
 			Timeout: time.Second * 3,
 		},
-		watermarkFetchers:     wmFetchers,
-		rateCalculators:       rateCalculators,
-		useNewRateCalculation: useNewRateCalculation,
+		watermarkFetchers:       wmFetchers,
+		rateCalculators:         rateCalculators,
+		optimizedRateCalculator: optimizedRateCalculator,
+		approach:                approach,
 	}
 	if err != nil {
 		return nil, err
@@ -188,8 +193,10 @@ func (ps *pipelineMetadataQuery) GetVertexMetrics(ctx context.Context, req *daem
 	}
 
 	var vertexLevelRates map[string]float64
-	if ps.useNewRateCalculation {
+	if ps.approach == util.SYNC_METRICS {
 		vertexLevelRates = ps.rateCalculators[req.GetVertex()].GetRates()
+	} else if ps.approach == util.ASYNC_METRICS {
+		vertexLevelRates = ps.optimizedRateCalculator.GetRates(req.GetVertex())
 	}
 
 	// Get the headless service name
@@ -219,7 +226,7 @@ func (ps *pipelineMetadataQuery) GetVertexMetrics(ctx context.Context, req *daem
 				return nil, err
 			}
 
-			if !ps.useNewRateCalculation {
+			if ps.approach == util.ISB {
 				// Check if the resultant metrics list contains the processingRate, if it does look for the period label
 				if value, ok := result[metrics.VertexProcessingRate]; ok {
 					metricsList := value.GetMetric()
@@ -248,14 +255,22 @@ func (ps *pipelineMetadataQuery) GetVertexMetrics(ctx context.Context, req *daem
 				}
 			}
 
-			if !ps.useNewRateCalculation {
+			if ps.approach == util.ISB {
 				metricsArr[i] = &daemon.VertexMetrics{
 					Pipeline:        &ps.pipeline.Name,
 					Vertex:          req.Vertex,
 					ProcessingRates: processingRates,
 					Pendings:        pendings,
 				}
+			} else if ps.approach == util.SYNC_METRICS {
+				metricsArr[i] = &daemon.VertexMetrics{
+					Pipeline:        &ps.pipeline.Name,
+					Vertex:          req.Vertex,
+					ProcessingRates: vertexLevelRates,
+					Pendings:        pendings,
+				}
 			} else {
+				// Async Metrics
 				metricsArr[i] = &daemon.VertexMetrics{
 					Pipeline:        &ps.pipeline.Name,
 					Vertex:          req.Vertex,

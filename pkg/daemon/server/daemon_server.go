@@ -33,11 +33,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
-	server "github.com/numaproj/numaflow/pkg/daemon/server/service/rate"
-
 	"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaflow/pkg/apis/proto/daemon"
 	"github.com/numaproj/numaflow/pkg/daemon/server/service"
+	server "github.com/numaproj/numaflow/pkg/daemon/server/service/rate"
+	server_v2 "github.com/numaproj/numaflow/pkg/daemon/server/service/rate_v2"
+	"github.com/numaproj/numaflow/pkg/daemon/server/service/util"
+
 	"github.com/numaproj/numaflow/pkg/isbsvc"
 	jsclient "github.com/numaproj/numaflow/pkg/shared/clients/nats"
 	redisclient "github.com/numaproj/numaflow/pkg/shared/clients/redis"
@@ -89,12 +91,20 @@ func (ds *daemonServer) Run(ctx context.Context) error {
 		}
 	}()
 
+	var rater = util.SYNC_METRICS
+
+	// This part prepare the rate calculators for each vertex, assuming we use SYNC_METRICS to calculate rate.
 	rateCalculators := make(map[string]*server.RateCalculator, len(ds.pipeline.Spec.Vertices))
 	for _, vertex := range ds.pipeline.Spec.Vertices {
 		// assigning vertex to a new variable to avoid the closure problem, ensure each rate calculator has its own unique vertex pointer to work with.
 		v := vertex
 		rateCalculators[v.Name] = server.NewRateCalculator(ctx, ds.pipeline, &v)
 	}
+
+	// This part prepare the optimized rate calculators for each vertex, assuming we use ASYNC_METRICS to calculate rate.
+	podTracker := server_v2.NewPodTracker(ctx, ds.pipeline)
+	countTracker := server_v2.NewCountTracker(ctx, podTracker)
+	optimizedRateCalculator := server_v2.NewOptimizedRateCalculator(ctx, ds.pipeline, countTracker)
 
 	// Start listener
 	var conn net.Listener
@@ -111,7 +121,7 @@ func (ds *daemonServer) Run(ctx context.Context) error {
 	}
 
 	tlsConfig := &tls.Config{Certificates: []tls.Certificate{*cer}, MinVersion: tls.VersionTLS12}
-	grpcServer, err := ds.newGRPCServer(isbSvcClient, wmFetchers, rateCalculators)
+	grpcServer, err := ds.newGRPCServer(isbSvcClient, wmFetchers, rateCalculators, optimizedRateCalculator, util.SYNC_METRICS)
 	if err != nil {
 		return fmt.Errorf("failed to create grpc server: %w", err)
 	}
@@ -128,12 +138,27 @@ func (ds *daemonServer) Run(ctx context.Context) error {
 	go func() { _ = tcpm.Serve() }()
 
 	log.Infof("Daemon server started successfully on %s", address)
-	// Start rate calculators for each vertex
-	for _, rc := range rateCalculators {
-		if err := rc.Start(ctx); err != nil {
-			log.Errorw("failed to start the rate calculator", zap.Error(err))
+
+	if rater == util.SYNC_METRICS {
+		// Start rate calculators for each vertex
+		for _, rc := range rateCalculators {
+			if err := rc.Start(ctx); err != nil {
+				log.Errorw("failed to start the rate calculator", zap.Error(err))
+			}
+		}
+	} else if rater == util.ASYNC_METRICS {
+		// Start optimized rate calculators for the entire pipeline
+		if err := podTracker.Start(ctx); err != nil {
+			log.Errorw("failed to start the pod tracker", zap.Error(err))
+		}
+		if err := countTracker.Start(ctx); err != nil {
+			log.Errorw("failed to start the count tracker", zap.Error(err))
+		}
+		if err := optimizedRateCalculator.Start(ctx); err != nil {
+			log.Errorw("failed to start the optimized rate calculator", zap.Error(err))
 		}
 	}
+
 	<-ctx.Done()
 	return nil
 }
@@ -141,7 +166,9 @@ func (ds *daemonServer) Run(ctx context.Context) error {
 func (ds *daemonServer) newGRPCServer(
 	isbSvcClient isbsvc.ISBService,
 	wmFetchers map[string][]fetch.Fetcher,
-	rateCalculators map[string]*server.RateCalculator) (*grpc.Server, error) {
+	rateCalculators map[string]*server.RateCalculator,
+	optimizedRateCalculator *server_v2.OptimizedRateCalculator,
+	approach util.Rater) (*grpc.Server, error) {
 	// "Prometheus histograms are a great way to measure latency distributions of your RPCs.
 	// However, since it is a bad practice to have metrics of high cardinality the latency monitoring metrics are disabled by default.
 	// To enable them please call the following in your server initialization code:"
@@ -155,7 +182,7 @@ func (ds *daemonServer) newGRPCServer(
 	}
 	grpcServer := grpc.NewServer(sOpts...)
 	grpc_prometheus.Register(grpcServer)
-	pipelineMetadataQuery, err := service.NewPipelineMetadataQuery(isbSvcClient, ds.pipeline, wmFetchers, rateCalculators, true)
+	pipelineMetadataQuery, err := service.NewPipelineMetadataQuery(isbSvcClient, ds.pipeline, wmFetchers, rateCalculators, optimizedRateCalculator, approach)
 	if err != nil {
 		return nil, err
 	}
