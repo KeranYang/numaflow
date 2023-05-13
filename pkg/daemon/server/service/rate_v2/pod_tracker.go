@@ -30,9 +30,13 @@ import (
 	"github.com/numaproj/numaflow/pkg/shared/logging"
 )
 
-// metricsHttpClient interface for the GET/HEAD call to metrics endpoint.
+type void struct{}
+
+var member void
+
+// MetricsHttpClient interface for the GET/HEAD call to metrics endpoint.
 // Had to add this an interface for testing
-type metricsHttpClient interface {
+type MetricsHttpClient interface {
 	Get(url string) (*http.Response, error)
 	Head(url string) (*http.Response, error)
 }
@@ -40,7 +44,7 @@ type metricsHttpClient interface {
 type PodTracker struct {
 	pipeline   *v1alpha1.Pipeline
 	log        *zap.SugaredLogger
-	httpClient metricsHttpClient
+	httpClient MetricsHttpClient
 	// a set of active pods' names
 	activePods      map[string]void
 	refreshInterval time.Duration
@@ -65,7 +69,7 @@ func NewPodTracker(ctx context.Context, p *v1alpha1.Pipeline) *PodTracker {
 
 // Start TODO: description
 func (pt *PodTracker) Start(ctx context.Context) error {
-	pt.log.Infof("Starting pod tracker for pipeline %s...", pt.pipeline.Name)
+	pt.log.Infof("Starting pod counts for pipeline %s...", pt.pipeline.Name)
 	go func() {
 		ticker := time.NewTicker(pt.refreshInterval)
 		defer ticker.Stop()

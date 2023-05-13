@@ -103,7 +103,7 @@ func (ds *daemonServer) Run(ctx context.Context) error {
 
 	// This part prepare the optimized rate calculators for each vertex, assuming we use ASYNC_METRICS to calculate rate.
 	podTracker := server_v2.NewPodTracker(ctx, ds.pipeline)
-	countTracker := server_v2.NewCountTracker(ctx, podTracker)
+	countTracker := server_v2.NewCountTracker(ctx, ds.pipeline, podTracker)
 	optimizedRateCalculator := server_v2.NewOptimizedRateCalculator(ctx, ds.pipeline, countTracker)
 
 	// Start listener

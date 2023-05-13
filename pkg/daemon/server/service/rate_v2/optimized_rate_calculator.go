@@ -30,7 +30,7 @@ import (
 // TimestampedCount is a helper struct to wrap a count number and timestamp pair
 type TimestampedCount struct {
 	// count is the number of messages processed
-	count int64
+	count float64
 	// timestamp in seconds, is the time when the count is recorded
 	timestamp int64
 }
