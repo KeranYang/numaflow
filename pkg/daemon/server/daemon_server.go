@@ -91,7 +91,7 @@ func (ds *daemonServer) Run(ctx context.Context) error {
 		}
 	}()
 
-	var rater = util.SYNC_METRICS
+	var rater = util.ASYNC_METRICS
 
 	// This part prepare the rate calculators for each vertex, assuming we use SYNC_METRICS to calculate rate.
 	rateCalculators := make(map[string]*server.RateCalculator, len(ds.pipeline.Spec.Vertices))
@@ -121,7 +121,7 @@ func (ds *daemonServer) Run(ctx context.Context) error {
 	}
 
 	tlsConfig := &tls.Config{Certificates: []tls.Certificate{*cer}, MinVersion: tls.VersionTLS12}
-	grpcServer, err := ds.newGRPCServer(isbSvcClient, wmFetchers, rateCalculators, optimizedRateCalculator, util.SYNC_METRICS)
+	grpcServer, err := ds.newGRPCServer(isbSvcClient, wmFetchers, rateCalculators, optimizedRateCalculator, rater)
 	if err != nil {
 		return fmt.Errorf("failed to create grpc server: %w", err)
 	}

@@ -45,7 +45,7 @@ type CountTracker struct {
 // NewCountTracker creates...
 func NewCountTracker(ctx context.Context, podTracker *PodTracker) *CountTracker {
 	ct := CountTracker{
-		log:             logging.FromContext(ctx).Named("OptimizedRateCalculator"),
+		log:             logging.FromContext(ctx).Named("CountTracker"),
 		podTracker:      podTracker,
 		tracker:         make(map[PodCount]void),
 		refreshInterval: 5 * time.Second, // Default refresh interval
