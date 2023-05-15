@@ -33,7 +33,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
-	server "github.com/numaproj/numaflow/pkg/daemon/server/service/rate"
+	server "github.com/numaproj/numaflow/pkg/daemon/server/service/rater"
 
 	"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaflow/pkg/apis/proto/daemon"
@@ -89,12 +89,7 @@ func (ds *daemonServer) Run(ctx context.Context) error {
 		}
 	}()
 
-	rateCalculators := make(map[string]*server.RateCalculator, len(ds.pipeline.Spec.Vertices))
-	for _, vertex := range ds.pipeline.Spec.Vertices {
-		// assigning vertex to a new variable to avoid the closure problem, ensure each rate calculator has its own unique vertex pointer to work with.
-		v := vertex
-		rateCalculators[v.Name] = server.NewRateCalculator(ctx, ds.pipeline, &v)
-	}
+	rater := server.NewRater(ctx, ds.pipeline)
 
 	// Start listener
 	var conn net.Listener
@@ -111,7 +106,7 @@ func (ds *daemonServer) Run(ctx context.Context) error {
 	}
 
 	tlsConfig := &tls.Config{Certificates: []tls.Certificate{*cer}, MinVersion: tls.VersionTLS12}
-	grpcServer, err := ds.newGRPCServer(isbSvcClient, wmFetchers, rateCalculators)
+	grpcServer, err := ds.newGRPCServer(isbSvcClient, wmFetchers, rater)
 	if err != nil {
 		return fmt.Errorf("failed to create grpc server: %w", err)
 	}
@@ -128,12 +123,11 @@ func (ds *daemonServer) Run(ctx context.Context) error {
 	go func() { _ = tcpm.Serve() }()
 
 	log.Infof("Daemon server started successfully on %s", address)
-	// Start rate calculators for each vertex
-	for _, rc := range rateCalculators {
-		if err := rc.Start(ctx); err != nil {
-			log.Errorw("failed to start the rate calculator", zap.Error(err))
-		}
+	// Start rater
+	if err := rater.Start(ctx); err != nil {
+		log.Errorw("failed to start the rate calculator", zap.Error(err))
 	}
+
 	<-ctx.Done()
 	return nil
 }
@@ -141,7 +135,7 @@ func (ds *daemonServer) Run(ctx context.Context) error {
 func (ds *daemonServer) newGRPCServer(
 	isbSvcClient isbsvc.ISBService,
 	wmFetchers map[string][]fetch.Fetcher,
-	rateCalculators map[string]*server.RateCalculator) (*grpc.Server, error) {
+	rater *server.Rater) (*grpc.Server, error) {
 	// "Prometheus histograms are a great way to measure latency distributions of your RPCs.
 	// However, since it is a bad practice to have metrics of high cardinality the latency monitoring metrics are disabled by default.
 	// To enable them please call the following in your server initialization code:"
@@ -155,7 +149,7 @@ func (ds *daemonServer) newGRPCServer(
 	}
 	grpcServer := grpc.NewServer(sOpts...)
 	grpc_prometheus.Register(grpcServer)
-	pipelineMetadataQuery, err := service.NewPipelineMetadataQuery(isbSvcClient, ds.pipeline, wmFetchers, rateCalculators, true)
+	pipelineMetadataQuery, err := service.NewPipelineMetadataQuery(isbSvcClient, ds.pipeline, wmFetchers, rater, true)
 	if err != nil {
 		return nil, err
 	}

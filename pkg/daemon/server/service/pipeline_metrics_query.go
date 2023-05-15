@@ -29,7 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/pointer"
 
-	server "github.com/numaproj/numaflow/pkg/daemon/server/service/rate"
+	server "github.com/numaproj/numaflow/pkg/daemon/server/service/rater"
 
 	"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaflow/pkg/apis/proto/daemon"
@@ -51,8 +51,7 @@ type pipelineMetadataQuery struct {
 	pipeline          *v1alpha1.Pipeline
 	httpClient        metricsHttpClient
 	watermarkFetchers map[string][]fetch.Fetcher
-	// rateCalculators is a map of vertex name to rate calculator
-	rateCalculators map[string]*server.RateCalculator
+	rater             *server.Rater
 
 	// temporary flag to help with testing new rate calculation approach
 	useNewRateCalculation bool
@@ -69,7 +68,7 @@ func NewPipelineMetadataQuery(
 	isbSvcClient isbsvc.ISBService,
 	pipeline *v1alpha1.Pipeline,
 	wmFetchers map[string][]fetch.Fetcher,
-	rateCalculators map[string]*server.RateCalculator,
+	rater *server.Rater,
 	useNewRateCalculation bool) (*pipelineMetadataQuery, error) {
 	// TODO - there is never an error thrown here, so this can be removed.
 	var err error
@@ -83,7 +82,7 @@ func NewPipelineMetadataQuery(
 			Timeout: time.Second * 3,
 		},
 		watermarkFetchers:     wmFetchers,
-		rateCalculators:       rateCalculators,
+		rater:                 rater,
 		useNewRateCalculation: useNewRateCalculation,
 	}
 	if err != nil {
@@ -189,7 +188,7 @@ func (ps *pipelineMetadataQuery) GetVertexMetrics(ctx context.Context, req *daem
 
 	var vertexLevelRates map[string]float64
 	if ps.useNewRateCalculation {
-		vertexLevelRates = ps.rateCalculators[req.GetVertex()].GetRates()
+		vertexLevelRates = ps.rater.GetRates(req.GetVertex())
 	}
 
 	// Get the headless service name
