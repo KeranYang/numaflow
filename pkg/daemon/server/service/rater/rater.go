@@ -17,7 +17,6 @@ limitations under the License.
 package server
 
 import (
-	"container/list"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -34,11 +33,10 @@ import (
 	sharedqueue "github.com/numaproj/numaflow/pkg/shared/queue"
 )
 
-// metricsHttpClient interface for the GET/HEAD call to metrics endpoint.
+// metricsHttpClient interface for the GET call to metrics endpoint.
 // Had to add this an interface for testing
 type metricsHttpClient interface {
 	Get(url string) (*http.Response, error)
-	Head(url string) (*http.Response, error)
 }
 
 type TimestampedCount struct {
@@ -59,9 +57,8 @@ type Rater struct {
 	pipeline   *v1alpha1.Pipeline
 	httpClient metricsHttpClient
 	log        *zap.SugaredLogger
-
-	podList *list.List
-	lock    *sync.RWMutex
+	podTracker *PodTracker
+	lock       *sync.RWMutex
 	// vertexName -> TimestampedCounts
 	timestampedPodCounts map[string]*sharedqueue.OverflowQueue[TimestampedCount]
 	options              *options
@@ -77,26 +74,14 @@ func NewRater(ctx context.Context, p *v1alpha1.Pipeline, opts ...Option) *Rater 
 			Timeout: time.Second * 1,
 		},
 		log:                  logging.FromContext(ctx).Named("Rater"),
-		podList:              list.New(),
 		timestampedPodCounts: make(map[string]*sharedqueue.OverflowQueue[TimestampedCount]),
 		lock:                 new(sync.RWMutex),
 		options:              defaultOptions(),
 	}
 
-	// initialize pod list and timestamped pod counts
+	rater.podTracker = NewPodTracker(ctx, p)
+	// initialize timestamped pod counts
 	for _, v := range p.Spec.Vertices {
-		var vertexType string
-		if v.IsReduceUDF() {
-			vertexType = "reduce"
-		} else {
-			vertexType = "non_reduce"
-		}
-		// start from simple, maximum 100 pods per vertex
-		// TODO - most of the time we don't have 100 pods in a vertex, pending optimization on this for loop.
-		for i := 0; i < 100; i++ {
-			key := fmt.Sprintf("%s*%s*%d*%s", rater.pipeline.Name, v.Name, i, vertexType)
-			rater.podList.PushBack(key)
-		}
 		// maintain the total counts of the last 30 minutes since we support 1m, 5m, 15m lookback seconds.
 		rater.timestampedPodCounts[v.Name] = sharedqueue.New[TimestampedCount](1800)
 	}
@@ -138,8 +123,12 @@ func (r *Rater) monitorOnePod(ctx context.Context, key string, worker int) error
 	vertexType := strs[3]
 	podName := strs[0] + "-" + strs[1] + "-" + strs[2]
 	var count float64
-	if r.podExists(vertexName, podName) {
+	if r.podTracker.activePods.Contains(key) {
 		count = r.getTotalCount(ctx, vertexName, vertexType, podName)
+		if count == CountNotAvailable {
+			log.Infof("Pod %s does not exist, removing it from the active pod list.", podName)
+			r.podTracker.GetActivePods().Remove(key)
+		}
 	} else {
 		log.Infof("Pod %s does not exist, updating it with count 0.", podName)
 		count = CountNotAvailable
@@ -155,6 +144,14 @@ func (r *Rater) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(logging.WithLogger(ctx, r.log))
 	defer cancel()
 
+	go func() {
+		// TODO - error handling?
+		err := r.podTracker.Start(ctx)
+		if err != nil {
+			r.log.Errorw("Failed to start pod tracker", zap.Error(err))
+		}
+	}()
+
 	// Worker group
 	for i := 1; i <= r.options.workers; i++ {
 		go r.monitor(ctx, i, keyCh)
@@ -165,14 +162,13 @@ func (r *Rater) Start(ctx context.Context) error {
 	assign := func() {
 		r.lock.Lock()
 		defer r.lock.Unlock()
-		if r.podList.Len() == 0 {
+		activePods := r.podTracker.GetActivePods()
+		if activePods.Len() == 0 {
 			return
 		}
-		e := r.podList.Front()
-		if key, ok := e.Value.(string); ok {
-			r.podList.MoveToBack(e)
-			keyCh <- key
-		}
+		e := activePods.Front()
+		activePods.MoveToBack(e)
+		keyCh <- e
 	}
 
 	// Following for loop keeps calling assign() function to assign monitoring tasks to the workers.
@@ -187,7 +183,7 @@ func (r *Rater) Start(ctx context.Context) error {
 		}
 		// Make sure each of the key will be assigned at least every taskInterval milliseconds.
 		time.Sleep(time.Millisecond * time.Duration(func() int {
-			l := r.podList.Len()
+			l := r.podTracker.GetActivePods().Len()
 			if l == 0 {
 				return r.options.taskInterval
 			}
@@ -198,16 +194,6 @@ func (r *Rater) Start(ctx context.Context) error {
 			return 1
 		}()))
 	}
-}
-
-func (r *Rater) podExists(vertexName, podName string) bool {
-	// using the vertex headless service to check if a pod exists or not.
-	// example for 0th pod : https://simple-pipeline-in-0.simple-pipeline-in-headless.default.svc.cluster.local:2469/metrics
-	url := fmt.Sprintf("https://%s.%s.%s.svc.cluster.local:%v/metrics", podName, r.pipeline.Name+"-"+vertexName+"-headless", r.pipeline.Namespace, v1alpha1.VertexMetricsPort)
-	if _, err := r.httpClient.Head(url); err != nil {
-		return false
-	}
-	return true
 }
 
 // getTotalCount returns the total number of messages read by the pod
