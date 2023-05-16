@@ -21,7 +21,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"math"
 	"net/http"
 	"strings"
 	"sync"
@@ -51,7 +50,7 @@ type TimestampedCount struct {
 }
 
 // CountNotAvailable indicates that the rate calculator was not able to retrieve the count
-const CountNotAvailable = float64(math.MinInt)
+const CountNotAvailable = 0.0
 
 // fixedLookbackSeconds Always maintain rate metrics for the following lookback seconds (1m, 5m, 15m)
 var fixedLookbackSeconds = map[string]int64{"1m": 60, "5m": 300, "15m": 900}
@@ -75,7 +74,7 @@ func NewRater(ctx context.Context, p *v1alpha1.Pipeline, opts ...Option) *Rater 
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 			},
-			Timeout: time.Second * 3,
+			Timeout: time.Second * 1,
 		},
 		log:                  logging.FromContext(ctx).Named("Rater"),
 		podList:              list.New(),
@@ -92,8 +91,9 @@ func NewRater(ctx context.Context, p *v1alpha1.Pipeline, opts ...Option) *Rater 
 		} else {
 			vertexType = "non_reduce"
 		}
-		// start from simple, maximum 10 pods per vertex
-		for i := 0; i < 10; i++ {
+		// start from simple, maximum 100 pods per vertex
+		// TODO - most of the time we don't have 100 pods in a vertex, pending optimization on this for loop.
+		for i := 0; i < 100; i++ {
 			key := fmt.Sprintf("%s*%s*%d*%s", rater.pipeline.Name, v.Name, i, vertexType)
 			rater.podList.PushBack(key)
 		}
@@ -142,7 +142,7 @@ func (r *Rater) monitorOnePod(ctx context.Context, key string, worker int) error
 		count = r.getTotalCount(ctx, vertexName, vertexType, podName)
 	} else {
 		log.Infof("Pod %s does not exist, updating it with count 0.", podName)
-		count = 0
+		count = CountNotAvailable
 	}
 	r.updateCount(ctx, vertexName, podName, count)
 	return nil
@@ -185,7 +185,7 @@ func (r *Rater) Start(ctx context.Context) error {
 		default:
 			assign()
 		}
-		// Make sure each of the key will be assigned at most every N milliseconds.
+		// Make sure each of the key will be assigned at least every taskInterval milliseconds.
 		time.Sleep(time.Millisecond * time.Duration(func() int {
 			l := r.podList.Len()
 			if l == 0 {
@@ -293,15 +293,19 @@ func (r *Rater) GetRates(vertexName string) map[string]float64 {
 
 // CalculateRate calculates the rate of the vertex in the last lookback seconds
 func CalculateRate(q *sharedqueue.OverflowQueue[TimestampedCount], lookbackSeconds int64) float64 {
-	now := time.Now().Truncate(time.Second * 10).Unix()
+	n := q.Length()
+	if n <= 1 {
+		return 0
+	}
 
+	now := time.Now().Truncate(time.Second * 10).Unix()
 	counts := q.Items()
 	var startIndex int
-	startCountInfo := counts[len(counts)-2]
+	startCountInfo := counts[n-2]
 	if now-startCountInfo.timestamp > lookbackSeconds {
 		return 0
 	}
-	for i := len(counts) - 3; i >= 0; i-- {
+	for i := n - 3; i >= 0; i-- {
 		if now-counts[i].timestamp <= lookbackSeconds {
 			startIndex = i
 		} else {
@@ -310,19 +314,27 @@ func CalculateRate(q *sharedqueue.OverflowQueue[TimestampedCount], lookbackSecon
 	}
 	delta := float64(0)
 	// time diff in seconds.
-	timeDiff := counts[len(counts)-1].timestamp - counts[startIndex].timestamp
-	for i := startIndex; i < len(counts)-1; i++ {
-		delta = delta + CalculateDelta(counts[i], counts[i+1])
+	timeDiff := counts[n-1].timestamp - counts[startIndex].timestamp
+	for i := startIndex; i < n-1; i++ {
+		delta = delta + calculateDelta(counts[i], counts[i+1])
 	}
 	return delta / float64(timeDiff)
 }
 
-func CalculateDelta(c1, c2 TimestampedCount) float64 {
-	// TODO - implement the real calculation
+func calculateDelta(c1, c2 TimestampedCount) float64 {
 	delta := float64(0)
-	for k, v := range c2.podCounts {
-		if v1, ok := c1.podCounts[k]; ok {
-			delta = delta + (v - v1)
+	// Iterate over the podCounts of the second TimestampedCount
+	for pod, count2 := range c2.podCounts {
+		// If the pod also exists in the first TimestampedCount
+		if count1, ok := c1.podCounts[pod]; ok {
+			// If the count has decreased, it means the pod restarted
+			if count2 < count1 {
+				delta += count2
+			} else { // If the count has increased or stayed the same
+				delta += count2 - count1
+			}
+		} else { // If the pod only exists in the second TimestampedCount, it's a new pod
+			delta += count2
 		}
 	}
 	return delta
