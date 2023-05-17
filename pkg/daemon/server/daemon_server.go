@@ -89,6 +89,7 @@ func (ds *daemonServer) Run(ctx context.Context) error {
 		}
 	}()
 
+	// rater is used to calculate the processing rate for each of the vertices
 	rater := server.NewRater(ctx, ds.pipeline)
 
 	// Start listener
@@ -123,11 +124,10 @@ func (ds *daemonServer) Run(ctx context.Context) error {
 	go func() { _ = tcpm.Serve() }()
 
 	log.Infof("Daemon server started successfully on %s", address)
-	// Start rater
+	// Start the rater
 	if err := rater.Start(ctx); err != nil {
-		log.Errorw("failed to start the rate calculator", zap.Error(err))
+		return fmt.Errorf("failed to start the rater: %w", err)
 	}
-
 	<-ctx.Done()
 	return nil
 }

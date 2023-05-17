@@ -5,6 +5,8 @@ import (
 	"sync"
 )
 
+// UniqueStringList is a list of strings that only allows unique values.
+// the underlying list is a doubly linked list.
 type UniqueStringList struct {
 	l    *list.List
 	m    map[string]*list.Element
@@ -41,14 +43,14 @@ func (l *UniqueStringList) MoveToBack(value string) {
 func (l *UniqueStringList) Front() string {
 	l.lock.RLock()
 	defer l.lock.RUnlock()
-	if l.Len() == 0 {
+	if l.Length() == 0 {
 		return ""
 	}
 	return l.l.Front().Value.(string)
 }
 
-// Len returns the number of elements of list l.
-func (l *UniqueStringList) Len() int {
+// Length returns the number of elements of list l.
+func (l *UniqueStringList) Length() int {
 	l.lock.RLock()
 	defer l.lock.RUnlock()
 	return l.l.Len()
@@ -62,7 +64,7 @@ func (l *UniqueStringList) Contains(value string) bool {
 	return ok
 }
 
-// Remove removes the element from the list, if the value exists in the list.
+// Remove removes the string from the list, if it exists in the list.
 func (l *UniqueStringList) Remove(value string) {
 	l.lock.Lock()
 	defer l.lock.Unlock()

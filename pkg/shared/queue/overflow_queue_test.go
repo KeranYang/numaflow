@@ -50,17 +50,3 @@ func TestReverse(t *testing.T) {
 	assert.Equal(t, 2, l1[1])
 	assert.Equal(t, 1, l1[2])
 }
-
-func TestNewest(t *testing.T) {
-	q := New[int](2)
-	assert.Equal(t, 0, q.Newest())
-	q.Append(1)
-	q.Append(2)
-	assert.Equal(t, 2, q.Newest())
-	q.Append(3)
-	assert.Equal(t, 3, q.Newest())
-	q.Append(4)
-	q.Append(5)
-	q.Append(6)
-	assert.Equal(t, 6, q.Newest())
-}

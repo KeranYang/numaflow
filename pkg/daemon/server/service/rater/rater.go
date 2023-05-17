@@ -33,33 +33,36 @@ import (
 	sharedqueue "github.com/numaproj/numaflow/pkg/shared/queue"
 )
 
-// metricsHttpClient interface for the GET call to metrics endpoint.
+// metricsHttpClient interface for the GET/HEAD call to metrics endpoint.
 // Had to add this an interface for testing
 type metricsHttpClient interface {
 	Get(url string) (*http.Response, error)
+	Head(url string) (*http.Response, error)
 }
 
+// TimestampedCount track the total count of processed messages for a list of pods at a given timestamp
 type TimestampedCount struct {
 	// timestamp in seconds, is the time when the count is recorded
-	// it's a 10-second interval, so the timestamp is the end of the interval
 	timestamp int64
-	// podName -> count
+	// podName to count mapping
 	podCounts map[string]float64
 }
 
-// CountNotAvailable indicates that the rate calculator was not able to retrieve the count
+// CountNotAvailable indicates that the rater was not able to retrieve the count
 const CountNotAvailable = 0.0
 
-// fixedLookbackSeconds Always maintain rate metrics for the following lookback seconds (1m, 5m, 15m)
+// fixedLookbackSeconds always maintain rate metrics for the following lookback seconds (1m, 5m, 15m)
 var fixedLookbackSeconds = map[string]int64{"1m": 60, "5m": 300, "15m": 900}
 
+// Rater is a struct that maintains information about the processing rate of each vertex.
+// It monitors the number of processed messages for each pod in a vertex and calculates the rate.
 type Rater struct {
 	pipeline   *v1alpha1.Pipeline
 	httpClient metricsHttpClient
 	log        *zap.SugaredLogger
 	podTracker *PodTracker
 	lock       *sync.RWMutex
-	// vertexName -> TimestampedCounts
+	// timestampedPodCounts is a map between vertex name and a queue of timestamped counts for that vertex
 	timestampedPodCounts map[string]*sharedqueue.OverflowQueue[TimestampedCount]
 	options              *options
 }
@@ -80,7 +83,6 @@ func NewRater(ctx context.Context, p *v1alpha1.Pipeline, opts ...Option) *Rater 
 	}
 
 	rater.podTracker = NewPodTracker(ctx, p)
-	// initialize timestamped pod counts
 	for _, v := range p.Spec.Vertices {
 		// maintain the total counts of the last 30 minutes since we support 1m, 5m, 15m lookback seconds.
 		rater.timestampedPodCounts[v.Name] = sharedqueue.New[TimestampedCount](1800)
@@ -95,18 +97,17 @@ func NewRater(ctx context.Context, p *v1alpha1.Pipeline, opts ...Option) *Rater 
 }
 
 // Function monitor() defines each of the worker's job.
-// It waits for keys in the channel, and starts a scaling job
+// It waits for keys in the channel, and starts a monitoring job
 func (r *Rater) monitor(ctx context.Context, id int, keyCh <-chan string) {
-	log := logging.FromContext(ctx)
-	log.Infof("Started monitoring worker %v", id)
+	r.log.Debugf("Started monitoring worker %v", id)
 	for {
 		select {
 		case <-ctx.Done():
-			log.Infof("Stopped monitoring worker %v", id)
+			r.log.Debugf("Stopped monitoring worker %v", id)
 			return
 		case key := <-keyCh:
 			if err := r.monitorOnePod(ctx, key, id); err != nil {
-				log.Errorw("Failed to monitor a pod", zap.String("pod", key), zap.Error(err))
+				r.log.Errorw("Failed to monitor a pod", zap.String("pod", key), zap.Error(err))
 			}
 		}
 	}
@@ -114,7 +115,7 @@ func (r *Rater) monitor(ctx context.Context, id int, keyCh <-chan string) {
 
 func (r *Rater) monitorOnePod(ctx context.Context, key string, worker int) error {
 	log := logging.FromContext(ctx).With("worker", fmt.Sprint(worker)).With("podKey", key)
-	log.Infof("Working on key: %s", key)
+	log.Debugf("Working on key: %s", key)
 	strs := strings.Split(key, "*")
 	if len(strs) != 4 {
 		return fmt.Errorf("invalid key %q", key)
@@ -123,21 +124,24 @@ func (r *Rater) monitorOnePod(ctx context.Context, key string, worker int) error
 	vertexType := strs[3]
 	podName := strs[0] + "-" + strs[1] + "-" + strs[2]
 	var count float64
-	if r.podTracker.activePods.Contains(key) {
+	activePods := r.podTracker.GetActivePods()
+	if activePods.Contains(key) {
 		count = r.getTotalCount(ctx, vertexName, vertexType, podName)
 		if count == CountNotAvailable {
-			log.Infof("Pod %s does not exist, removing it from the active pod list.", podName)
-			r.podTracker.GetActivePods().Remove(key)
+			log.Debugf("Pod %s does not exist, removing it from the active pod list...", podName)
+			activePods.Remove(key)
 		}
 	} else {
-		log.Infof("Pod %s does not exist, updating it with count 0.", podName)
+		log.Infof("Pod %s does not exist, updating it with CountNotAvailable.", podName)
 		count = CountNotAvailable
 	}
-	r.updateCount(ctx, vertexName, podName, count)
+	// track the total counts using a 10-second time window
+	// e.g. if the current time is 12:00:07, the count will be tracked in the 12:00:00-12:00:10 time window using 12:00:10 as the timestamp
+	now := time.Now().Add(time.Second * 10).Truncate(time.Second * 10).Unix()
+	UpdateCount(r.timestampedPodCounts[vertexName], now, podName, count)
 	return nil
 }
 
-// Start starts the rate calculator that periodically fetches the total counts, calculates and updates the rates.
 func (r *Rater) Start(ctx context.Context) error {
 	r.log.Infof("Starting rater...")
 	keyCh := make(chan string)
@@ -163,7 +167,7 @@ func (r *Rater) Start(ctx context.Context) error {
 		r.lock.Lock()
 		defer r.lock.Unlock()
 		activePods := r.podTracker.GetActivePods()
-		if activePods.Len() == 0 {
+		if activePods.Length() == 0 {
 			return
 		}
 		e := activePods.Front()
@@ -176,14 +180,14 @@ func (r *Rater) Start(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			r.log.Info("Shutting down rater job assigner")
+			r.log.Info("Shutting down monitoring job assigner")
 			return nil
 		default:
 			assign()
 		}
 		// Make sure each of the key will be assigned at least every taskInterval milliseconds.
 		time.Sleep(time.Millisecond * time.Duration(func() int {
-			l := r.podTracker.GetActivePods().Len()
+			l := r.podTracker.GetActivePods().Length()
 			if l == 0 {
 				return r.options.taskInterval
 			}
@@ -198,17 +202,16 @@ func (r *Rater) Start(ctx context.Context) error {
 
 // getTotalCount returns the total number of messages read by the pod
 func (r *Rater) getTotalCount(ctx context.Context, vertexName, vertexType, podName string) float64 {
-	log := logging.FromContext(ctx).Named("RateCalculator")
 	// scrape the read total metric from pod metric port
 	url := fmt.Sprintf("https://%s.%s.%s.svc.cluster.local:%v/metrics", podName, r.pipeline.Name+"-"+vertexName+"-headless", r.pipeline.Namespace, v1alpha1.VertexMetricsPort)
 	if res, err := r.httpClient.Get(url); err != nil {
-		log.Errorf("failed reading the metrics endpoint, %v", err.Error())
+		r.log.Errorf("failed reading the metrics endpoint, %v", err.Error())
 		return CountNotAvailable
 	} else {
 		textParser := expfmt.TextParser{}
 		result, err := textParser.TextToMetricFamilies(res.Body)
 		if err != nil {
-			log.Errorf("failed parsing to prometheus metric families, %v", err.Error())
+			r.log.Errorf("failed parsing to prometheus metric families, %v", err.Error())
 			return CountNotAvailable
 		}
 
@@ -228,100 +231,26 @@ func (r *Rater) getTotalCount(ctx context.Context, vertexName, vertexType, podNa
 	}
 }
 
-func (r *Rater) updateCount(_ context.Context, vertexName, podName string, count float64) {
-	// track the total counts using a 10-second time window
-	now := time.Now().Add(time.Second * 10).Truncate(time.Second * 10).Unix()
-	vertexQueue := r.timestampedPodCounts[vertexName]
-
-	// if the queue is empty or the latest element is before now, add the new element to the queue
-	if vertexQueue.Length() == 0 || vertexQueue.Newest().timestamp < now {
-		counts := make(map[string]float64)
-		counts[podName] = count
-		vertexQueue.Append(TimestampedCount{
-			timestamp: now,
-			podCounts: counts,
-		})
-		return
-	}
-
-	// if the latest element is at the same time as now, update the latest element
-	if vertexQueue.Newest().timestamp == now {
-		counts := vertexQueue.Newest().podCounts
-		counts[podName] = count
-		return
-	}
-
-	// if the latest element is after now, it means we need to update a previous element
-	// find the element that is at the same time as now
-	for _, i := range vertexQueue.Items() {
-		if i.timestamp == now {
-			counts := i.podCounts
-			counts[podName] = count
-			return
-		}
-	}
-}
-
 // GetRates returns the processing rates of the vertex in the format of lookback second to rate mappings
 func (r *Rater) GetRates(vertexName string) map[string]float64 {
 	var result = make(map[string]float64)
-	lookbackSecondsMap := map[string]int64{}
+	// get the user-specified lookback seconds from the pipeline spec
+	var userSpecifiedLookBackSeconds int64
+	// TODO - we can keep a local copy of vertex to lookback seconds mapping to avoid iterating the pipeline spec every time.
+	for _, v := range r.pipeline.Spec.Vertices {
+		if v.Name == vertexName {
+			userSpecifiedLookBackSeconds = int64(v.Scale.GetLookbackSeconds())
+		}
+	}
+	lookbackSecondsMap := map[string]int64{"default": userSpecifiedLookBackSeconds}
 	for k, v := range fixedLookbackSeconds {
 		lookbackSecondsMap[k] = v
 	}
+
 	// calculate rates for each lookback seconds
 	for n, i := range lookbackSecondsMap {
 		r := CalculateRate(r.timestampedPodCounts[vertexName], i)
 		result[n] = r
 	}
 	return result
-}
-
-// CalculateRate calculates the rate of the vertex in the last lookback seconds
-func CalculateRate(q *sharedqueue.OverflowQueue[TimestampedCount], lookbackSeconds int64) float64 {
-	n := q.Length()
-	if n <= 1 {
-		return 0
-	}
-
-	now := time.Now().Truncate(time.Second * 10).Unix()
-	counts := q.Items()
-	var startIndex int
-	startCountInfo := counts[n-2]
-	if now-startCountInfo.timestamp > lookbackSeconds {
-		return 0
-	}
-	for i := n - 3; i >= 0; i-- {
-		if now-counts[i].timestamp <= lookbackSeconds {
-			startIndex = i
-		} else {
-			break
-		}
-	}
-	delta := float64(0)
-	// time diff in seconds.
-	timeDiff := counts[n-1].timestamp - counts[startIndex].timestamp
-	for i := startIndex; i < n-1; i++ {
-		delta = delta + calculateDelta(counts[i], counts[i+1])
-	}
-	return delta / float64(timeDiff)
-}
-
-func calculateDelta(c1, c2 TimestampedCount) float64 {
-	delta := float64(0)
-	// Iterate over the podCounts of the second TimestampedCount
-	for pod, count2 := range c2.podCounts {
-		// If the pod also exists in the first TimestampedCount
-		if count1, ok := c1.podCounts[pod]; ok {
-			// If the count has decreased, it means the pod restarted
-			if count2 < count1 {
-				delta += count2
-			} else { // If the count has increased or stayed the same
-				delta += count2 - count1
-			}
-		} else { // If the pod only exists in the second TimestampedCount, it's a new pod
-			delta += count2
-		}
-	}
-	return delta
 }

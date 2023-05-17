@@ -29,16 +29,12 @@ import (
 	"github.com/numaproj/numaflow/pkg/shared/logging"
 )
 
-// MetricsHttpClient interface for the HEAD call to metrics endpoint.
-// Had to add this an interface for testing
-type MetricsHttpClient interface {
-	Head(url string) (*http.Response, error)
-}
-
+// PodTracker maintains a set of active pods for a pipeline
+// It periodically sends http requests to pods to check if they are still active
 type PodTracker struct {
 	pipeline        *v1alpha1.Pipeline
 	log             *zap.SugaredLogger
-	httpClient      MetricsHttpClient
+	httpClient      metricsHttpClient
 	activePods      *UniqueStringList
 	refreshInterval time.Duration
 }
@@ -53,13 +49,14 @@ func NewPodTracker(ctx context.Context, p *v1alpha1.Pipeline) *PodTracker {
 			},
 			Timeout: time.Second,
 		},
-		activePods:      NewUniqueStringList(),
+		activePods: NewUniqueStringList(),
+		// TODO - make refreshInterval configurable
 		refreshInterval: 30 * time.Second, // Default refresh interval for updating active pod set
 	}
 	return &pt
 }
 
-// Start TODO: description
+// TODO - unit test this
 func (pt *PodTracker) Start(ctx context.Context) error {
 	pt.log.Infof("Starting pod counts for pipeline %s...", pt.pipeline.Name)
 	go func() {
@@ -70,15 +67,12 @@ func (pt *PodTracker) Start(ctx context.Context) error {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				// update the active pod set
-				pt.log.Infof("Start updating the active pod set...")
 				for _, v := range pt.pipeline.Spec.Vertices {
 					var limit int
 					if max := v.Scale.Max; max != nil {
 						limit = int(*max)
 					} else {
-						// default max number of pods per vertex
-						limit = 100
+						limit = v1alpha1.MaxReplicasLimit
 					}
 					var vType string
 					if v.IsReduceUDF() {
@@ -88,18 +82,21 @@ func (pt *PodTracker) Start(ctx context.Context) error {
 					}
 					for i := 0; i < limit; i++ {
 						podName := fmt.Sprintf("%s-%s-%d", pt.pipeline.Name, v.Name, i)
+						// podKey is used as a unique identifier for the pod, it is used by worker to determine the count of processed messages of the pod.
+						// * is used as a separator such that worker can split the key to get the pipeline name, vertex name, pod index and vertex type.
 						podKey := fmt.Sprintf("%s*%s*%d*%s", pt.pipeline.Name, v.Name, i, vType)
 						if pt.isActive(v.Name, podName) {
 							pt.activePods.PushBack(podKey)
 						} else {
 							pt.activePods.Remove(podKey)
-							// TODO - more comments
-							// we might missed removing following pods from the active pod set, but it's fine, we will ultimately remove them by rater.
-							break
+							// we assume all the pods are in order, hence if we don't find one, we can stop looking
+							// this is because when we scale down, we always scale down from the last pod
+							// there can be a case when a pod in the middle crashes, hence we miss counting the following pods
+							// but this is rare, if it happens, we end up getting a rate that's lower than the real one and wait for the next refresh to recoverbreak
 						}
 					}
 				}
-				pt.log.Infof("Finished updating the active pod set: %v", pt.activePods.ToString())
+				pt.log.Debugf("Finished updating the active pod set: %v", pt.activePods.ToString())
 			}
 		}
 	}()

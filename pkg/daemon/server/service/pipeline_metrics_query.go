@@ -70,7 +70,6 @@ func NewPipelineMetadataQuery(
 	wmFetchers map[string][]fetch.Fetcher,
 	rater *server.Rater,
 	useNewRateCalculation bool) (*pipelineMetadataQuery, error) {
-	// TODO - there is never an error thrown here, so this can be removed.
 	var err error
 	ps := pipelineMetadataQuery{
 		isbSvcClient: isbSvcClient,
