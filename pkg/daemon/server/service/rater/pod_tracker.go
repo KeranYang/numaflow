@@ -39,7 +39,7 @@ type PodTracker struct {
 	refreshInterval time.Duration
 }
 
-func NewPodTracker(ctx context.Context, p *v1alpha1.Pipeline) *PodTracker {
+func NewPodTracker(ctx context.Context, p *v1alpha1.Pipeline, opts ...PodTrackerOption) *PodTracker {
 	pt := PodTracker{
 		pipeline: p,
 		log:      logging.FromContext(ctx).Named("PodTracker"),
@@ -49,14 +49,27 @@ func NewPodTracker(ctx context.Context, p *v1alpha1.Pipeline) *PodTracker {
 			},
 			Timeout: time.Second,
 		},
-		activePods: NewUniqueStringList(),
-		// TODO - make refreshInterval configurable
+		activePods:      NewUniqueStringList(),
 		refreshInterval: 30 * time.Second, // Default refresh interval for updating active pod set
+	}
+
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&pt)
+		}
 	}
 	return &pt
 }
 
-// TODO - unit test this
+type PodTrackerOption func(*PodTracker)
+
+// WithRefreshInterval sets how often to refresh the rate metrics.
+func WithRefreshInterval(d time.Duration) PodTrackerOption {
+	return func(r *PodTracker) {
+		r.refreshInterval = d
+	}
+}
+
 func (pt *PodTracker) Start(ctx context.Context) error {
 	pt.log.Infof("Starting pod counts for pipeline %s...", pt.pipeline.Name)
 	go func() {

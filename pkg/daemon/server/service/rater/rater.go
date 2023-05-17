@@ -184,19 +184,28 @@ func (r *Rater) Start(ctx context.Context) error {
 			return nil
 		default:
 			assign()
+			// Make sure each of the key will be assigned at least every taskInterval milliseconds.
+			sleep(ctx, time.Millisecond*time.Duration(func() int {
+				l := r.podTracker.GetActivePods().Length()
+				if l == 0 {
+					return r.options.taskInterval
+				}
+				result := r.options.taskInterval / l
+				if result > 0 {
+					return result
+				}
+				return 1
+			}()))
 		}
-		// Make sure each of the key will be assigned at least every taskInterval milliseconds.
-		time.Sleep(time.Millisecond * time.Duration(func() int {
-			l := r.podTracker.GetActivePods().Length()
-			if l == 0 {
-				return r.options.taskInterval
-			}
-			result := r.options.taskInterval / l
-			if result > 0 {
-				return result
-			}
-			return 1
-		}()))
+	}
+}
+
+// sleep function uses a select statement to check if the context is cancelled before sleeping for the given duration
+// it helps ensure the sleep will be released when the context is cancelled, allowing the goroutine to exit gracefully
+func sleep(ctx context.Context, duration time.Duration) {
+	select {
+	case <-ctx.Done():
+	case <-time.After(duration):
 	}
 }
 
