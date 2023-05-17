@@ -5,21 +5,15 @@ metadata:
 spec:
   vertices:
     - name: input
-      scale:
-        min: 1
       source:
         generator:
-          rpu: 10
+          rpu: 5
           duration: 1s
     - name: p1
-      scale:
-        min: 2
       udf:
         builtin:
           name: cat
     - name: output
-      scale:
-        min: 3
       sink:
         log: {}
   edges:
