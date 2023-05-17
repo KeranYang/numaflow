@@ -62,7 +62,7 @@ func CalculateRate(q *sharedqueue.OverflowQueue[TimestampedCount], lookbackSecon
 	if now-startCountInfo.timestamp > lookbackSeconds {
 		return 0
 	}
-	for i := n - 3; i >= 0; i-- {
+	for i := n - 2; i >= 0; i-- {
 		if now-counts[i].timestamp <= lookbackSeconds {
 			startIndex = i
 		} else {

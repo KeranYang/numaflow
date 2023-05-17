@@ -18,12 +18,15 @@ package server
 
 import (
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
 
 	sharedqueue "github.com/numaproj/numaflow/pkg/shared/queue"
 )
 
 func TestUpdateCount(t *testing.T) {
-	t.Run("given_TimeExistsPodExistsCountAvailable_whenUpdate_updatePodCount", func(t *testing.T) {
+	t.Run("givenTimeExistsPodExistsCountAvailable_whenUpdate_thenUpdatePodCount", func(t *testing.T) {
 		q := sharedqueue.New[TimestampedCount](1800)
 		q.Append(TimestampedCount{
 			timestamp: 1,
@@ -37,7 +40,7 @@ func TestUpdateCount(t *testing.T) {
 		}
 	})
 
-	t.Run("given_TimeExistsPodNotExistsCountAvailable_whenUpdate_addPodCount", func(t *testing.T) {
+	t.Run("givenTimeExistsPodNotExistsCountAvailable_whenUpdate_thenAddPodCount", func(t *testing.T) {
 		q := sharedqueue.New[TimestampedCount](1800)
 		q.Append(TimestampedCount{
 			timestamp: 1,
@@ -51,7 +54,7 @@ func TestUpdateCount(t *testing.T) {
 		}
 	})
 
-	t.Run("given_TimeExistsPodExistsCountNotAvailable_whenUpdate_removePod", func(t *testing.T) {
+	t.Run("givenTimeExistsPodExistsCountNotAvailable_whenUpdate_thenRemovePod", func(t *testing.T) {
 		q := sharedqueue.New[TimestampedCount](1800)
 		q.Append(TimestampedCount{
 			timestamp: 1,
@@ -67,7 +70,7 @@ func TestUpdateCount(t *testing.T) {
 		}
 	})
 
-	t.Run("given_TimeExistsPodNotExistsCountNotAvailable_whenUpdate_noUpdate", func(t *testing.T) {
+	t.Run("givenTimeExistsPodNotExistsCountNotAvailable_whenUpdate_thenNoUpdate", func(t *testing.T) {
 		q := sharedqueue.New[TimestampedCount](1800)
 		q.Append(TimestampedCount{
 			timestamp: 1,
@@ -81,7 +84,7 @@ func TestUpdateCount(t *testing.T) {
 		}
 	})
 
-	t.Run("given_TimeNotExistsCountAvailable_whenUpdate_updateNewTimeWithPod", func(t *testing.T) {
+	t.Run("givenTimeNotExistsCountAvailable_whenUpdate_thenUpdateNewTimeWithPod", func(t *testing.T) {
 		q := sharedqueue.New[TimestampedCount](1800)
 		q.Append(TimestampedCount{
 			timestamp: 1,
@@ -95,7 +98,7 @@ func TestUpdateCount(t *testing.T) {
 		}
 	})
 
-	t.Run("given_TimeNotExistsCountNotAvailable_whenUpdate_noUpdate", func(t *testing.T) {
+	t.Run("givenTimeNotExistsCountNotAvailable_whenUpdate_thenNoUpdate", func(t *testing.T) {
 		q := sharedqueue.New[TimestampedCount](1800)
 		q.Append(TimestampedCount{
 			timestamp: 1,
@@ -107,5 +110,194 @@ func TestUpdateCount(t *testing.T) {
 		if items := q.Items(); len(items) != 1 || items[0].podCounts["pod1"] != 10.0 {
 			t.Errorf("UpdateCount failed not to update the existing counts")
 		}
+	})
+}
+
+func TestCalculateRate(t *testing.T) {
+	t.Run("givenCollectedTimeLessThanTwo_whenCalculateRate_thenReturnZero", func(t *testing.T) {
+		q := sharedqueue.New[TimestampedCount](1800)
+		rate := CalculateRate(q, 10)
+		assert.Equal(t, 0.0, rate)
+	})
+
+	t.Run("singlePod_givenCountIncreases_whenCalculateRate_thenReturnRate", func(t *testing.T) {
+		q := sharedqueue.New[TimestampedCount](1800)
+		now := time.Now()
+		q.Append(TimestampedCount{
+			timestamp: now.Truncate(time.Second*10).Unix() - 20,
+			podCounts: map[string]float64{
+				"pod1": 5.0,
+			},
+		})
+		q.Append(TimestampedCount{
+			timestamp: now.Truncate(time.Second*10).Unix() - 10,
+			podCounts: map[string]float64{
+				"pod1": 10.0,
+			},
+		})
+		q.Append(TimestampedCount{
+			timestamp: now.Truncate(time.Second * 10).Unix(),
+			podCounts: map[string]float64{
+				"pod1": 20.0,
+			},
+		})
+		assert.Equal(t, 0.0, CalculateRate(q, 5))
+		assert.Equal(t, 1.0, CalculateRate(q, 15))
+		assert.Equal(t, 0.75, CalculateRate(q, 25))
+		assert.Equal(t, 0.75, CalculateRate(q, 100))
+	})
+
+	t.Run("singlePod_givenCountDecreases_whenCalculateRate_thenReturnRate", func(t *testing.T) {
+		q := sharedqueue.New[TimestampedCount](1800)
+		now := time.Now()
+		q.Append(TimestampedCount{
+			timestamp: now.Truncate(time.Second*10).Unix() - 30,
+			podCounts: map[string]float64{
+				"pod1": 200.0,
+			},
+		})
+		q.Append(TimestampedCount{
+			timestamp: now.Truncate(time.Second*10).Unix() - 20,
+			podCounts: map[string]float64{
+				"pod1": 100.0,
+			},
+		})
+		q.Append(TimestampedCount{
+			timestamp: now.Truncate(time.Second*10).Unix() - 10,
+			podCounts: map[string]float64{
+				"pod1": 50.0,
+			},
+		})
+		q.Append(TimestampedCount{
+			timestamp: now.Truncate(time.Second * 10).Unix(),
+			podCounts: map[string]float64{
+				"pod1": 80.0,
+			},
+		})
+		assert.Equal(t, 0.0, CalculateRate(q, 5))
+		assert.Equal(t, 3.0, CalculateRate(q, 15))
+		assert.Equal(t, 4.0, CalculateRate(q, 25))
+		assert.Equal(t, 6.0, CalculateRate(q, 35))
+		assert.Equal(t, 6.0, CalculateRate(q, 100))
+	})
+
+	t.Run("multiplePods_givenCountIncreasesAndDecreases_whenCalculateRate_thenReturnRate", func(t *testing.T) {
+		q := sharedqueue.New[TimestampedCount](1800)
+		now := time.Now()
+		q.Append(TimestampedCount{
+			timestamp: now.Truncate(time.Second*10).Unix() - 30,
+			podCounts: map[string]float64{
+				"pod1": 200.0,
+				"pod2": 100.0,
+			},
+		})
+		q.Append(TimestampedCount{
+			timestamp: now.Truncate(time.Second*10).Unix() - 20,
+			podCounts: map[string]float64{
+				"pod1": 100.0,
+				"pod2": 200.0,
+			},
+		})
+		q.Append(TimestampedCount{
+			timestamp: now.Truncate(time.Second*10).Unix() - 10,
+			podCounts: map[string]float64{
+				"pod1": 50.0,
+				"pod2": 300.0,
+			},
+		})
+		q.Append(TimestampedCount{
+			timestamp: now.Truncate(time.Second * 10).Unix(),
+			podCounts: map[string]float64{
+				"pod1": 80.0,
+				"pod2": 400.0,
+			},
+		})
+		assert.Equal(t, 0.0, CalculateRate(q, 5))
+		assert.Equal(t, 13.0, CalculateRate(q, 15))
+		assert.Equal(t, 14.0, CalculateRate(q, 25))
+		assert.Equal(t, 16.0, CalculateRate(q, 35))
+		assert.Equal(t, 16.0, CalculateRate(q, 100))
+	})
+
+	t.Run("multiplePods_givenPodsComeAndGo_whenCalculateRate_thenReturnRate", func(t *testing.T) {
+		q := sharedqueue.New[TimestampedCount](1800)
+		now := time.Now()
+		q.Append(TimestampedCount{
+			timestamp: now.Truncate(time.Second*10).Unix() - 30,
+			podCounts: map[string]float64{
+				"pod1": 200.0,
+				"pod2": 90.0,
+				"pod3": 50.0,
+			},
+		})
+		q.Append(TimestampedCount{
+			timestamp: now.Truncate(time.Second*10).Unix() - 20,
+			podCounts: map[string]float64{
+				"pod1": 100.0,
+				"pod2": 200.0,
+			},
+		})
+		q.Append(TimestampedCount{
+			timestamp: now.Truncate(time.Second*10).Unix() - 10,
+			podCounts: map[string]float64{
+				"pod1": 50.0,
+				"pod2": 300.0,
+				"pod4": 100.0,
+			},
+		})
+		q.Append(TimestampedCount{
+			timestamp: now.Truncate(time.Second * 10).Unix(),
+			podCounts: map[string]float64{
+				"pod2":   400.0,
+				"pod3":   200.0,
+				"pod100": 200.0,
+			},
+		})
+		assert.Equal(t, 0.0, CalculateRate(q, 5))
+		assert.Equal(t, 50.0, CalculateRate(q, 15))
+		assert.Equal(t, 37.5, CalculateRate(q, 25))
+		assert.Equal(t, 32.0, CalculateRate(q, 35))
+		assert.Equal(t, 32.0, CalculateRate(q, 100))
+	})
+
+	t.Run("queueOverflowed_SinglePod_givenCountIncreases_whenCalculateRate_thenReturnRate", func(t *testing.T) {
+		q := sharedqueue.New[TimestampedCount](3)
+		now := time.Now()
+		q.Append(TimestampedCount{
+			timestamp: now.Truncate(time.Second*10).Unix() - 30,
+			podCounts: map[string]float64{
+				"pod1": 200.0,
+				"pod2": 90.0,
+				"pod3": 50.0,
+			},
+		})
+		q.Append(TimestampedCount{
+			timestamp: now.Truncate(time.Second*10).Unix() - 20,
+			podCounts: map[string]float64{
+				"pod1": 100.0,
+				"pod2": 200.0,
+			},
+		})
+		q.Append(TimestampedCount{
+			timestamp: now.Truncate(time.Second*10).Unix() - 10,
+			podCounts: map[string]float64{
+				"pod1": 50.0,
+				"pod2": 300.0,
+				"pod4": 100.0,
+			},
+		})
+		q.Append(TimestampedCount{
+			timestamp: now.Truncate(time.Second * 10).Unix(),
+			podCounts: map[string]float64{
+				"pod2":   400.0,
+				"pod3":   200.0,
+				"pod100": 200.0,
+			},
+		})
+		assert.Equal(t, 0.0, CalculateRate(q, 5))
+		assert.Equal(t, 50.0, CalculateRate(q, 15))
+		assert.Equal(t, 37.5, CalculateRate(q, 25))
+		assert.Equal(t, 37.5, CalculateRate(q, 35))
+		assert.Equal(t, 37.5, CalculateRate(q, 100))
 	})
 }
