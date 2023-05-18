@@ -40,8 +40,9 @@ type mockHttpClient struct {
 }
 
 func (m *mockHttpClient) Get(url string) (*http.Response, error) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
 	if url == "https://p-v-0.p-v-headless.default.svc.cluster.local:2469/metrics" {
-		m.lock.Lock()
 		m.podOneCount = m.podOneCount + 20
 		resp := &http.Response{
 			StatusCode: 200,
@@ -50,10 +51,8 @@ func (m *mockHttpClient) Get(url string) (*http.Response, error) {
 # TYPE forwarder_read_total counter
 forwarder_read_total{buffer="input",pipeline="simple-pipeline",vertex="input"} %d
 `, m.podOneCount))))}
-		m.lock.Unlock()
 		return resp, nil
 	} else if url == "https://p-v-1.p-v-headless.default.svc.cluster.local:2469/metrics" {
-		m.lock.Lock()
 		m.podTwoCount = m.podTwoCount + 60
 		resp := &http.Response{
 			StatusCode: 200,
@@ -62,7 +61,6 @@ forwarder_read_total{buffer="input",pipeline="simple-pipeline",vertex="input"} %
 # TYPE forwarder_read_total counter
 forwarder_read_total{buffer="input",pipeline="simple-pipeline",vertex="input"} %d
 `, m.podTwoCount))))}
-		m.lock.Unlock()
 		return resp, nil
 	} else {
 		return nil, nil
@@ -70,6 +68,8 @@ forwarder_read_total{buffer="input",pipeline="simple-pipeline",vertex="input"} %
 }
 
 func (m *mockHttpClient) Head(url string) (*http.Response, error) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
 	if url == "https://p-v-0.p-v-headless.default.svc.cluster.local:2469/metrics" {
 		return &http.Response{
 			StatusCode: 200,

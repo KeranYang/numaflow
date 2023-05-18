@@ -24,8 +24,8 @@ import (
 )
 
 // UpdateCount updates the count of processed messages for a pod at a given time
-func UpdateCount(q *sharedqueue.OverflowQueue[TimestampedCount], now int64, podName string, count float64) {
-	// find the element that is at the same time as now and update it
+func UpdateCount(q *sharedqueue.OverflowQueue[*TimestampedCount], now int64, podName string, count float64) {
+	// find the element matching the input timestamp and update it
 	for _, i := range q.Items() {
 		if i.timestamp == now {
 			i.lock.Lock()
@@ -41,11 +41,11 @@ func UpdateCount(q *sharedqueue.OverflowQueue[TimestampedCount], now int64, podN
 		}
 	}
 
-	// if we cannot find an element that is at the same time as now, it means we need to add a new timestamped count to the queue
+	// if we cannot find a matching element, it means we need to add a new timestamped count to the queue
 	if count != CountNotAvailable {
 		counts := make(map[string]float64)
 		counts[podName] = count
-		q.Append(TimestampedCount{
+		q.Append(&TimestampedCount{
 			timestamp: now,
 			podCounts: counts,
 			lock:      new(sync.RWMutex),
@@ -54,7 +54,7 @@ func UpdateCount(q *sharedqueue.OverflowQueue[TimestampedCount], now int64, podN
 }
 
 // CalculateRate calculates the rate of the vertex in the last lookback seconds
-func CalculateRate(q *sharedqueue.OverflowQueue[TimestampedCount], lookbackSeconds int64) float64 {
+func CalculateRate(q *sharedqueue.OverflowQueue[*TimestampedCount], lookbackSeconds int64) float64 {
 	n := q.Length()
 	if n <= 1 {
 		return 0
@@ -83,7 +83,7 @@ func CalculateRate(q *sharedqueue.OverflowQueue[TimestampedCount], lookbackSecon
 	return delta / float64(timeDiff)
 }
 
-func calculateDelta(c1, c2 TimestampedCount) float64 {
+func calculateDelta(c1, c2 *TimestampedCount) float64 {
 	c1.lock.RLock()
 	defer c1.lock.RUnlock()
 	c2.lock.RLock()

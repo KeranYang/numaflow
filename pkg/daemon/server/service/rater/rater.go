@@ -63,7 +63,7 @@ type Rater struct {
 	log        *zap.SugaredLogger
 	podTracker *PodTracker
 	// timestampedPodCounts is a map between vertex name and a queue of timestamped counts for that vertex
-	timestampedPodCounts map[string]*sharedqueue.OverflowQueue[TimestampedCount]
+	timestampedPodCounts map[string]*sharedqueue.OverflowQueue[*TimestampedCount]
 	options              *options
 }
 
@@ -77,14 +77,14 @@ func NewRater(ctx context.Context, p *v1alpha1.Pipeline, opts ...Option) *Rater 
 			Timeout: time.Second * 1,
 		},
 		log:                  logging.FromContext(ctx).Named("Rater"),
-		timestampedPodCounts: make(map[string]*sharedqueue.OverflowQueue[TimestampedCount]),
+		timestampedPodCounts: make(map[string]*sharedqueue.OverflowQueue[*TimestampedCount]),
 		options:              defaultOptions(),
 	}
 
 	rater.podTracker = NewPodTracker(ctx, p)
 	for _, v := range p.Spec.Vertices {
 		// maintain the total counts of the last 30 minutes since we support 1m, 5m, 15m lookback seconds.
-		rater.timestampedPodCounts[v.Name] = sharedqueue.New[TimestampedCount](1800)
+		rater.timestampedPodCounts[v.Name] = sharedqueue.New[*TimestampedCount](1800)
 	}
 
 	for _, opt := range opts {
@@ -131,7 +131,7 @@ func (r *Rater) monitorOnePod(ctx context.Context, key string, worker int) error
 			activePods.Remove(key)
 		}
 	} else {
-		log.Infof("Pod %s does not exist, updating it with CountNotAvailable.", podName)
+		log.Debugf("Pod %s does not exist, updating it with CountNotAvailable...", podName)
 		count = CountNotAvailable
 	}
 	// track the total counts using a 10-second time window

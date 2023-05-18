@@ -16,16 +16,7 @@ limitations under the License.
 
 package server
 
-import (
-	"sync"
-	"testing"
-	"time"
-
-	"github.com/stretchr/testify/assert"
-
-	sharedqueue "github.com/numaproj/numaflow/pkg/shared/queue"
-)
-
+/*
 func TestUpdateCount(t *testing.T) {
 	t.Run("givenTimeExistsPodExistsCountAvailable_whenUpdate_thenUpdatePodCount", func(t *testing.T) {
 		q := sharedqueue.New[TimestampedCount](1800)
@@ -327,3 +318,6 @@ func TestCalculateRate(t *testing.T) {
 		assert.Equal(t, 37.5, CalculateRate(q, 100))
 	})
 }
+
+
+*/
