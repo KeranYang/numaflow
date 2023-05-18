@@ -30,7 +30,6 @@ import (
 )
 
 // PodTracker maintains a set of active pods for a pipeline
-// It periodically sends http requests to pods to check if they are still active
 type PodTracker struct {
 	pipeline        *v1alpha1.Pipeline
 	log             *zap.SugaredLogger
@@ -71,7 +70,7 @@ func WithRefreshInterval(d time.Duration) PodTrackerOption {
 }
 
 func (pt *PodTracker) Start(ctx context.Context) error {
-	pt.log.Infof("Starting pod counts for pipeline %s...", pt.pipeline.Name)
+	pt.log.Infof("Starting tracking active pods for pipeline %s...", pt.pipeline.Name)
 	go func() {
 		ticker := time.NewTicker(pt.refreshInterval)
 		defer ticker.Stop()
@@ -96,16 +95,18 @@ func (pt *PodTracker) Start(ctx context.Context) error {
 					for i := 0; i < limit; i++ {
 						podName := fmt.Sprintf("%s-%s-%d", pt.pipeline.Name, v.Name, i)
 						// podKey is used as a unique identifier for the pod, it is used by worker to determine the count of processed messages of the pod.
-						// * is used as a separator such that worker can split the key to get the pipeline name, vertex name, pod index and vertex type.
+						// "*" is used as a separator such that the worker can split the key to get the pipeline name, vertex name, pod index and vertex type.
 						podKey := fmt.Sprintf("%s*%s*%d*%s", pt.pipeline.Name, v.Name, i, vType)
-						if pt.isActive(v.Name, podName) {
+						if pt.isActive(v.Name, podName) && !pt.activePods.Contains(podKey) {
+							// found a new pod, add it to the active pod set
 							pt.activePods.PushBack(podKey)
 						} else {
 							pt.activePods.Remove(podKey)
-							// we assume all the pods are in order, hence if we don't find one, we can stop looking
-							// this is because when we scale down, we always scale down from the last pod
-							// there can be a case when a pod in the middle crashes, hence we miss counting the following pods
-							// but this is rare, if it happens, we end up getting a rate that's lower than the real one and wait for the next refresh to recoverbreak
+							// we assume all the pods are ordered with continuous indices, hence as we keep increasing the index, if we don't find one, we can stop looking.
+							// the assumption holds because when we scale down, we always scale down from the last pod.
+							// there can be a case when a pod in the middle crashes, causing us missing counting the following pods.
+							// such case is rare and if it happens, it can lead to lower rate then the real one. It is acceptable because it will recover when the crashed pod is restarted.
+							// break
 						}
 					}
 				}
