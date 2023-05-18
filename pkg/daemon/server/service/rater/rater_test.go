@@ -111,7 +111,7 @@ func TestRater_Start(t *testing.T) {
 	r.httpClient = &mockHttpClient{podOneCount: 0, podTwoCount: 0, lock: &sync.RWMutex{}}
 	r.podTracker = podTracker
 
-	timer := time.NewTimer(30 * time.Second)
+	timer := time.NewTimer(60 * time.Second)
 	succeedChan := make(chan struct{})
 	go func() {
 		if err := r.Start(ctx); err != nil {

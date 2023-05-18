@@ -46,6 +46,7 @@ type TimestampedCount struct {
 	timestamp int64
 	// podName to count mapping
 	podCounts map[string]float64
+	lock      *sync.RWMutex
 }
 
 // CountNotAvailable indicates that the rater was not able to retrieve the count
@@ -61,7 +62,6 @@ type Rater struct {
 	httpClient metricsHttpClient
 	log        *zap.SugaredLogger
 	podTracker *PodTracker
-	lock       *sync.RWMutex
 	// timestampedPodCounts is a map between vertex name and a queue of timestamped counts for that vertex
 	timestampedPodCounts map[string]*sharedqueue.OverflowQueue[TimestampedCount]
 	options              *options
@@ -78,7 +78,6 @@ func NewRater(ctx context.Context, p *v1alpha1.Pipeline, opts ...Option) *Rater 
 		},
 		log:                  logging.FromContext(ctx).Named("Rater"),
 		timestampedPodCounts: make(map[string]*sharedqueue.OverflowQueue[TimestampedCount]),
-		lock:                 new(sync.RWMutex),
 		options:              defaultOptions(),
 	}
 
@@ -164,15 +163,12 @@ func (r *Rater) Start(ctx context.Context) error {
 	// Function assign() moves an element in the list from the front to the back,
 	// and send to the channel so that it can be picked up by a worker.
 	assign := func() {
-		r.lock.Lock()
-		defer r.lock.Unlock()
 		activePods := r.podTracker.GetActivePods()
-		if activePods.Length() == 0 {
+		if e := activePods.Front(); e != "" {
+			activePods.MoveToBack(e)
+			keyCh <- e
 			return
 		}
-		e := activePods.Front()
-		activePods.MoveToBack(e)
-		keyCh <- e
 	}
 
 	// Following for loop keeps calling assign() function to assign monitoring tasks to the workers.

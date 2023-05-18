@@ -17,6 +17,7 @@ limitations under the License.
 package server
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -33,6 +34,7 @@ func TestUpdateCount(t *testing.T) {
 			podCounts: map[string]float64{
 				"pod1": 10.0,
 			},
+			lock: new(sync.RWMutex),
 		})
 		UpdateCount(q, 1, "pod1", 20.0)
 		if items := q.Items(); len(items) != 1 || items[0].podCounts["pod1"] != 20.0 {
@@ -47,6 +49,7 @@ func TestUpdateCount(t *testing.T) {
 			podCounts: map[string]float64{
 				"pod1": 20.0,
 			},
+			lock: new(sync.RWMutex),
 		})
 		UpdateCount(q, 1, "pod2", 10.0)
 		if items := q.Items(); len(items) != 1 || items[0].podCounts["pod1"] != 20.0 || items[0].podCounts["pod2"] != 10.0 {
@@ -61,6 +64,7 @@ func TestUpdateCount(t *testing.T) {
 			podCounts: map[string]float64{
 				"pod1": 10.0,
 			},
+			lock: new(sync.RWMutex),
 		})
 		UpdateCount(q, 1, "pod1", CountNotAvailable)
 		if items := q.Items(); len(items) != 1 {
@@ -77,6 +81,7 @@ func TestUpdateCount(t *testing.T) {
 			podCounts: map[string]float64{
 				"pod1": 10.0,
 			},
+			lock: new(sync.RWMutex),
 		})
 		UpdateCount(q, 1, "pod2", CountNotAvailable)
 		if items := q.Items(); len(items) != 1 || items[0].podCounts["pod1"] != 10.0 {
@@ -91,6 +96,7 @@ func TestUpdateCount(t *testing.T) {
 			podCounts: map[string]float64{
 				"pod1": 10.0,
 			},
+			lock: new(sync.RWMutex),
 		})
 		UpdateCount(q, 2, "pod1", 20.0)
 		if items := q.Items(); len(items) != 2 || items[0].podCounts["pod1"] != 10.0 || items[1].podCounts["pod1"] != 20.0 {
@@ -105,6 +111,7 @@ func TestUpdateCount(t *testing.T) {
 			podCounts: map[string]float64{
 				"pod1": 10.0,
 			},
+			lock: new(sync.RWMutex),
 		})
 		UpdateCount(q, 2, "pod2", CountNotAvailable)
 		if items := q.Items(); len(items) != 1 || items[0].podCounts["pod1"] != 10.0 {
@@ -128,18 +135,21 @@ func TestCalculateRate(t *testing.T) {
 			podCounts: map[string]float64{
 				"pod1": 5.0,
 			},
+			lock: new(sync.RWMutex),
 		})
 		q.Append(TimestampedCount{
 			timestamp: now.Truncate(time.Second*10).Unix() - 10,
 			podCounts: map[string]float64{
 				"pod1": 10.0,
 			},
+			lock: new(sync.RWMutex),
 		})
 		q.Append(TimestampedCount{
 			timestamp: now.Truncate(time.Second * 10).Unix(),
 			podCounts: map[string]float64{
 				"pod1": 20.0,
 			},
+			lock: new(sync.RWMutex),
 		})
 		assert.Equal(t, 0.0, CalculateRate(q, 5))
 		assert.Equal(t, 1.0, CalculateRate(q, 15))
@@ -155,24 +165,28 @@ func TestCalculateRate(t *testing.T) {
 			podCounts: map[string]float64{
 				"pod1": 200.0,
 			},
+			lock: new(sync.RWMutex),
 		})
 		q.Append(TimestampedCount{
 			timestamp: now.Truncate(time.Second*10).Unix() - 20,
 			podCounts: map[string]float64{
 				"pod1": 100.0,
 			},
+			lock: new(sync.RWMutex),
 		})
 		q.Append(TimestampedCount{
 			timestamp: now.Truncate(time.Second*10).Unix() - 10,
 			podCounts: map[string]float64{
 				"pod1": 50.0,
 			},
+			lock: new(sync.RWMutex),
 		})
 		q.Append(TimestampedCount{
 			timestamp: now.Truncate(time.Second * 10).Unix(),
 			podCounts: map[string]float64{
 				"pod1": 80.0,
 			},
+			lock: new(sync.RWMutex),
 		})
 		assert.Equal(t, 0.0, CalculateRate(q, 5))
 		assert.Equal(t, 3.0, CalculateRate(q, 15))
@@ -190,6 +204,7 @@ func TestCalculateRate(t *testing.T) {
 				"pod1": 200.0,
 				"pod2": 100.0,
 			},
+			lock: new(sync.RWMutex),
 		})
 		q.Append(TimestampedCount{
 			timestamp: now.Truncate(time.Second*10).Unix() - 20,
@@ -197,6 +212,7 @@ func TestCalculateRate(t *testing.T) {
 				"pod1": 100.0,
 				"pod2": 200.0,
 			},
+			lock: new(sync.RWMutex),
 		})
 		q.Append(TimestampedCount{
 			timestamp: now.Truncate(time.Second*10).Unix() - 10,
@@ -204,6 +220,7 @@ func TestCalculateRate(t *testing.T) {
 				"pod1": 50.0,
 				"pod2": 300.0,
 			},
+			lock: new(sync.RWMutex),
 		})
 		q.Append(TimestampedCount{
 			timestamp: now.Truncate(time.Second * 10).Unix(),
@@ -211,6 +228,7 @@ func TestCalculateRate(t *testing.T) {
 				"pod1": 80.0,
 				"pod2": 400.0,
 			},
+			lock: new(sync.RWMutex),
 		})
 		assert.Equal(t, 0.0, CalculateRate(q, 5))
 		assert.Equal(t, 13.0, CalculateRate(q, 15))
@@ -229,6 +247,7 @@ func TestCalculateRate(t *testing.T) {
 				"pod2": 90.0,
 				"pod3": 50.0,
 			},
+			lock: new(sync.RWMutex),
 		})
 		q.Append(TimestampedCount{
 			timestamp: now.Truncate(time.Second*10).Unix() - 20,
@@ -236,6 +255,7 @@ func TestCalculateRate(t *testing.T) {
 				"pod1": 100.0,
 				"pod2": 200.0,
 			},
+			lock: new(sync.RWMutex),
 		})
 		q.Append(TimestampedCount{
 			timestamp: now.Truncate(time.Second*10).Unix() - 10,
@@ -244,6 +264,7 @@ func TestCalculateRate(t *testing.T) {
 				"pod2": 300.0,
 				"pod4": 100.0,
 			},
+			lock: new(sync.RWMutex),
 		})
 		q.Append(TimestampedCount{
 			timestamp: now.Truncate(time.Second * 10).Unix(),
@@ -252,6 +273,7 @@ func TestCalculateRate(t *testing.T) {
 				"pod3":   200.0,
 				"pod100": 200.0,
 			},
+			lock: new(sync.RWMutex),
 		})
 		assert.Equal(t, 0.0, CalculateRate(q, 5))
 		assert.Equal(t, 50.0, CalculateRate(q, 15))
@@ -270,6 +292,7 @@ func TestCalculateRate(t *testing.T) {
 				"pod2": 90.0,
 				"pod3": 50.0,
 			},
+			lock: new(sync.RWMutex),
 		})
 		q.Append(TimestampedCount{
 			timestamp: now.Truncate(time.Second*10).Unix() - 20,
@@ -277,6 +300,7 @@ func TestCalculateRate(t *testing.T) {
 				"pod1": 100.0,
 				"pod2": 200.0,
 			},
+			lock: new(sync.RWMutex),
 		})
 		q.Append(TimestampedCount{
 			timestamp: now.Truncate(time.Second*10).Unix() - 10,
@@ -285,6 +309,7 @@ func TestCalculateRate(t *testing.T) {
 				"pod2": 300.0,
 				"pod4": 100.0,
 			},
+			lock: new(sync.RWMutex),
 		})
 		q.Append(TimestampedCount{
 			timestamp: now.Truncate(time.Second * 10).Unix(),
@@ -293,6 +318,7 @@ func TestCalculateRate(t *testing.T) {
 				"pod3":   200.0,
 				"pod100": 200.0,
 			},
+			lock: new(sync.RWMutex),
 		})
 		assert.Equal(t, 0.0, CalculateRate(q, 5))
 		assert.Equal(t, 50.0, CalculateRate(q, 15))

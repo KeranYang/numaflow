@@ -17,15 +17,18 @@ limitations under the License.
 package server
 
 import (
+	"sync"
 	"time"
 
 	sharedqueue "github.com/numaproj/numaflow/pkg/shared/queue"
 )
 
+// UpdateCount updates the count of processed messages for a pod at a given time
 func UpdateCount(q *sharedqueue.OverflowQueue[TimestampedCount], now int64, podName string, count float64) {
 	// find the element that is at the same time as now and update it
 	for _, i := range q.Items() {
 		if i.timestamp == now {
+			i.lock.Lock()
 			counts := i.podCounts
 			if count == CountNotAvailable {
 				// if the count is not available, we need to delete the pod from the map
@@ -33,6 +36,7 @@ func UpdateCount(q *sharedqueue.OverflowQueue[TimestampedCount], now int64, podN
 			} else {
 				counts[podName] = count
 			}
+			i.lock.Unlock()
 			return
 		}
 	}
@@ -44,6 +48,7 @@ func UpdateCount(q *sharedqueue.OverflowQueue[TimestampedCount], now int64, podN
 		q.Append(TimestampedCount{
 			timestamp: now,
 			podCounts: counts,
+			lock:      new(sync.RWMutex),
 		})
 	}
 }
@@ -79,6 +84,10 @@ func CalculateRate(q *sharedqueue.OverflowQueue[TimestampedCount], lookbackSecon
 }
 
 func calculateDelta(c1, c2 TimestampedCount) float64 {
+	c1.lock.RLock()
+	defer c1.lock.RUnlock()
+	c2.lock.RLock()
+	defer c2.lock.RUnlock()
 	delta := float64(0)
 	// Iterate over the podCounts of the second TimestampedCount
 	for pod, count2 := range c2.podCounts {
