@@ -17,49 +17,34 @@ limitations under the License.
 package server
 
 import (
-	"sync"
 	"time"
 
 	sharedqueue "github.com/numaproj/numaflow/pkg/shared/queue"
 )
 
 // UpdateCount updates the count of processed messages for a pod at a given time
-func UpdateCount(q *sharedqueue.OverflowQueue[*TimestampedCount], now int64, podName string, count float64) {
+func UpdateCount(q *sharedqueue.OverflowQueue[*TimestampedCounts], now int64, podName string, count float64) {
 	// find the element matching the input timestamp and update it
 	for _, i := range q.Items() {
 		if i.timestamp == now {
-			i.lock.Lock()
-			counts := i.podCounts
-			if count == CountNotAvailable {
-				// if the count is not available, we need to delete the pod from the map
-				delete(counts, podName)
-			} else {
-				counts[podName] = count
-			}
-			i.lock.Unlock()
+			i.Update(podName, count)
 			return
 		}
 	}
-
 	// if we cannot find a matching element, it means we need to add a new timestamped count to the queue
 	if count != CountNotAvailable {
-		counts := make(map[string]float64)
-		counts[podName] = count
-		q.Append(&TimestampedCount{
-			timestamp: now,
-			podCounts: counts,
-			lock:      new(sync.RWMutex),
-		})
+		tc := NewTimestampedCounts(now)
+		tc.Update(podName, count)
+		q.Append(tc)
 	}
 }
 
 // CalculateRate calculates the rate of the vertex in the last lookback seconds
-func CalculateRate(q *sharedqueue.OverflowQueue[*TimestampedCount], lookbackSeconds int64) float64 {
+func CalculateRate(q *sharedqueue.OverflowQueue[*TimestampedCounts], lookbackSeconds int64) float64 {
 	n := q.Length()
 	if n <= 1 {
 		return 0
 	}
-
 	now := time.Now().Truncate(time.Second * 10).Unix()
 	counts := q.Items()
 	var startIndex int
@@ -83,15 +68,15 @@ func CalculateRate(q *sharedqueue.OverflowQueue[*TimestampedCount], lookbackSeco
 	return delta / float64(timeDiff)
 }
 
-func calculateDelta(c1, c2 *TimestampedCount) float64 {
+func calculateDelta(c1, c2 *TimestampedCounts) float64 {
 	c1.lock.RLock()
 	defer c1.lock.RUnlock()
 	c2.lock.RLock()
 	defer c2.lock.RUnlock()
 	delta := float64(0)
-	// Iterate over the podCounts of the second TimestampedCount
+	// Iterate over the podCounts of the second TimestampedCounts
 	for pod, count2 := range c2.podCounts {
-		// If the pod also exists in the first TimestampedCount
+		// If the pod also exists in the first TimestampedCounts
 		if count1, ok := c1.podCounts[pod]; ok {
 			// If the count has decreased, it means the pod restarted
 			if count2 < count1 {
@@ -99,7 +84,7 @@ func calculateDelta(c1, c2 *TimestampedCount) float64 {
 			} else { // If the count has increased or stayed the same
 				delta += count2 - count1
 			}
-		} else { // If the pod only exists in the second TimestampedCount, it's a new pod
+		} else { // If the pod only exists in the second TimestampedCounts, it's a new pod
 			delta += count2
 		}
 	}

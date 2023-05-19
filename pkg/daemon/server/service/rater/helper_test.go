@@ -19,8 +19,8 @@ package server
 /*
 func TestUpdateCount(t *testing.T) {
 	t.Run("givenTimeExistsPodExistsCountAvailable_whenUpdate_thenUpdatePodCount", func(t *testing.T) {
-		q := sharedqueue.New[TimestampedCount](1800)
-		q.Append(TimestampedCount{
+		q := sharedqueue.New[TimestampedCounts](1800)
+		q.Append(TimestampedCounts{
 			timestamp: 1,
 			podCounts: map[string]float64{
 				"pod1": 10.0,
@@ -34,8 +34,8 @@ func TestUpdateCount(t *testing.T) {
 	})
 
 	t.Run("givenTimeExistsPodNotExistsCountAvailable_whenUpdate_thenAddPodCount", func(t *testing.T) {
-		q := sharedqueue.New[TimestampedCount](1800)
-		q.Append(TimestampedCount{
+		q := sharedqueue.New[TimestampedCounts](1800)
+		q.Append(TimestampedCounts{
 			timestamp: 1,
 			podCounts: map[string]float64{
 				"pod1": 20.0,
@@ -49,8 +49,8 @@ func TestUpdateCount(t *testing.T) {
 	})
 
 	t.Run("givenTimeExistsPodExistsCountNotAvailable_whenUpdate_thenRemovePod", func(t *testing.T) {
-		q := sharedqueue.New[TimestampedCount](1800)
-		q.Append(TimestampedCount{
+		q := sharedqueue.New[TimestampedCounts](1800)
+		q.Append(TimestampedCounts{
 			timestamp: 1,
 			podCounts: map[string]float64{
 				"pod1": 10.0,
@@ -66,8 +66,8 @@ func TestUpdateCount(t *testing.T) {
 	})
 
 	t.Run("givenTimeExistsPodNotExistsCountNotAvailable_whenUpdate_thenNoUpdate", func(t *testing.T) {
-		q := sharedqueue.New[TimestampedCount](1800)
-		q.Append(TimestampedCount{
+		q := sharedqueue.New[TimestampedCounts](1800)
+		q.Append(TimestampedCounts{
 			timestamp: 1,
 			podCounts: map[string]float64{
 				"pod1": 10.0,
@@ -81,8 +81,8 @@ func TestUpdateCount(t *testing.T) {
 	})
 
 	t.Run("givenTimeNotExistsCountAvailable_whenUpdate_thenUpdateNewTimeWithPod", func(t *testing.T) {
-		q := sharedqueue.New[TimestampedCount](1800)
-		q.Append(TimestampedCount{
+		q := sharedqueue.New[TimestampedCounts](1800)
+		q.Append(TimestampedCounts{
 			timestamp: 1,
 			podCounts: map[string]float64{
 				"pod1": 10.0,
@@ -96,8 +96,8 @@ func TestUpdateCount(t *testing.T) {
 	})
 
 	t.Run("givenTimeNotExistsCountNotAvailable_whenUpdate_thenNoUpdate", func(t *testing.T) {
-		q := sharedqueue.New[TimestampedCount](1800)
-		q.Append(TimestampedCount{
+		q := sharedqueue.New[TimestampedCounts](1800)
+		q.Append(TimestampedCounts{
 			timestamp: 1,
 			podCounts: map[string]float64{
 				"pod1": 10.0,
@@ -113,29 +113,29 @@ func TestUpdateCount(t *testing.T) {
 
 func TestCalculateRate(t *testing.T) {
 	t.Run("givenCollectedTimeLessThanTwo_whenCalculateRate_thenReturnZero", func(t *testing.T) {
-		q := sharedqueue.New[TimestampedCount](1800)
+		q := sharedqueue.New[TimestampedCounts](1800)
 		rate := CalculateRate(q, 10)
 		assert.Equal(t, 0.0, rate)
 	})
 
 	t.Run("singlePod_givenCountIncreases_whenCalculateRate_thenReturnRate", func(t *testing.T) {
-		q := sharedqueue.New[TimestampedCount](1800)
+		q := sharedqueue.New[TimestampedCounts](1800)
 		now := time.Now()
-		q.Append(TimestampedCount{
+		q.Append(TimestampedCounts{
 			timestamp: now.Truncate(time.Second*10).Unix() - 20,
 			podCounts: map[string]float64{
 				"pod1": 5.0,
 			},
 			lock: new(sync.RWMutex),
 		})
-		q.Append(TimestampedCount{
+		q.Append(TimestampedCounts{
 			timestamp: now.Truncate(time.Second*10).Unix() - 10,
 			podCounts: map[string]float64{
 				"pod1": 10.0,
 			},
 			lock: new(sync.RWMutex),
 		})
-		q.Append(TimestampedCount{
+		q.Append(TimestampedCounts{
 			timestamp: now.Truncate(time.Second * 10).Unix(),
 			podCounts: map[string]float64{
 				"pod1": 20.0,
@@ -149,30 +149,30 @@ func TestCalculateRate(t *testing.T) {
 	})
 
 	t.Run("singlePod_givenCountDecreases_whenCalculateRate_thenReturnRate", func(t *testing.T) {
-		q := sharedqueue.New[TimestampedCount](1800)
+		q := sharedqueue.New[TimestampedCounts](1800)
 		now := time.Now()
-		q.Append(TimestampedCount{
+		q.Append(TimestampedCounts{
 			timestamp: now.Truncate(time.Second*10).Unix() - 30,
 			podCounts: map[string]float64{
 				"pod1": 200.0,
 			},
 			lock: new(sync.RWMutex),
 		})
-		q.Append(TimestampedCount{
+		q.Append(TimestampedCounts{
 			timestamp: now.Truncate(time.Second*10).Unix() - 20,
 			podCounts: map[string]float64{
 				"pod1": 100.0,
 			},
 			lock: new(sync.RWMutex),
 		})
-		q.Append(TimestampedCount{
+		q.Append(TimestampedCounts{
 			timestamp: now.Truncate(time.Second*10).Unix() - 10,
 			podCounts: map[string]float64{
 				"pod1": 50.0,
 			},
 			lock: new(sync.RWMutex),
 		})
-		q.Append(TimestampedCount{
+		q.Append(TimestampedCounts{
 			timestamp: now.Truncate(time.Second * 10).Unix(),
 			podCounts: map[string]float64{
 				"pod1": 80.0,
@@ -187,9 +187,9 @@ func TestCalculateRate(t *testing.T) {
 	})
 
 	t.Run("multiplePods_givenCountIncreasesAndDecreases_whenCalculateRate_thenReturnRate", func(t *testing.T) {
-		q := sharedqueue.New[TimestampedCount](1800)
+		q := sharedqueue.New[TimestampedCounts](1800)
 		now := time.Now()
-		q.Append(TimestampedCount{
+		q.Append(TimestampedCounts{
 			timestamp: now.Truncate(time.Second*10).Unix() - 30,
 			podCounts: map[string]float64{
 				"pod1": 200.0,
@@ -197,7 +197,7 @@ func TestCalculateRate(t *testing.T) {
 			},
 			lock: new(sync.RWMutex),
 		})
-		q.Append(TimestampedCount{
+		q.Append(TimestampedCounts{
 			timestamp: now.Truncate(time.Second*10).Unix() - 20,
 			podCounts: map[string]float64{
 				"pod1": 100.0,
@@ -205,7 +205,7 @@ func TestCalculateRate(t *testing.T) {
 			},
 			lock: new(sync.RWMutex),
 		})
-		q.Append(TimestampedCount{
+		q.Append(TimestampedCounts{
 			timestamp: now.Truncate(time.Second*10).Unix() - 10,
 			podCounts: map[string]float64{
 				"pod1": 50.0,
@@ -213,7 +213,7 @@ func TestCalculateRate(t *testing.T) {
 			},
 			lock: new(sync.RWMutex),
 		})
-		q.Append(TimestampedCount{
+		q.Append(TimestampedCounts{
 			timestamp: now.Truncate(time.Second * 10).Unix(),
 			podCounts: map[string]float64{
 				"pod1": 80.0,
@@ -229,9 +229,9 @@ func TestCalculateRate(t *testing.T) {
 	})
 
 	t.Run("multiplePods_givenPodsComeAndGo_whenCalculateRate_thenReturnRate", func(t *testing.T) {
-		q := sharedqueue.New[TimestampedCount](1800)
+		q := sharedqueue.New[TimestampedCounts](1800)
 		now := time.Now()
-		q.Append(TimestampedCount{
+		q.Append(TimestampedCounts{
 			timestamp: now.Truncate(time.Second*10).Unix() - 30,
 			podCounts: map[string]float64{
 				"pod1": 200.0,
@@ -240,7 +240,7 @@ func TestCalculateRate(t *testing.T) {
 			},
 			lock: new(sync.RWMutex),
 		})
-		q.Append(TimestampedCount{
+		q.Append(TimestampedCounts{
 			timestamp: now.Truncate(time.Second*10).Unix() - 20,
 			podCounts: map[string]float64{
 				"pod1": 100.0,
@@ -248,7 +248,7 @@ func TestCalculateRate(t *testing.T) {
 			},
 			lock: new(sync.RWMutex),
 		})
-		q.Append(TimestampedCount{
+		q.Append(TimestampedCounts{
 			timestamp: now.Truncate(time.Second*10).Unix() - 10,
 			podCounts: map[string]float64{
 				"pod1": 50.0,
@@ -257,7 +257,7 @@ func TestCalculateRate(t *testing.T) {
 			},
 			lock: new(sync.RWMutex),
 		})
-		q.Append(TimestampedCount{
+		q.Append(TimestampedCounts{
 			timestamp: now.Truncate(time.Second * 10).Unix(),
 			podCounts: map[string]float64{
 				"pod2":   400.0,
@@ -274,9 +274,9 @@ func TestCalculateRate(t *testing.T) {
 	})
 
 	t.Run("queueOverflowed_SinglePod_givenCountIncreases_whenCalculateRate_thenReturnRate", func(t *testing.T) {
-		q := sharedqueue.New[TimestampedCount](3)
+		q := sharedqueue.New[TimestampedCounts](3)
 		now := time.Now()
-		q.Append(TimestampedCount{
+		q.Append(TimestampedCounts{
 			timestamp: now.Truncate(time.Second*10).Unix() - 30,
 			podCounts: map[string]float64{
 				"pod1": 200.0,
@@ -285,7 +285,7 @@ func TestCalculateRate(t *testing.T) {
 			},
 			lock: new(sync.RWMutex),
 		})
-		q.Append(TimestampedCount{
+		q.Append(TimestampedCounts{
 			timestamp: now.Truncate(time.Second*10).Unix() - 20,
 			podCounts: map[string]float64{
 				"pod1": 100.0,
@@ -293,7 +293,7 @@ func TestCalculateRate(t *testing.T) {
 			},
 			lock: new(sync.RWMutex),
 		})
-		q.Append(TimestampedCount{
+		q.Append(TimestampedCounts{
 			timestamp: now.Truncate(time.Second*10).Unix() - 10,
 			podCounts: map[string]float64{
 				"pod1": 50.0,
@@ -302,7 +302,7 @@ func TestCalculateRate(t *testing.T) {
 			},
 			lock: new(sync.RWMutex),
 		})
-		q.Append(TimestampedCount{
+		q.Append(TimestampedCounts{
 			timestamp: now.Truncate(time.Second * 10).Unix(),
 			podCounts: map[string]float64{
 				"pod2":   400.0,
