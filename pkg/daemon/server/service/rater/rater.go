@@ -39,9 +39,6 @@ type metricsHttpClient interface {
 	Head(url string) (*http.Response, error)
 }
 
-// CountNotAvailable indicates that the rater was not able to retrieve the count
-const CountNotAvailable = 0.0
-
 // fixedLookbackSeconds always maintain rate metrics for the following lookback seconds (1m, 5m, 15m)
 var fixedLookbackSeconds = map[string]int64{"1m": 60, "5m": 300, "15m": 900}
 
@@ -209,14 +206,12 @@ func (r *Rater) getTotalCount(ctx context.Context, vertexName, vertexType, podNa
 			r.log.Errorf("failed parsing to prometheus metric families, %v", err.Error())
 			return CountNotAvailable
 		}
-
 		var readTotalMetricName string
 		if vertexType == "reduce" {
 			readTotalMetricName = "reduce_isb_reader_read_total"
 		} else {
 			readTotalMetricName = "forwarder_read_total"
 		}
-
 		if value, ok := result[readTotalMetricName]; ok && value != nil && len(value.GetMetric()) > 0 {
 			metricsList := value.GetMetric()
 			return metricsList[0].Counter.GetValue()

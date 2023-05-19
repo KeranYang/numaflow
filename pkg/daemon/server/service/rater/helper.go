@@ -23,20 +23,18 @@ import (
 )
 
 // UpdateCount updates the count of processed messages for a pod at a given time
-func UpdateCount(q *sharedqueue.OverflowQueue[*TimestampedCounts], now int64, podName string, count float64) {
+func UpdateCount(q *sharedqueue.OverflowQueue[*TimestampedCounts], time int64, podName string, count float64) {
 	// find the element matching the input timestamp and update it
 	for _, i := range q.Items() {
-		if i.timestamp == now {
+		if i.timestamp == time {
 			i.Update(podName, count)
 			return
 		}
 	}
 	// if we cannot find a matching element, it means we need to add a new timestamped count to the queue
-	if count != CountNotAvailable {
-		tc := NewTimestampedCounts(now)
-		tc.Update(podName, count)
-		q.Append(tc)
-	}
+	tc := NewTimestampedCounts(time)
+	tc.Update(podName, count)
+	q.Append(tc)
 }
 
 // CalculateRate calculates the rate of the vertex in the last lookback seconds
@@ -69,15 +67,13 @@ func CalculateRate(q *sharedqueue.OverflowQueue[*TimestampedCounts], lookbackSec
 }
 
 func calculateDelta(c1, c2 *TimestampedCounts) float64 {
-	c1.lock.RLock()
-	defer c1.lock.RUnlock()
-	c2.lock.RLock()
-	defer c2.lock.RUnlock()
+	tc1 := c1.Snapshot()
+	tc2 := c2.Snapshot()
 	delta := float64(0)
 	// Iterate over the podCounts of the second TimestampedCounts
-	for pod, count2 := range c2.podCounts {
+	for pod, count2 := range tc2 {
 		// If the pod also exists in the first TimestampedCounts
-		if count1, ok := c1.podCounts[pod]; ok {
+		if count1, ok := tc1[pod]; ok {
 			// If the count has decreased, it means the pod restarted
 			if count2 < count1 {
 				delta += count2
