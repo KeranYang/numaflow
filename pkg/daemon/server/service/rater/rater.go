@@ -21,6 +21,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -223,7 +224,34 @@ func (r *Rater) getTotalCount(ctx context.Context, vertexName, vertexType, podNa
 
 // GetRates returns the processing rates of the vertex in the format of lookback second to rate mappings
 func (r *Rater) GetRates(vertexName string) map[string]float64 {
+	str := ""
+	str += fmt.Sprintf("Getting rates for vertex %s\n", vertexName)
+	for _, tc := range r.timestampedPodCounts[vertexName].Items() {
+		str += fmt.Sprintf("Timestamped pod counts: %s", tc.ToString())
+	}
+	r.log.Info(str)
 	var result = make(map[string]float64)
+	// calculate rates for each lookback seconds
+	for n, i := range r.buildLookbackSecondsMap(vertexName) {
+		r := CalculateRate(r.timestampedPodCounts[vertexName], i)
+		result[n] = r
+	}
+	return result
+}
+
+// GetPodRates returns the processing rates of the pod in the format of lookback second to rate mappings
+func (r *Rater) GetPodRates(vertexName string, podIndex int) map[string]float64 {
+	podName := r.pipeline.Name + "-" + vertexName + "-" + strconv.Itoa(podIndex)
+	var result = make(map[string]float64)
+	// calculate rates for each lookback seconds
+	for n, i := range r.buildLookbackSecondsMap(vertexName) {
+		r := CalculatePodRate(r.timestampedPodCounts[vertexName], i, podName)
+		result[n] = r
+	}
+	return result
+}
+
+func (r *Rater) buildLookbackSecondsMap(vertexName string) map[string]int64 {
 	// get the user-specified lookback seconds from the pipeline spec
 	var userSpecifiedLookBackSeconds int64
 	// TODO - we can keep a local copy of vertex to lookback seconds mapping to avoid iterating the pipeline spec every time.
@@ -236,11 +264,5 @@ func (r *Rater) GetRates(vertexName string) map[string]float64 {
 	for k, v := range fixedLookbackSeconds {
 		lookbackSecondsMap[k] = v
 	}
-
-	// calculate rates for each lookback seconds
-	for n, i := range lookbackSecondsMap {
-		r := CalculateRate(r.timestampedPodCounts[vertexName], i)
-		result[n] = r
-	}
-	return result
+	return lookbackSecondsMap
 }
