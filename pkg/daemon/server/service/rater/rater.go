@@ -224,12 +224,6 @@ func (r *Rater) getTotalCount(ctx context.Context, vertexName, vertexType, podNa
 
 // GetRates returns the processing rates of the vertex in the format of lookback second to rate mappings
 func (r *Rater) GetRates(vertexName string) map[string]float64 {
-	str := ""
-	str += fmt.Sprintf("Getting rates for vertex %s\n", vertexName)
-	for _, tc := range r.timestampedPodCounts[vertexName].Items() {
-		str += fmt.Sprintf("Timestamped pod counts: %s", tc.ToString())
-	}
-	r.log.Info(str)
 	var result = make(map[string]float64)
 	// calculate rates for each lookback seconds
 	for n, i := range r.buildLookbackSecondsMap(vertexName) {
