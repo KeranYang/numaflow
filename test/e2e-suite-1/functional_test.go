@@ -97,6 +97,7 @@ wmLoop:
 			}
 			w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte(testMsgFive)))
 			time.Sleep(time.Second)
+			s.T().Log("keep waiting for watermark to be generated")
 		}
 	}
 }
