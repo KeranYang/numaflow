@@ -19,13 +19,17 @@ limitations under the License.
 package e2e
 
 import (
+	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
 	dfv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	daemonclient "github.com/numaproj/numaflow/pkg/daemon/client"
 	. "github.com/numaproj/numaflow/test/fixtures"
 )
 
