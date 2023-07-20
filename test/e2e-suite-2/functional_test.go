@@ -158,6 +158,10 @@ func (s *FunctionalSuite) TestBuiltinEventTimeExtractor() {
 	testMsgThree := `{"test": 21, "item": [{"id": 1, "name": "numa", "time": "2022-02-18T21:54:42.123Z"},{"id": 2, "name": "numa", "time": "2021-03-18T21:54:42.123Z"}]}`
 	testMsgFour := `{"test": 21, "item": [{"id": 1, "name": "numa", "time": "2022-02-18T21:54:42.123Z"},{"id": 2, "name": "numa", "time": "2021-04-18T21:54:42.123Z"}]}`
 	testMsgFive := `{"test": 21, "item": [{"id": 1, "name": "numa", "time": "2022-02-18T21:54:42.123Z"},{"id": 2, "name": "numa", "time": "2021-05-18T21:54:42.123Z"}]}`
+	testMsgSix := `{"test": 21, "item": [{"id": 1, "name": "numa", "time": "2022-02-18T21:54:42.123Z"},{"id": 2, "name": "numa", "time": "2021-06-18T21:54:42.123Z"}]}`
+	testMsgSeven := `{"test": 21, "item": [{"id": 1, "name": "numa", "time": "2022-02-18T21:54:42.123Z"},{"id": 2, "name": "numa", "time": "2021-07-18T21:54:42.123Z"}]}`
+	testMsgEight := `{"test": 21, "item": [{"id": 1, "name": "numa", "time": "2022-02-18T21:54:42.123Z"},{"id": 2, "name": "numa", "time": "2021-08-18T21:54:42.123Z"}]}`
+
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
@@ -165,6 +169,9 @@ func (s *FunctionalSuite) TestBuiltinEventTimeExtractor() {
 	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte(testMsgThree)))
 	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte(testMsgFour)))
 	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte(testMsgFive)))
+	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte(testMsgSix)))
+	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte(testMsgSeven)))
+	w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte(testMsgEight)))
 
 wmLoop:
 	for {
@@ -184,10 +191,10 @@ wmLoop:
 					assert.Fail(s.T(), err.Error())
 				}
 				// Watermark propagation can delay, we consider the test as passed as long as the retrieved watermark matches one of the assigned event times.
-				assert.True(s.T(), edgeWM == time.Date(2021, 5, 18, 21, 54, 42, 123000000, time.UTC).UnixMilli() || edgeWM == time.Date(2021, 4, 18, 21, 54, 42, 123000000, time.UTC).UnixMilli() || edgeWM == time.Date(2021, 3, 18, 21, 54, 42, 123000000, time.UTC).UnixMilli() || edgeWM == time.Date(2021, 2, 18, 21, 54, 42, 123000000, time.UTC).UnixMilli() || edgeWM == time.Date(2021, 1, 18, 21, 54, 42, 123000000, time.UTC).UnixMilli())
+				assert.True(s.T(), edgeWM == time.Date(2021, 5, 18, 21, 54, 42, 123000000, time.UTC).UnixMilli() || edgeWM == time.Date(2021, 4, 18, 21, 54, 42, 123000000, time.UTC).UnixMilli() || edgeWM == time.Date(2021, 3, 18, 21, 54, 42, 123000000, time.UTC).UnixMilli() || edgeWM == time.Date(2021, 2, 18, 21, 54, 42, 123000000, time.UTC).UnixMilli() || edgeWM == time.Date(2021, 1, 18, 21, 54, 42, 123000000, time.UTC).UnixMilli() || edgeWM == time.Date(2021, 6, 18, 21, 54, 42, 123000000, time.UTC).UnixMilli() || edgeWM == time.Date(2021, 7, 18, 21, 54, 42, 123000000, time.UTC).UnixMilli() || edgeWM == time.Date(2021, 8, 18, 21, 54, 42, 123000000, time.UTC).UnixMilli())
 				break wmLoop
 			}
-			w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte(testMsgFive)))
+			w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte(testMsgEight)))
 			time.Sleep(time.Second)
 			s.T().Log("keep waiting for watermark to be generated")
 		}
