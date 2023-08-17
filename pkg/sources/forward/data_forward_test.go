@@ -24,9 +24,10 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/goleak"
+
 	"github.com/numaproj/numaflow/pkg/shared/kvs/inmem"
 	"github.com/numaproj/numaflow/pkg/shared/kvs/noop"
-	"go.uber.org/goleak"
 
 	dfv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaflow/pkg/forward"

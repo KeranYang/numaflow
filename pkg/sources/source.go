@@ -21,8 +21,10 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/numaproj/numaflow/pkg/shared/kvs/noop"
 	"go.uber.org/zap"
+
+	"github.com/numaproj/numaflow/pkg/shared/kvs/noop"
+	"github.com/numaproj/numaflow/pkg/sources/udsource"
 
 	dfv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaflow/pkg/forward"
@@ -206,7 +208,8 @@ func (sp *SourceProcessor) Start(ctx context.Context) error {
 }
 
 // getSourcer is used to send the sourcer information
-func (sp *SourceProcessor) getSourcer(writers map[string][]isb.BufferWriter,
+func (sp *SourceProcessor) getSourcer(
+	writers map[string][]isb.BufferWriter,
 	fsd forward.ToWhichStepDecider,
 	mapApplier applier.MapApplier,
 	fetchWM fetch.Fetcher,
@@ -215,7 +218,10 @@ func (sp *SourceProcessor) getSourcer(writers map[string][]isb.BufferWriter,
 	logger *zap.SugaredLogger) (Sourcer, error) {
 
 	src := sp.VertexInstance.Vertex.Spec.Source
-	if x := src.Generator; x != nil {
+	if sp.VertexInstance.Vertex.IsUDSource() {
+		// TODO - udsource - implement this
+		return udsource.New()
+	} else if x := src.Generator; x != nil {
 		readOptions := []generator.Option{
 			generator.WithLogger(logger),
 		}
