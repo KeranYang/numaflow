@@ -22,7 +22,7 @@ import (
 	"github.com/numaproj/numaflow/pkg/isb"
 )
 
-// TODO - udsource - use gRPC client to connect to the user defined source and implement the interfaces below
+// TODO(udsource) - use gRPC client to connect to the user defined source and implement the interfaces below
 type userDefinedSource struct {
 }
 
