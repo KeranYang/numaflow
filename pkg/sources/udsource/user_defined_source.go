@@ -22,7 +22,6 @@ import (
 	"github.com/numaproj/numaflow/pkg/isb"
 )
 
-// TODO(udsource) - use gRPC client to connect to the user defined source and implement the interfaces below
 type userDefinedSource struct {
 }
 
@@ -31,7 +30,7 @@ func New() (*userDefinedSource, error) {
 }
 
 func (u *userDefinedSource) GetName() string {
-	return ""
+	return "UserDefinedSource"
 }
 
 // GetPartitionIdx returns the partition number for the user-defined source.
@@ -41,27 +40,34 @@ func (u *userDefinedSource) GetPartitionIdx() int32 {
 }
 
 func (u *userDefinedSource) Read(_ context.Context, count int64) ([]*isb.ReadMessage, error) {
+	// TODO(udsource) - Implement it
 	return nil, nil
 }
 
 func (u *userDefinedSource) Ack(_ context.Context, offsets []isb.Offset) []error {
+	// TODO(udsource) - Implement it
 	return make([]error, len(offsets))
 }
 
 func (u *userDefinedSource) NoAck(_ context.Context, _ []isb.Offset) {
 	// User defined source does not support NoAck
+	panic("not implemented")
 }
 
 func (u *userDefinedSource) Close() error {
+	// TODO(udsource) - Implement it
 	return nil
 }
 
 func (u *userDefinedSource) Stop() {
+	// TODO(udsource) - Implement it
 }
 
 func (u *userDefinedSource) ForceStop() {
+	// TODO(udsource) - Implement it
 }
 
 func (u *userDefinedSource) Start() <-chan struct{} {
+	// TODO(udsource) - Implement it
 	return nil
 }
