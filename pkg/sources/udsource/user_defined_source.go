@@ -52,6 +52,11 @@ func (u *userDefinedSource) Ack(_ context.Context, offsets []isb.Offset) []error
 	return make([]error, len(offsets))
 }
 
+func (u *userDefinedSource) Pending(_ context.Context) (int64, error) {
+	// TODO(udsource) - Implement it
+	return 0, nil
+}
+
 func (u *userDefinedSource) NoAck(_ context.Context, _ []isb.Offset) {
 	// User defined source does not support NoAck
 	panic("not implemented")
