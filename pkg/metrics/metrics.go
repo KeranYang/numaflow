@@ -255,14 +255,12 @@ func (ms *metricsServer) Start(ctx context.Context) (func(ctx context.Context) e
 		w.WriteHeader(http.StatusNoContent)
 	})
 	mux.HandleFunc("/sidecar-livez", func(w http.ResponseWriter, r *http.Request) {
-		if len(ms.healthCheckExecutors) > 0 {
-			for _, ex := range ms.healthCheckExecutors {
-				if err := ex(); err != nil {
-					log.Errorw("Failed to execute sidecar health check", zap.Error(err))
-					w.WriteHeader(http.StatusInternalServerError)
-					_, _ = w.Write([]byte(err.Error()))
-					return
-				}
+		for _, ex := range ms.healthCheckExecutors {
+			if err := ex(); err != nil {
+				log.Errorw("Failed to execute sidecar health check", zap.Error(err))
+				w.WriteHeader(http.StatusInternalServerError)
+				_, _ = w.Write([]byte(err.Error()))
+				return
 			}
 		}
 		w.WriteHeader(http.StatusNoContent)

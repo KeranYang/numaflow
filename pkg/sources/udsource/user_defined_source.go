@@ -23,10 +23,13 @@ import (
 )
 
 type userDefinedSource struct {
+	udsource *UDSgRPCBasedUDSource
 }
 
-func New() (*userDefinedSource, error) {
-	return &userDefinedSource{}, nil
+func New(udsource *UDSgRPCBasedUDSource) (*userDefinedSource, error) {
+	return &userDefinedSource{
+		udsource: udsource,
+	}, nil
 }
 
 func (u *userDefinedSource) GetName() string {
