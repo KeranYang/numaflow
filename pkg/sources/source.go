@@ -143,8 +143,8 @@ func (sp *SourceProcessor) Start(ctx context.Context) error {
 		return fmt.Errorf("unrecognized isb svc type %q", sp.ISBSvcType)
 	}
 	var sourcer Sourcer
-	var readyChecker metrics.HealthChecker
-	// Populate shuffle function map
+	var readyCheckers []metrics.HealthChecker
+	// Populate the shuffle function map
 	// we need to shuffle the messages, because we can have a reduce vertex immediately after a source vertex.
 	var toVertexPartitionMap = make(map[string]int)
 	shuffleFuncMap := make(map[string]*shuffle.Shuffle)
@@ -170,7 +170,7 @@ func (sp *SourceProcessor) Start(ctx context.Context) error {
 				log.Warnw("Failed to close gRPC client conn", zap.Error(err))
 			}
 		}()
-		readyChecker = t
+		readyCheckers = append(readyCheckers, t)
 		sourcer, err = sp.getSourcer(writersMap, sp.getTransformerGoWhereDecider(shuffleFuncMap), t, fetchWatermark, toVertexWatermarkStores, sourcePublisherStores, log)
 	} else {
 		sourcer, err = sp.getSourcer(writersMap, sp.getSourceGoWhereDecider(shuffleFuncMap), applier.Terminal, fetchWatermark, toVertexWatermarkStores, sourcePublisherStores, log)
@@ -191,7 +191,7 @@ func (sp *SourceProcessor) Start(ctx context.Context) error {
 		}
 	}()
 
-	metricsOpts := metrics.NewMetricsOptions(ctx, sp.VertexInstance.Vertex, readyChecker, []isb.BufferReader{sourcer})
+	metricsOpts := metrics.NewMetricsOptions(ctx, sp.VertexInstance.Vertex, readyCheckers, []isb.BufferReader{sourcer})
 	ms := metrics.NewMetricsServer(sp.VertexInstance.Vertex, metricsOpts...)
 	if shutdown, err := ms.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start metrics server, error: %w", err)
