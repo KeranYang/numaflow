@@ -7,25 +7,33 @@ spec:
     - name: in
       scale:
         min: 2
+      volumes:
+        - name: my-config-mount
+          configMap:
+            name: nats-config-map
+        - name: my-secret-mount
+          secret:
+            secretName: nats-auth-fake-token
       source:
-        nats:
-          auth:
-            token:
-              name: nats-source-fake-token
-              key: fake-token
-          url: nats
-          subject: test-subject
-          queue: my-queue
+        udsource:
+          container:
+            env:
+              - name: abc
+                value: |
+                  {"a": "b", "c": "d"}
+            image: quay.io/numaio/numaflow-go/keran-test-nats-source:secret0.5.1
+            volumeMounts:
+              - name: my-config-mount
+                mountPath: /etc/config
+              - name: my-secret-mount
+                mountPath: /etc/secrets/nats-auth-fake-token
     - name: p1
       udf:
         builtin:
           name: cat
     - name: out
       sink:
-        udsink:
-          container:
-            # A redis sink for e2e testing, see https://github.com/numaproj/numaflow-sinks/tree/main/redis-e2e-test-sink
-            image: quay.io/numaio/numaflow-sink/redis-e2e-test-sink:v0.5.0
+        log: {}
   edges:
     - from: in
       to: p1

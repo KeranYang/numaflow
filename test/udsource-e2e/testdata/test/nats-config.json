@@ -1,0 +1,11 @@
+{
+	"url": "nats",
+	"subject": "test-subject",
+	"queue": "my-queue",
+	"auth": {
+		"token": {
+			"name": "nats-source-fake-token",
+			"key": "fake-token"
+		}
+	}
+}
