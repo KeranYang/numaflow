@@ -7,15 +7,22 @@ spec:
     - name: in
       scale:
         min: 2
+      volumes:
+        - name: my-config-mount
+          configMap:
+            name: nats-config-map
+        - name: my-secret-mount
+          secret:
+            secretName: nats-source-fake-token
       source:
-        nats:
-          auth:
-            token:
-              name: nats-source-fake-token
-              key: fake-token
-          url: nats
-          subject: test-subject
-          queue: my-queue
+        udsource:
+          container:
+            image: quay.io/numaio/numaflow-go/keran-test-nats-source:secret0.5.1
+            volumeMounts:
+              - name: my-config-mount
+                mountPath: /etc/config
+              - name: my-secret-mount
+                mountPath: /etc/secrets/nats-source-fake-token
     - name: p1
       udf:
         builtin:

@@ -1,0 +1,17 @@
+apiVersion: v1
+data:
+  nats-config.json: |
+    {
+      "url":"nats",
+      "subject":"test-subject",
+      "queue":"my-queue",
+      "auth":{
+        "token":{
+          "name":"nats-source-fake-token",
+          "key":"fake-token"
+        }
+      }
+    }
+kind: ConfigMap
+metadata:
+  name: nats-config-map
