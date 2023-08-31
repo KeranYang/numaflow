@@ -27,7 +27,7 @@ import (
 
 //go:generate kubectl -n numaflow-system delete statefulset nats --ignore-not-found=true
 //go:generate kubectl apply -k ../../config/apps/nats -n numaflow-system
-//go:generate kubectl apply -f testdata/nats-config-map.yaml -n numaflow-system
+//go:generate kubectl apply -f testdata/nats-source-config.yaml -n numaflow-system
 //go:generate kubectl apply -f testdata/nats-auth-fake-token.yaml -n numaflow-system
 type NatsSuite struct {
 	fixtures.E2ESuite
@@ -44,8 +44,7 @@ func (ns *NatsSuite) TestNatsSource() {
 	w.Expect().VertexPodsRunning()
 
 	fixtures.PumpNatsSubject(subject, 100, 20*time.Millisecond, 10, "test-message")
-	w.Expect().VertexPodLogContains("out", "test-message")
-	// w.Expect().SinkContains("out", "test-message", fixtures.WithContainCount(100))
+	w.Expect().SinkContains("out", "test-message", fixtures.WithContainCount(100))
 }
 
 func TestNatsSuite(t *testing.T) {

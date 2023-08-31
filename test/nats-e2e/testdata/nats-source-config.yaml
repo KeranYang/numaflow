@@ -7,7 +7,7 @@ data:
       "queue":"my-queue",
       "auth":{
         "token":{
-          "name":"nats-auth-fake-token",
+          "name":"nats-source-fake-token",
           "key":"fake-token"
         }
       }
