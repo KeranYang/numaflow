@@ -13,16 +13,16 @@ spec:
             name: nats-config-map
         - name: my-secret-mount
           secret:
-            secretName: nats-source-fake-token
+            secretName: nats-auth-fake-token
       source:
         udsource:
           container:
-            image: quay.io/numaio/numaflow-go/keran-test-nats-source:secret0.5.1
+            image: quay.io/numaio/numaflow-go/keran-test-nats-source:secret0.5.2
             volumeMounts:
               - name: my-config-mount
                 mountPath: /etc/config
               - name: my-secret-mount
-                mountPath: /etc/secrets/nats-source-fake-token
+                mountPath: /etc/secrets/nats-auth-fake-token
     - name: p1
       udf:
         builtin:
