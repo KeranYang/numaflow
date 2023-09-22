@@ -42,7 +42,6 @@ import (
 	"github.com/numaproj/numaflow/pkg/sources/generator"
 	"github.com/numaproj/numaflow/pkg/sources/http"
 	"github.com/numaproj/numaflow/pkg/sources/kafka"
-	"github.com/numaproj/numaflow/pkg/sources/nats"
 	"github.com/numaproj/numaflow/pkg/sources/redisstreams"
 	"github.com/numaproj/numaflow/pkg/sources/transformer"
 	"github.com/numaproj/numaflow/pkg/sources/udsource"
@@ -289,7 +288,8 @@ func (sp *SourceProcessor) getSourcer(
 	logger *zap.SugaredLogger) (Sourcer, error) {
 
 	src := sp.VertexInstance.Vertex.Spec.Source
-	if x := src.UDSource; x != nil && udsGRPCClient != nil {
+	// TODO - can be better.
+	if x := src.UDSource; (x != nil && udsGRPCClient != nil) || src.Nats != nil {
 		readOptions := []udsource.Option{
 			udsource.WithLogger(logger),
 		}
@@ -316,14 +316,6 @@ func (sp *SourceProcessor) getSourcer(
 		return kafka.NewKafkaSource(sp.VertexInstance, writers, fsd, transformerApplier, fetchWM, toVertexPublisherStores, publishWMStores, idleManager, readOptions...)
 	} else if x := src.HTTP; x != nil {
 		return http.New(sp.VertexInstance, writers, fsd, transformerApplier, fetchWM, toVertexPublisherStores, publishWMStores, idleManager, http.WithLogger(logger))
-	} else if x := src.Nats; x != nil {
-		readOptions := []nats.Option{
-			nats.WithLogger(logger),
-		}
-		if l := sp.VertexInstance.Vertex.Spec.Limits; l != nil && l.ReadTimeout != nil {
-			readOptions = append(readOptions, nats.WithReadTimeout(l.ReadTimeout.Duration))
-		}
-		return nats.New(sp.VertexInstance, writers, fsd, transformerApplier, fetchWM, toVertexPublisherStores, publishWMStores, idleManager, readOptions...)
 	} else if x := src.RedisStreams; x != nil {
 		readOptions := []redisstreams.Option{
 			redisstreams.WithLogger(logger),

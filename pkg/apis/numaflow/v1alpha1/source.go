@@ -34,7 +34,7 @@ type Source struct {
 	// +optional
 	HTTP *HTTPSource `json:"http,omitempty" protobuf:"bytes,3,opt,name=http"`
 	// +optional
-	Nats *NatsSource `json:"nats,omitempty" protobuf:"bytes,4,opt,name=nats"`
+	Nats *NatsConfig `json:"nats,omitempty" protobuf:"bytes,4,opt,name=nats"`
 	// +optional
 	RedisStreams *RedisStreamsSource `json:"redisStreams,omitempty" protobuf:"bytes,5,opt,name=redisStreams"`
 	// +optional

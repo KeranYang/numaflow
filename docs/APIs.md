@@ -2882,7 +2882,7 @@ NatsAuth
 <p>
 (<em>Appears on:</em>
 <a href="#numaflow.numaproj.io/v1alpha1.JetStreamConfig">JetStreamConfig</a>,
-<a href="#numaflow.numaproj.io/v1alpha1.NatsSource">NatsSource</a>)
+<a href="#numaflow.numaproj.io/v1alpha1.NatsConfig">NatsConfig</a>)
 </p>
 <p>
 <p>
@@ -2941,14 +2941,70 @@ NKey auth
 </tr>
 </tbody>
 </table>
-<h3 id="numaflow.numaproj.io/v1alpha1.NatsSource">
-NatsSource
+<h3 id="numaflow.numaproj.io/v1alpha1.NatsBasicAuth">
+NatsBasicAuth
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#numaflow.numaproj.io/v1alpha1.UDNatsAuth">UDNatsAuth</a>)
+</p>
+<p>
+<p>
+NatsBasicAuth represents the basic authentication approach which
+contains a username and a password.
+</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>
+Field
+</th>
+<th>
+Description
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>user</code></br> <em>
+<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#secretkeyselector-v1-core">
+Kubernetes core/v1.SecretKeySelector </a> </em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>
+Secret for auth user
+</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>password</code></br> <em>
+<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#secretkeyselector-v1-core">
+Kubernetes core/v1.SecretKeySelector </a> </em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>
+Secret for auth password
+</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="numaflow.numaproj.io/v1alpha1.NatsConfig">
+NatsConfig
 </h3>
 <p>
 (<em>Appears on:</em>
 <a href="#numaflow.numaproj.io/v1alpha1.Source">Source</a>)
 </p>
 <p>
+<p>
+NatsConfig represents the configuration for the Nats client.
+</p>
 </p>
 <table>
 <thead>
@@ -2968,7 +3024,7 @@ Description
 </td>
 <td>
 <p>
-URL to connect to NATS cluster, multiple urls could be separated by
+URL to connect to Nats cluster, multiple urls could be separated by
 comma.
 </p>
 </td>
@@ -2995,13 +3051,13 @@ Queue is used for queue subscription.
 </tr>
 <tr>
 <td>
-<code>tls</code></br> <em> <a href="#numaflow.numaproj.io/v1alpha1.TLS">
-TLS </a> </em>
+<code>tls</code></br> <em>
+<a href="#numaflow.numaproj.io/v1alpha1.NatsTLS"> NatsTLS </a> </em>
 </td>
 <td>
 <em>(Optional)</em>
 <p>
-TLS configuration for the nats client.
+TLS configuration for the Nats client.
 </p>
 </td>
 </tr>
@@ -3014,6 +3070,79 @@ TLS configuration for the nats client.
 <em>(Optional)</em>
 <p>
 Auth information
+</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="numaflow.numaproj.io/v1alpha1.NatsTLS">
+NatsTLS
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#numaflow.numaproj.io/v1alpha1.NatsConfig">NatsConfig</a>)
+</p>
+<p>
+<p>
+NatsTLS defines the TLS configuration for the Nats client.
+</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>
+Field
+</th>
+<th>
+Description
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>insecureSkipVerify</code></br> <em> bool </em>
+</td>
+<td>
+<em>(Optional)</em>
+</td>
+</tr>
+<tr>
+<td>
+<code>caCertSecret</code></br> <em>
+<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#secretkeyselector-v1-core">
+Kubernetes core/v1.SecretKeySelector </a> </em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>
+CACertSecret refers to the secret that contains the CA cert
+</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>clientCertSecret</code></br> <em>
+<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#secretkeyselector-v1-core">
+Kubernetes core/v1.SecretKeySelector </a> </em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>
+CertSecret refers to the secret that contains the cert
+</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>clientKeySecret</code></br> <em>
+<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#secretkeyselector-v1-core">
+Kubernetes core/v1.SecretKeySelector </a> </em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>
+KeySecret refers to the secret that contains the key
 </p>
 </td>
 </tr>
@@ -4460,7 +4589,7 @@ GeneratorSource </a> </em>
 <tr>
 <td>
 <code>nats</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.NatsSource"> NatsSource </a>
+<a href="#numaflow.numaproj.io/v1alpha1.NatsConfig"> NatsConfig </a>
 </em>
 </td>
 <td>
@@ -4546,7 +4675,6 @@ TLS
 (<em>Appears on:</em>
 <a href="#numaflow.numaproj.io/v1alpha1.KafkaSink">KafkaSink</a>,
 <a href="#numaflow.numaproj.io/v1alpha1.KafkaSource">KafkaSource</a>,
-<a href="#numaflow.numaproj.io/v1alpha1.NatsSource">NatsSource</a>,
 <a href="#numaflow.numaproj.io/v1alpha1.RedisStreamsSource">RedisStreamsSource</a>)
 </p>
 <p>
@@ -4826,6 +4954,68 @@ Description
 </td>
 <td>
 <em>(Optional)</em>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="numaflow.numaproj.io/v1alpha1.UDNatsAuth">
+UDNatsAuth
+</h3>
+<p>
+<p>
+UDNatsAuth represents the authentication information for the Nats
+client.
+</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>
+Field
+</th>
+<th>
+Description
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>basic</code></br> <em>
+<a href="#numaflow.numaproj.io/v1alpha1.NatsBasicAuth"> NatsBasicAuth
+</a> </em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>
+Basic auth, which contains a username and a password,
+</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>token</code></br> <em>
+<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#secretkeyselector-v1-core">
+Kubernetes core/v1.SecretKeySelector </a> </em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>
+Token auth
+</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>nkey</code></br> <em>
+<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#secretkeyselector-v1-core">
+Kubernetes core/v1.SecretKeySelector </a> </em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>
+NKey auth
+</p>
 </td>
 </tr>
 </tbody>
