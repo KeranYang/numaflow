@@ -22,7 +22,7 @@ type NatsConfig struct {
 	TLS *NatsTLS `json:"tls" protobuf:"bytes,4,opt,name=tls"`
 	// Auth information
 	// +optional
-	Auth *NatsAuth `json:"auth,omitempty" protobuf:"bytes,5,opt,name=auth"`
+	Auth *UDNatsAuth `json:"auth,omitempty" protobuf:"bytes,5,opt,name=auth"`
 }
 
 // NatsTLS defines the TLS configuration for the Nats client.

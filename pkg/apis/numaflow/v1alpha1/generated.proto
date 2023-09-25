@@ -801,7 +801,7 @@ message NatsConfig {
 
   // Auth information
   // +optional
-  optional NatsAuth auth = 5;
+  optional UDNatsAuth auth = 5;
 }
 
 // NatsTLS defines the TLS configuration for the Nats client.

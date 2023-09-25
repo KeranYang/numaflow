@@ -275,6 +275,8 @@ func (r *vertexReconciler) reconcile(ctx context.Context, vertex *dfv1.Vertex) (
 				annotations[dfv1.KeyDefaultContainer] = dfv1.CtrUdsink
 			} else if vertex.IsUDSource() {
 				annotations[dfv1.KeyDefaultContainer] = dfv1.CtrUdsource
+			} else if vertex.IsNatsSource() {
+				annotations[dfv1.KeyDefaultContainer] = dfv1.CtrNatsSource
 			} else if vertex.HasUDTransformer() {
 				annotations[dfv1.KeyDefaultContainer] = dfv1.CtrUdtransformer
 			}

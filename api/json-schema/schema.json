@@ -18699,7 +18699,7 @@
       "description": "NatsConfig represents the configuration for the Nats client.",
       "properties": {
         "auth": {
-          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.NatsAuth",
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.UDNatsAuth",
           "description": "Auth information"
         },
         "queue": {

@@ -2881,8 +2881,7 @@ NatsAuth
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#numaflow.numaproj.io/v1alpha1.JetStreamConfig">JetStreamConfig</a>,
-<a href="#numaflow.numaproj.io/v1alpha1.NatsConfig">NatsConfig</a>)
+<a href="#numaflow.numaproj.io/v1alpha1.JetStreamConfig">JetStreamConfig</a>)
 </p>
 <p>
 <p>
@@ -3064,7 +3063,8 @@ TLS configuration for the Nats client.
 <tr>
 <td>
 <code>auth</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.NatsAuth"> NatsAuth </a> </em>
+<a href="#numaflow.numaproj.io/v1alpha1.UDNatsAuth"> UDNatsAuth </a>
+</em>
 </td>
 <td>
 <em>(Optional)</em>
@@ -4961,6 +4961,10 @@ Description
 <h3 id="numaflow.numaproj.io/v1alpha1.UDNatsAuth">
 UDNatsAuth
 </h3>
+<p>
+(<em>Appears on:</em>
+<a href="#numaflow.numaproj.io/v1alpha1.NatsConfig">NatsConfig</a>)
+</p>
 <p>
 <p>
 UDNatsAuth represents the authentication information for the Nats

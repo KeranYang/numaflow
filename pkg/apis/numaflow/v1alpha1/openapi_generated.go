@@ -2827,7 +2827,7 @@ func schema_pkg_apis_numaflow_v1alpha1_NatsConfig(ref common.ReferenceCallback) 
 					"auth": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Auth information",
-							Ref:         ref("github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.NatsAuth"),
+							Ref:         ref("github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.UDNatsAuth"),
 						},
 					},
 				},
@@ -2835,7 +2835,7 @@ func schema_pkg_apis_numaflow_v1alpha1_NatsConfig(ref common.ReferenceCallback) 
 			},
 		},
 		Dependencies: []string{
-			"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.NatsAuth", "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.NatsTLS"},
+			"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.NatsTLS", "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.UDNatsAuth"},
 	}
 }
 

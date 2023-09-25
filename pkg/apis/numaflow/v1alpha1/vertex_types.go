@@ -81,6 +81,10 @@ func (v Vertex) IsUDSource() bool {
 	return v.Spec.IsUDSource()
 }
 
+func (v Vertex) IsNatsSource() bool {
+	return v.Spec.IsNatsSource()
+}
+
 func (v Vertex) HasSideInputs() bool {
 	return len(v.Spec.SideInputs) > 0
 }
@@ -225,6 +229,19 @@ func (v Vertex) GetPodSpec(req GetVertexPodSpecReq) (*corev1.PodSpec, error) {
 	}
 	volumeMounts := []corev1.VolumeMount{{Name: varVolumeName, MountPath: PathVarRun}}
 
+	if v.IsNatsSource() {
+		// TODO - Volume secrets for other auth types.
+		volumes = append(volumes, corev1.Volume{
+			// TODO - BETTER NAME
+			Name: "my-secret-mount",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: v.Spec.Source.Nats.Auth.Token.Name,
+				},
+			},
+		})
+	}
+
 	containers, err := v.Spec.getType().getContainers(getContainerReq{
 		isbSvcType:      req.ISBSvcType,
 		env:             envVars,
@@ -294,7 +311,7 @@ func (v Vertex) GetPodSpec(req GetVertexPodSpecReq) (*corev1.PodSpec, error) {
 			if containers[i].Name == CtrSideInputsWatcher {
 				containers[i].VolumeMounts = append(containers[i].VolumeMounts, corev1.VolumeMount{Name: sideInputsVolName, MountPath: PathSideInputsMount})
 			} else {
-				// Readonly mount for user defined containers
+				// Readonly mount for user-defined containers
 				containers[i].VolumeMounts = append(containers[i].VolumeMounts, corev1.VolumeMount{Name: sideInputsVolName, MountPath: PathSideInputsMount, ReadOnly: true})
 			}
 		}
@@ -516,6 +533,10 @@ func (av AbstractVertex) HasUDTransformer() bool {
 
 func (av AbstractVertex) IsUDSource() bool {
 	return av.IsASource() && av.Source.UDSource != nil
+}
+
+func (av AbstractVertex) IsNatsSource() bool {
+	return av.IsASource() && av.Source.UDSource == nil && av.Source.Nats != nil
 }
 
 func (av AbstractVertex) IsASink() bool {

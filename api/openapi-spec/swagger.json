@@ -18701,7 +18701,7 @@
       "properties": {
         "auth": {
           "description": "Auth information",
-          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.NatsAuth"
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.UDNatsAuth"
         },
         "queue": {
           "description": "Queue is used for queue subscription.",

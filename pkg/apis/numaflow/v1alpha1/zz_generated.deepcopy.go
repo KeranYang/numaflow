@@ -1283,7 +1283,7 @@ func (in *NatsConfig) DeepCopyInto(out *NatsConfig) {
 	}
 	if in.Auth != nil {
 		in, out := &in.Auth, &out.Auth
-		*out = new(NatsAuth)
+		*out = new(UDNatsAuth)
 		(*in).DeepCopyInto(*out)
 	}
 	return
