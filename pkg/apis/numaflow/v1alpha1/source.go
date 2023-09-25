@@ -161,7 +161,7 @@ func (s Source) getNatsContainer(mainContainerReq getContainerReq) corev1.Contai
 		imagePullPolicy(mainContainerReq.imagePullPolicy). // Use the same image pull policy as the main container
 		appendVolumeMounts(mainContainerReq.volumeMounts...)
 	// TODO - ALL knowledge from user-defined nats package should be imported instead of hard-coded here
-	c.Image = "quay.io/numaio/numaflow-source/nats-source:v0.5.4"
+	c.Image = "quay.io/numaio/numaflow-source/nats-source:v0.5.10"
 	nats := s.Nats
 	if nats.Auth != nil && nats.Auth.Token != nil {
 		// TODO - add complete volume list for nats authentications and TLS

@@ -181,7 +181,8 @@ func (sp *SourceProcessor) Start(ctx context.Context) error {
 
 	// if the source is a user-defined source, we create a gRPC client for it.
 	var udsGRPCClient *udsource.GRPCBasedUDSource
-	if sp.VertexInstance.Vertex.IsUDSource() {
+	// TODO - Can be better.
+	if sp.VertexInstance.Vertex.IsUDSource() || sp.VertexInstance.Vertex.IsNatsSource() {
 		srcClient, err := sourceclient.New()
 		if err != nil {
 			return fmt.Errorf("failed to create a new gRPC client: %w", err)
