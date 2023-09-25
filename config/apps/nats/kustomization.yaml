@@ -1,3 +1,5 @@
 resources:
   - nats.yaml
 
+commonLabels:
+  "numaflow-e2e": "true"
