@@ -69,7 +69,9 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.Metadata":                       schema_pkg_apis_numaflow_v1alpha1_Metadata(ref),
 		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.NativeRedis":                    schema_pkg_apis_numaflow_v1alpha1_NativeRedis(ref),
 		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.NatsAuth":                       schema_pkg_apis_numaflow_v1alpha1_NatsAuth(ref),
-		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.NatsSource":                     schema_pkg_apis_numaflow_v1alpha1_NatsSource(ref),
+		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.NatsBasicAuth":                  schema_pkg_apis_numaflow_v1alpha1_NatsBasicAuth(ref),
+		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.NatsConfig":                     schema_pkg_apis_numaflow_v1alpha1_NatsConfig(ref),
+		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.NatsTLS":                        schema_pkg_apis_numaflow_v1alpha1_NatsTLS(ref),
 		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.PBQStorage":                     schema_pkg_apis_numaflow_v1alpha1_PBQStorage(ref),
 		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.PersistenceStrategy":            schema_pkg_apis_numaflow_v1alpha1_PersistenceStrategy(ref),
 		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.Pipeline":                       schema_pkg_apis_numaflow_v1alpha1_Pipeline(ref),
@@ -96,6 +98,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.Templates":                      schema_pkg_apis_numaflow_v1alpha1_Templates(ref),
 		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.Transformer":                    schema_pkg_apis_numaflow_v1alpha1_Transformer(ref),
 		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.UDF":                            schema_pkg_apis_numaflow_v1alpha1_UDF(ref),
+		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.UDNatsAuth":                     schema_pkg_apis_numaflow_v1alpha1_UDNatsAuth(ref),
 		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.UDSink":                         schema_pkg_apis_numaflow_v1alpha1_UDSink(ref),
 		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.UDSource":                       schema_pkg_apis_numaflow_v1alpha1_UDSource(ref),
 		"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.UDTransformer":                  schema_pkg_apis_numaflow_v1alpha1_UDTransformer(ref),
@@ -2757,15 +2760,43 @@ func schema_pkg_apis_numaflow_v1alpha1_NatsAuth(ref common.ReferenceCallback) co
 	}
 }
 
-func schema_pkg_apis_numaflow_v1alpha1_NatsSource(ref common.ReferenceCallback) common.OpenAPIDefinition {
+func schema_pkg_apis_numaflow_v1alpha1_NatsBasicAuth(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Type: []string{"object"},
+				Description: "NatsBasicAuth represents the basic authentication approach which contains a username and a password.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"user": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Secret for auth user",
+							Ref:         ref("k8s.io/api/core/v1.SecretKeySelector"),
+						},
+					},
+					"password": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Secret for auth password",
+							Ref:         ref("k8s.io/api/core/v1.SecretKeySelector"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/api/core/v1.SecretKeySelector"},
+	}
+}
+
+func schema_pkg_apis_numaflow_v1alpha1_NatsConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "NatsConfig represents the configuration for the Nats client.",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"url": {
 						SchemaProps: spec.SchemaProps{
-							Description: "URL to connect to NATS cluster, multiple urls could be separated by comma.",
+							Description: "URL to connect to Nats cluster, multiple urls could be separated by comma.",
 							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
@@ -2789,14 +2820,14 @@ func schema_pkg_apis_numaflow_v1alpha1_NatsSource(ref common.ReferenceCallback) 
 					},
 					"tls": {
 						SchemaProps: spec.SchemaProps{
-							Description: "TLS configuration for the nats client.",
-							Ref:         ref("github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.TLS"),
+							Description: "TLS configuration for the Nats client.",
+							Ref:         ref("github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.NatsTLS"),
 						},
 					},
 					"auth": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Auth information",
-							Ref:         ref("github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.NatsAuth"),
+							Ref:         ref("github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.UDNatsAuth"),
 						},
 					},
 				},
@@ -2804,7 +2835,46 @@ func schema_pkg_apis_numaflow_v1alpha1_NatsSource(ref common.ReferenceCallback) 
 			},
 		},
 		Dependencies: []string{
-			"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.NatsAuth", "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.TLS"},
+			"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.NatsTLS", "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.UDNatsAuth"},
+	}
+}
+
+func schema_pkg_apis_numaflow_v1alpha1_NatsTLS(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "NatsTLS defines the TLS configuration for the Nats client.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"insecureSkipVerify": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"boolean"},
+							Format: "",
+						},
+					},
+					"caCertSecret": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CACertSecret refers to the secret that contains the CA cert",
+							Ref:         ref("k8s.io/api/core/v1.SecretKeySelector"),
+						},
+					},
+					"clientCertSecret": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CertSecret refers to the secret that contains the cert",
+							Ref:         ref("k8s.io/api/core/v1.SecretKeySelector"),
+						},
+					},
+					"clientKeySecret": {
+						SchemaProps: spec.SchemaProps{
+							Description: "KeySecret refers to the secret that contains the key",
+							Ref:         ref("k8s.io/api/core/v1.SecretKeySelector"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/api/core/v1.SecretKeySelector"},
 	}
 }
 
@@ -3836,7 +3906,7 @@ func schema_pkg_apis_numaflow_v1alpha1_Source(ref common.ReferenceCallback) comm
 					},
 					"nats": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.NatsSource"),
+							Ref: ref("github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.NatsConfig"),
 						},
 					},
 					"redisStreams": {
@@ -3858,7 +3928,7 @@ func schema_pkg_apis_numaflow_v1alpha1_Source(ref common.ReferenceCallback) comm
 			},
 		},
 		Dependencies: []string{
-			"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.GeneratorSource", "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.HTTPSource", "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.KafkaSource", "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.NatsSource", "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.RedisStreamsSource", "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.UDSource", "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.UDTransformer"},
+			"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.GeneratorSource", "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.HTTPSource", "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.KafkaSource", "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.NatsConfig", "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.RedisStreamsSource", "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.UDSource", "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.UDTransformer"},
 	}
 }
 
@@ -4083,6 +4153,39 @@ func schema_pkg_apis_numaflow_v1alpha1_UDF(ref common.ReferenceCallback) common.
 		},
 		Dependencies: []string{
 			"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.Container", "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.Function", "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.GroupBy"},
+	}
+}
+
+func schema_pkg_apis_numaflow_v1alpha1_UDNatsAuth(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "UDNatsAuth represents the authentication information for the Nats client.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"basic": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Basic auth, which contains a username and a password,",
+							Ref:         ref("github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.NatsBasicAuth"),
+						},
+					},
+					"token": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Token auth",
+							Ref:         ref("k8s.io/api/core/v1.SecretKeySelector"),
+						},
+					},
+					"nkey": {
+						SchemaProps: spec.SchemaProps{
+							Description: "NKey auth",
+							Ref:         ref("k8s.io/api/core/v1.SecretKeySelector"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1.NatsBasicAuth", "k8s.io/api/core/v1.SecretKeySelector"},
 	}
 }
 

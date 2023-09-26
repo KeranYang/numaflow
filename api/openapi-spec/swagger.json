@@ -18676,7 +18676,22 @@
         }
       }
     },
-    "io.numaproj.numaflow.v1alpha1.NatsSource": {
+    "io.numaproj.numaflow.v1alpha1.NatsBasicAuth": {
+      "description": "NatsBasicAuth represents the basic authentication approach which contains a username and a password.",
+      "type": "object",
+      "properties": {
+        "password": {
+          "description": "Secret for auth password",
+          "$ref": "#/definitions/io.k8s.api.core.v1.SecretKeySelector"
+        },
+        "user": {
+          "description": "Secret for auth user",
+          "$ref": "#/definitions/io.k8s.api.core.v1.SecretKeySelector"
+        }
+      }
+    },
+    "io.numaproj.numaflow.v1alpha1.NatsConfig": {
+      "description": "NatsConfig represents the configuration for the Nats client.",
       "type": "object",
       "required": [
         "url",
@@ -18686,7 +18701,7 @@
       "properties": {
         "auth": {
           "description": "Auth information",
-          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.NatsAuth"
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.UDNatsAuth"
         },
         "queue": {
           "description": "Queue is used for queue subscription.",
@@ -18697,12 +18712,33 @@
           "type": "string"
         },
         "tls": {
-          "description": "TLS configuration for the nats client.",
-          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.TLS"
+          "description": "TLS configuration for the Nats client.",
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.NatsTLS"
         },
         "url": {
-          "description": "URL to connect to NATS cluster, multiple urls could be separated by comma.",
+          "description": "URL to connect to Nats cluster, multiple urls could be separated by comma.",
           "type": "string"
+        }
+      }
+    },
+    "io.numaproj.numaflow.v1alpha1.NatsTLS": {
+      "description": "NatsTLS defines the TLS configuration for the Nats client.",
+      "type": "object",
+      "properties": {
+        "caCertSecret": {
+          "description": "CACertSecret refers to the secret that contains the CA cert",
+          "$ref": "#/definitions/io.k8s.api.core.v1.SecretKeySelector"
+        },
+        "clientCertSecret": {
+          "description": "CertSecret refers to the secret that contains the cert",
+          "$ref": "#/definitions/io.k8s.api.core.v1.SecretKeySelector"
+        },
+        "clientKeySecret": {
+          "description": "KeySecret refers to the secret that contains the key",
+          "$ref": "#/definitions/io.k8s.api.core.v1.SecretKeySelector"
+        },
+        "insecureSkipVerify": {
+          "type": "boolean"
         }
       }
     },
@@ -19267,7 +19303,7 @@
           "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.KafkaSource"
         },
         "nats": {
-          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.NatsSource"
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.NatsConfig"
         },
         "redisStreams": {
           "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.RedisStreamsSource"
@@ -19389,6 +19425,24 @@
         },
         "groupBy": {
           "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.GroupBy"
+        }
+      }
+    },
+    "io.numaproj.numaflow.v1alpha1.UDNatsAuth": {
+      "description": "UDNatsAuth represents the authentication information for the Nats client.",
+      "type": "object",
+      "properties": {
+        "basic": {
+          "description": "Basic auth, which contains a username and a password,",
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.NatsBasicAuth"
+        },
+        "nkey": {
+          "description": "NKey auth",
+          "$ref": "#/definitions/io.k8s.api.core.v1.SecretKeySelector"
+        },
+        "token": {
+          "description": "Token auth",
+          "$ref": "#/definitions/io.k8s.api.core.v1.SecretKeySelector"
         }
       }
     },

@@ -65,8 +65,8 @@ func GetConfigMapFromVolume(selector *corev1.ConfigMapKeySelector) (string, erro
 	if err != nil {
 		return "", fmt.Errorf("failed to get configMap value of name: %s, key: %s, %w", selector.Name, selector.Key, err)
 	}
-	// Contents edied by tools like "vim" always have an extra invisible "\n" in the end,
-	// and it's often negleted, but it makes differences for some of the applications.
+	// Contents edited by tools like "vim" always have an extra invisible "\n" in the end,
+	// and it's often neglected, but it makes differences for some of the applications.
 	return strings.TrimSuffix(string(data), "\n"), nil
 }
 
@@ -78,23 +78,23 @@ func GetConfigMapVolumePath(selector *corev1.ConfigMapKeySelector) (string, erro
 	return fmt.Sprintf("/var/numaflow/config/%s/%s", selector.Name, selector.Key), nil
 }
 
-// VolumesFromSecretsOrConfigMaps builds volumes and volumeMounts spec based on
+// VolumesFromSecretsAndConfigMaps builds volumes and volumeMounts spec based on
 // the obj and its children's secretKeyselector and configMapKeySelector
 func VolumesFromSecretsAndConfigMaps(obj interface{}) ([]corev1.Volume, []corev1.VolumeMount) {
-	v := []corev1.Volume{}
-	vm := []corev1.VolumeMount{}
+	var v []corev1.Volume
+	var vm []corev1.VolumeMount
 	volSecrets, volSecretMounts := volumesFromSecretsOrConfigMaps(obj, secretKeySelectorType)
 	v = append(v, volSecrets...)
 	vm = append(vm, volSecretMounts...)
-	volConfigMaps, volCofigMapMounts := volumesFromSecretsOrConfigMaps(obj, configMapKeySelectorType)
+	volConfigMaps, volConfigMapMounts := volumesFromSecretsOrConfigMaps(obj, configMapKeySelectorType)
 	v = append(v, volConfigMaps...)
-	vm = append(vm, volCofigMapMounts...)
+	vm = append(vm, volConfigMapMounts...)
 	return v, vm
 }
 
 func volumesFromSecretsOrConfigMaps(obj interface{}, t reflect.Type) ([]corev1.Volume, []corev1.VolumeMount) {
-	resultVolumes := []corev1.Volume{}
-	resultMounts := []corev1.VolumeMount{}
+	var resultVolumes []corev1.Volume
+	var resultMounts []corev1.VolumeMount
 	values := findTypeValues(obj, t)
 	if len(values) == 0 {
 		return resultVolumes, resultMounts
@@ -121,7 +121,7 @@ func volumesFromSecretsOrConfigMaps(obj interface{}, t reflect.Type) ([]corev1.V
 
 // Find all the values obj's children matching provided type, type needs to be a pointer
 func findTypeValues(obj interface{}, t reflect.Type) []interface{} {
-	result := []interface{}{}
+	var result []interface{}
 	value := reflect.ValueOf(obj)
 	findTypesRecursive(&result, value, t)
 	return result
@@ -166,7 +166,7 @@ func findTypesRecursive(result *[]interface{}, obj reflect.Value, t reflect.Type
 	}
 }
 
-// generateSecretVolumeSpecs builds a "volume" and "volumeMount"spec with a secretKeySelector
+// generateSecretVolumeSpecs builds a "volume" and "volumeMount" spec with a secretKeySelector
 func generateSecretVolumeSpecs(selector *corev1.SecretKeySelector) (corev1.Volume, corev1.VolumeMount) {
 	volName := strings.ReplaceAll("secret-"+selector.Name, "_", "-")
 	return corev1.Volume{
@@ -183,7 +183,7 @@ func generateSecretVolumeSpecs(selector *corev1.SecretKeySelector) (corev1.Volum
 		}
 }
 
-// generateConfigMapVolumeSpecs builds a "volume" and "volumeMount"spec with a configMapKeySelector
+// generateConfigMapVolumeSpecs builds a "volume" and "volumeMount" spec with a configMapKeySelector
 func generateConfigMapVolumeSpecs(selector *corev1.ConfigMapKeySelector) (corev1.Volume, corev1.VolumeMount) {
 	volName := strings.ReplaceAll("cm-"+selector.Name, "_", "-")
 	return corev1.Volume{
@@ -203,7 +203,7 @@ func generateConfigMapVolumeSpecs(selector *corev1.ConfigMapKeySelector) (corev1
 }
 
 func uniqueVolumes(vols []corev1.Volume) []corev1.Volume {
-	rVols := []corev1.Volume{}
+	var rVols []corev1.Volume
 	keys := make(map[string]bool)
 	for _, e := range vols {
 		if _, value := keys[e.Name]; !value {
@@ -215,7 +215,7 @@ func uniqueVolumes(vols []corev1.Volume) []corev1.Volume {
 }
 
 func uniqueVolumeMounts(mounts []corev1.VolumeMount) []corev1.VolumeMount {
-	rMounts := []corev1.VolumeMount{}
+	var rMounts []corev1.VolumeMount
 	keys := make(map[string]bool)
 	for _, e := range mounts {
 		if _, value := keys[e.Name]; !value {

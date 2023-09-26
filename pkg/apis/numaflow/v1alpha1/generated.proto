@@ -773,8 +773,20 @@ message NatsAuth {
   optional k8s.io.api.core.v1.SecretKeySelector nkey = 3;
 }
 
-message NatsSource {
-  // URL to connect to NATS cluster, multiple urls could be separated by comma.
+// NatsBasicAuth represents the basic authentication approach which contains a username and a password.
+message NatsBasicAuth {
+  // Secret for auth user
+  // +optional
+  optional k8s.io.api.core.v1.SecretKeySelector user = 1;
+
+  // Secret for auth password
+  // +optional
+  optional k8s.io.api.core.v1.SecretKeySelector password = 2;
+}
+
+// NatsConfig represents the configuration for the Nats client.
+message NatsConfig {
+  // URL to connect to Nats cluster, multiple urls could be separated by comma.
   optional string url = 1;
 
   // Subject holds the name of the subject onto which messages are published.
@@ -783,13 +795,31 @@ message NatsSource {
   // Queue is used for queue subscription.
   optional string queue = 3;
 
-  // TLS configuration for the nats client.
+  // TLS configuration for the Nats client.
   // +optional
-  optional TLS tls = 4;
+  optional NatsTLS tls = 4;
 
   // Auth information
   // +optional
-  optional NatsAuth auth = 5;
+  optional UDNatsAuth auth = 5;
+}
+
+// NatsTLS defines the TLS configuration for the Nats client.
+message NatsTLS {
+  // +optional
+  optional bool insecureSkipVerify = 1;
+
+  // CACertSecret refers to the secret that contains the CA cert
+  // +optional
+  optional k8s.io.api.core.v1.SecretKeySelector caCertSecret = 2;
+
+  // CertSecret refers to the secret that contains the cert
+  // +optional
+  optional k8s.io.api.core.v1.SecretKeySelector certSecret = 3;
+
+  // KeySecret refers to the secret that contains the key
+  // +optional
+  optional k8s.io.api.core.v1.SecretKeySelector keySecret = 4;
 }
 
 // PBQStorage defines the persistence configuration for a vertex.
@@ -1138,7 +1168,7 @@ message Source {
   optional HTTPSource http = 3;
 
   // +optional
-  optional NatsSource nats = 4;
+  optional NatsConfig nats = 4;
 
   // +optional
   optional RedisStreamsSource redisStreams = 5;
@@ -1225,6 +1255,21 @@ message UDF {
 
   // +optional
   optional GroupBy groupBy = 3;
+}
+
+// UDNatsAuth represents the authentication information for the Nats client.
+message UDNatsAuth {
+  // Basic auth, which contains a username and a password,
+  // +optional
+  optional NatsBasicAuth basic = 1;
+
+  // Token auth
+  // +optional
+  optional k8s.io.api.core.v1.SecretKeySelector token = 2;
+
+  // NKey auth
+  // +optional
+  optional k8s.io.api.core.v1.SecretKeySelector nkey = 3;
 }
 
 message UDSink {

@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strings"
 
+	"gopkg.in/yaml.v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
@@ -34,7 +35,7 @@ type Source struct {
 	// +optional
 	HTTP *HTTPSource `json:"http,omitempty" protobuf:"bytes,3,opt,name=http"`
 	// +optional
-	Nats *NatsSource `json:"nats,omitempty" protobuf:"bytes,4,opt,name=nats"`
+	Nats *NatsConfig `json:"nats,omitempty" protobuf:"bytes,4,opt,name=nats"`
 	// +optional
 	RedisStreams *RedisStreamsSource `json:"redisStreams,omitempty" protobuf:"bytes,5,opt,name=redisStreams"`
 	// +optional
@@ -52,6 +53,10 @@ func (s Source) getContainers(req getContainerReq) ([]corev1.Container, error) {
 	}
 	if s.UDSource != nil {
 		containers = append(containers, s.getUDSourceContainer(req))
+	}
+	// NATS source is a special case, it uses the user-defined nats image, but it's not specified as UDSource.
+	if s.Nats != nil {
+		containers = append(containers, s.getNatsContainer(req))
 	}
 	return containers, nil
 }
@@ -148,4 +153,54 @@ func (s Source) getUDSourceContainer(mainContainerReq getContainerReq) corev1.Co
 		TimeoutSeconds:      30,
 	}
 	return container
+}
+
+func (s Source) getNatsContainer(mainContainerReq getContainerReq) corev1.Container {
+	c := containerBuilder{}.
+		name(CtrNatsSource).
+		imagePullPolicy(mainContainerReq.imagePullPolicy). // Use the same image pull policy as the main container
+		appendVolumeMounts(mainContainerReq.volumeMounts...)
+	// TODO - ALL knowledge from user-defined nats package should be imported instead of hard-coded here
+	c.Image = "quay.io/numaio/numaflow-source/nats-source:v0.5.10"
+	nats := s.Nats
+	if nats.Auth != nil && nats.Auth.Token != nil {
+		// TODO - add complete volume list for nats authentications and TLS
+		c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{
+			// TODO - "my-secret-mount" and "/etc/secrets" should be const from the user-defined NATS package
+			Name:      "my-secret-mount",
+			MountPath: "/etc/secrets/" + nats.Auth.Token.Name,
+		})
+	}
+	c.Env = append(c.Env, s.natsUDSourceEnvs()...)
+	container := c.build()
+	container.LivenessProbe = &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Path:   "/sidecar-livez",
+				Port:   intstr.FromInt(VertexMetricsPort),
+				Scheme: corev1.URISchemeHTTPS,
+			},
+		},
+		InitialDelaySeconds: 30,
+		PeriodSeconds:       60,
+		TimeoutSeconds:      30,
+	}
+	return container
+}
+
+// natsUDSourceEnvs returns envs for configuring a nats source vertex.
+func (s Source) natsUDSourceEnvs() []corev1.EnvVar {
+	if s.Nats == nil {
+		return []corev1.EnvVar{}
+	}
+	// TODO - The names should be a const from the user-defined NATS package
+	return []corev1.EnvVar{
+		{Name: "CONFIG_FORMAT", Value: "yaml"},
+		{Name: "NATS_CONFIG", Value: stringify(s.Nats)},
+	}
+}
+
+func stringify(x *NatsConfig) string {
+	b, _ := yaml.Marshal(x)
+	return string(b)
 }

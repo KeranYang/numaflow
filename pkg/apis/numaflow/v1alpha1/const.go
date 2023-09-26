@@ -62,12 +62,13 @@ const (
 	JetStreamClientAuthSecretPasswordKey = "client-auth-password" // key for client auth password secret
 	JetStreamConfigMapKey                = "nats-js"              // key for nats-js.conf in the configmap
 
-	// container names.
+	// container names
 	CtrInit              = "init"
 	CtrMain              = "numa"
 	CtrUdf               = "udf"
 	CtrUdsink            = "udsink"
 	CtrUdsource          = "udsource"
+	CtrNatsSource        = "nats-source"
 	CtrUdtransformer     = "transformer"
 	CtrUdSideInput       = "udsi"
 	CtrInitSideInputs    = "init-side-inputs"
