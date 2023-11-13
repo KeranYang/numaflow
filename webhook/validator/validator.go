@@ -84,7 +84,7 @@ func GetValidator(ctx context.Context, client kubernetes.Interface, NumaClient v
 	}
 }
 
-// DeniedResponse constructs a denied AdmissionResonse
+// DeniedResponse constructs a denied AdmissionResponse
 func DeniedResponse(reason string, args ...interface{}) *admissionv1.AdmissionResponse {
 	result := apierrors.NewBadRequest(fmt.Sprintf(reason, args...)).Status()
 	return &admissionv1.AdmissionResponse{
@@ -93,7 +93,7 @@ func DeniedResponse(reason string, args ...interface{}) *admissionv1.AdmissionRe
 	}
 }
 
-// AllowedResponse constructs an allowed AdmissionResonse
+// AllowedResponse constructs an allowed AdmissionResponse
 func AllowedResponse() *admissionv1.AdmissionResponse {
 	return &admissionv1.AdmissionResponse{
 		Allowed: true,

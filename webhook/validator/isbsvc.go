@@ -29,15 +29,14 @@ import (
 
 type isbsvcValidator struct {
 	client kubernetes.Interface
-	isbscv v1alpha1.InterStepBufferServiceInterface
+	isbsvc v1alpha1.InterStepBufferServiceInterface
 
 	oldISBService *dfv1.InterStepBufferService
 	newISBService *dfv1.InterStepBufferService
 }
 
-// NewISBServiceValidator returns ISBService validator
 func NewISBServiceValidator(client kubernetes.Interface, isbsvc v1alpha1.InterStepBufferServiceInterface, old, new *dfv1.InterStepBufferService) Validator {
-	return &isbsvcValidator{client: client, isbscv: isbsvc, oldISBService: old, newISBService: new}
+	return &isbsvcValidator{client: client, isbsvc: isbsvc, oldISBService: old, newISBService: new}
 }
 
 func (v *isbsvcValidator) ValidateCreate(ctx context.Context) *admissionv1.AdmissionResponse {
@@ -48,11 +47,9 @@ func (v *isbsvcValidator) ValidateCreate(ctx context.Context) *admissionv1.Admis
 }
 
 func (v *isbsvcValidator) ValidateUpdate(ctx context.Context) *admissionv1.AdmissionResponse {
-
 	if err := isbsvccontroller.ValidateInterStepBufferService(v.newISBService); err != nil {
 		return DeniedResponse(err.Error())
 	}
-
 	switch {
 	case v.oldISBService.Spec.JetStream != nil:
 		if v.newISBService.Spec.Redis != nil {
@@ -63,6 +60,5 @@ func (v *isbsvcValidator) ValidateUpdate(ctx context.Context) *admissionv1.Admis
 			return DeniedResponse("Can not change ISB Service type from Redis to Jetstream")
 		}
 	}
-
 	return AllowedResponse()
 }
