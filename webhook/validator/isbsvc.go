@@ -20,35 +20,28 @@ import (
 	"context"
 
 	admissionv1 "k8s.io/api/admission/v1"
-	"k8s.io/client-go/kubernetes"
 
 	dfv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaflow/pkg/client/clientset/versioned/typed/numaflow/v1alpha1"
 	isbsvccontroller "github.com/numaproj/numaflow/pkg/reconciler/isbsvc"
 )
 
 type isbsvcValidator struct {
-	// keran - is this used?
-	client kubernetes.Interface
-	// keran - is this used?
-	isbsvc v1alpha1.InterStepBufferServiceInterface
-
 	oldISBService *dfv1.InterStepBufferService
 	newISBService *dfv1.InterStepBufferService
 }
 
-func NewISBServiceValidator(client kubernetes.Interface, isbsvc v1alpha1.InterStepBufferServiceInterface, old, new *dfv1.InterStepBufferService) Validator {
-	return &isbsvcValidator{client: client, isbsvc: isbsvc, oldISBService: old, newISBService: new}
+func NewISBServiceValidator(old, new *dfv1.InterStepBufferService) Validator {
+	return &isbsvcValidator{oldISBService: old, newISBService: new}
 }
 
-func (v *isbsvcValidator) ValidateCreate(ctx context.Context) *admissionv1.AdmissionResponse {
+func (v *isbsvcValidator) ValidateCreate(_ context.Context) *admissionv1.AdmissionResponse {
 	if err := isbsvccontroller.ValidateInterStepBufferService(v.newISBService); err != nil {
 		return DeniedResponse(err.Error())
 	}
 	return AllowedResponse()
 }
 
-func (v *isbsvcValidator) ValidateUpdate(ctx context.Context) *admissionv1.AdmissionResponse {
+func (v *isbsvcValidator) ValidateUpdate(_ context.Context) *admissionv1.AdmissionResponse {
 	if err := isbsvccontroller.ValidateInterStepBufferService(v.newISBService); err != nil {
 		return DeniedResponse(err.Error())
 	}

@@ -57,8 +57,7 @@ func GetValidator(ctx context.Context, client kubernetes.Interface, NumaClient v
 				return nil, err
 			}
 		}
-		isbSvcClient := NumaClient.InterStepBufferServices(newSpec.Namespace)
-		return NewISBServiceValidator(client, isbSvcClient, oldSpec, newSpec), nil
+		return NewISBServiceValidator(oldSpec, newSpec), nil
 	case dfv1.PipelineGroupVersionKind.Kind:
 		var newSpec *dfv1.Pipeline
 		if len(newBytes) > 0 {
