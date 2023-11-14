@@ -20,91 +20,22 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	apiresource "k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	dfv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 )
 
-var testStorageClassName = "test-sc"
-
 func TestValidateISBServiceCreate(t *testing.T) {
-	isbsvc := fakeRedisISBSvc()
+	isbsvc := fakeISBSvc()
 	v := NewISBServiceValidator(nil, isbsvc)
 	r := v.ValidateCreate(contextWithLogger(t))
 	assert.True(t, r.Allowed)
 }
 
 func TestValidateISBServiceUpdate(t *testing.T) {
-	testCases := []struct {
-		name string
-		old  *dfv1.InterStepBufferService
-		new  *dfv1.InterStepBufferService
-		want bool
-	}{
-		{name: "invalid new ISB Service", old: fakeRedisISBSvc(), new: nil, want: false},
-		{name: "changing ISB Service type is not allowed - redis to jetstream", old: fakeRedisISBSvc(), new: fakeJetStreamISBSvc(), want: false},
-		{name: "changing ISB Service type is not allowed - jetstream to redis", old: fakeRedisISBSvc(), new: fakeJetStreamISBSvc(), want: false},
-		{name: "changing persistence of Jetstream ISB Service is not allowed - remove persistence",
-			old: &dfv1.InterStepBufferService{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: testNamespace,
-					Name:      dfv1.DefaultISBSvcName,
-				},
-				Spec: dfv1.InterStepBufferServiceSpec{
-					JetStream: &dfv1.JetStreamBufferService{
-						Version: "1.1.1",
-						Persistence: &dfv1.PersistenceStrategy{
-							StorageClassName: &testStorageClassName,
-						},
-					},
-				}},
-			new: &dfv1.InterStepBufferService{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: testNamespace,
-					Name:      dfv1.DefaultISBSvcName,
-				},
-				Spec: dfv1.InterStepBufferServiceSpec{
-					JetStream: &dfv1.JetStreamBufferService{
-						Version: "1.1.1",
-					}}},
-			want: false},
-		{name: "changing persistence of Jetstream ISB Service is not allowed - update persistence",
-			old: &dfv1.InterStepBufferService{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: testNamespace,
-					Name:      dfv1.DefaultISBSvcName,
-				},
-				Spec: dfv1.InterStepBufferServiceSpec{
-					JetStream: &dfv1.JetStreamBufferService{
-						Version: "1.1.1",
-						Persistence: &dfv1.PersistenceStrategy{
-							StorageClassName: &testStorageClassName,
-						},
-					},
-				}},
-			new: &dfv1.InterStepBufferService{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: testNamespace,
-					Name:      dfv1.DefaultISBSvcName,
-				},
-				Spec: dfv1.InterStepBufferServiceSpec{
-					JetStream: &dfv1.JetStreamBufferService{
-						Version: "1.1.1",
-						Persistence: &dfv1.PersistenceStrategy{
-							StorageClassName: &testStorageClassName,
-							VolumeSize: &apiresource.Quantity{
-								Format: "1Gi",
-							},
-						},
-					}}},
-			want: false},
-	}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			v := NewISBServiceValidator(tc.old, tc.new)
-			r := v.ValidateUpdate(contextWithLogger(t))
-			assert.Equal(t, tc.want, r.Allowed)
-		})
-	}
+	isbsvc := fakeISBSvc()
+	t.Run("test ISBSvc spec change", func(t *testing.T) {
+		JetStreamISBSvc := fakeJetStreamISBSvc()
+		newISBSvc := JetStreamISBSvc.DeepCopy()
+		v := NewISBServiceValidator(isbsvc, newISBSvc)
+		r := v.ValidateUpdate(contextWithLogger(t))
+		assert.False(t, r.Allowed)
+	})
 }

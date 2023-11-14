@@ -14,11 +14,12 @@ const (
 
 var (
 	fakeK8sClient      = fakeClient.NewSimpleClientset()
+	fakeISBSvcClient   = fake.FakeInterStepBufferServices{}
 	fakePipelineClient = fake.FakePipelines{}
 	fakeNumaClient     = fake.FakeNumaflowV1alpha1{}
 )
 
-func fakeRedisISBSvc() *dfv1.InterStepBufferService {
+func fakeISBSvc() *dfv1.InterStepBufferService {
 	return &dfv1.InterStepBufferService{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: testNamespace,
@@ -37,7 +38,7 @@ func fakeRedisISBSvc() *dfv1.InterStepBufferService {
 func fakeJetStreamISBSvc() *dfv1.InterStepBufferService {
 	return &dfv1.InterStepBufferService{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: testNamespace,
+			Namespace: "test-ns",
 			Name:      dfv1.DefaultISBSvcName,
 		},
 		Spec: dfv1.InterStepBufferServiceSpec{
@@ -52,7 +53,7 @@ func fakePipeline() *dfv1.Pipeline {
 	return &dfv1.Pipeline{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-pl",
-			Namespace: testNamespace,
+			Namespace: "test-ns",
 		},
 		Spec: dfv1.PipelineSpec{
 			Vertices: []dfv1.AbstractVertex{
