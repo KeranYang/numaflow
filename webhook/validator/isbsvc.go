@@ -28,7 +28,9 @@ import (
 )
 
 type isbsvcValidator struct {
+	// keran - is this used?
 	client kubernetes.Interface
+	// keran - is this used?
 	isbsvc v1alpha1.InterStepBufferServiceInterface
 
 	oldISBService *dfv1.InterStepBufferService
