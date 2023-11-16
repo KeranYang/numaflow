@@ -50,9 +50,21 @@ func (v *isbsvcValidator) ValidateUpdate(_ context.Context) *admissionv1.Admissi
 		if v.newISBService.Spec.Redis != nil {
 			return DeniedResponse("Can not change ISB Service type from Jetstream to Redis")
 		}
+		// check the persistence of ISB Service is not changed
+		if v.oldISBService.Spec.JetStream.Persistence == nil && v.newISBService.Spec.JetStream.Persistence != nil ||
+			v.oldISBService.Spec.JetStream.Persistence != nil && v.newISBService.Spec.JetStream.Persistence == nil ||
+			v.oldISBService.Spec.JetStream.Persistence != nil && v.newISBService.Spec.JetStream.Persistence != nil && *v.oldISBService.Spec.JetStream.Persistence != *v.newISBService.Spec.JetStream.Persistence {
+			return DeniedResponse("Can not change persistence of Jetstream ISB Service")
+		}
 	case v.oldISBService.Spec.Redis != nil:
 		if v.newISBService.Spec.JetStream != nil {
 			return DeniedResponse("Can not change ISB Service type from Redis to Jetstream")
+		}
+		// check the persistence of ISB Service is not changed
+		if v.oldISBService.Spec.Redis.Native.Persistence == nil && v.newISBService.Spec.Redis.Native.Persistence != nil ||
+			v.oldISBService.Spec.Redis.Native.Persistence != nil && v.newISBService.Spec.Redis.Native.Persistence == nil ||
+			v.oldISBService.Spec.Redis.Native.Persistence != nil && v.newISBService.Spec.Redis.Native.Persistence != nil && *v.oldISBService.Spec.Redis.Native.Persistence != *v.newISBService.Spec.Redis.Native.Persistence {
+			return DeniedResponse("Can not change persistence of Redis ISB Service")
 		}
 	}
 	return AllowedResponse()
