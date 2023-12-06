@@ -526,23 +526,23 @@ type IdleSource struct {
 	IncrementBy *metav1.Duration `json:"incrementBy,omitempty" protobuf:"bytes,3,opt,name=incrementBy"`
 }
 
-func (is IdleSource) GetThreshold() time.Duration {
+func (is *IdleSource) GetThreshold() time.Duration {
 	if is.Threshold != nil {
 		return is.Threshold.Duration
 	}
-
+	// this line should never be reached as the pipeline validation requires the threshold to be set
 	return time.Duration(0)
 }
 
-func (is IdleSource) GetIncrementBy() time.Duration {
+func (is *IdleSource) GetIncrementBy() time.Duration {
 	if is.IncrementBy != nil {
 		return is.IncrementBy.Duration
 	}
-
+	// this line should never be reached as the pipeline validation requires the incrementBy to be set
 	return time.Duration(0)
 }
 
-func (is IdleSource) GetStepInterval() time.Duration {
+func (is *IdleSource) GetStepInterval() time.Duration {
 	if is.StepInterval != nil {
 		return is.StepInterval.Duration
 	}
