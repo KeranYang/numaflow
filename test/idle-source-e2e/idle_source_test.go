@@ -44,7 +44,7 @@ func (is *IdleSourceSuite) TestIdleKeyedReducePipeline() {
 
 	done := make(chan struct{})
 	go func() {
-		// publish messages to source vertex, with event time starting from 60000
+		// publish messages to source vertex, with event time starting from 100
 		startTime := 100
 		for i := 0; true; i++ {
 			select {
