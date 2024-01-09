@@ -125,7 +125,7 @@ subjects:
 ---
 apiVersion: v1
 data:
-  server.disable.auth: "false"
+  server.disable.auth: "true"
 kind: ConfigMap
 metadata:
   name: numaflow-cmd-params-config
@@ -205,7 +205,6 @@ spec:
       containers:
       - args:
         - server
-        - --disable-auth=false
         env:
         - name: NAMESPACE
           valueFrom:
