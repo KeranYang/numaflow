@@ -57,6 +57,7 @@ spec:
           image: quay.io/numaproj/numaflow:latest
           args:
           - "server"
+          - "--disable-auth=false"
           imagePullPolicy: Always
           volumeMounts:
           - mountPath: /ui/build/runtime-env.js
