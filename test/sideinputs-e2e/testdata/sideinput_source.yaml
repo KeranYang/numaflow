@@ -18,6 +18,7 @@ spec:
       source:
         udsource:
           container:
+            # test
             image: "quay.io/numaio/numaflow-source/simple_source_with_sideinput:latest"
       sideInputs:
         - myticker
