@@ -185,7 +185,7 @@ func (sp *SourceProcessor) Start(ctx context.Context) error {
 	var udsGRPCClient *udsource.GRPCBasedUDSource
 	if sp.VertexInstance.Vertex.IsUDSource() {
 		// Wait for server info to be ready
-		serverInfo, err := sdkserverinfo.SDKServerInfo()
+		serverInfo, err := sdkserverinfo.SDKServerInfo(sdkserverinfo.WithServerInfoFilePath("/var/run/numaflow/sourcer-server-info"))
 		if err != nil {
 			return err
 		}
