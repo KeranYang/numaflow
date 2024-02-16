@@ -186,7 +186,7 @@ func (sp *SourceProcessor) Start(ctx context.Context) error {
 	if sp.VertexInstance.Vertex.IsUDSource() {
 		log.Info("kerantest - I am a udsource, I am looking for server info file...")
 		// Wait for server info to be ready
-		serverInfo, err := sdkserverinfo.SDKServerInfo(sdkserverinfo.WithServerInfoFilePath("/var/run/numaflow/sourcer-server-info"))
+		serverInfo, err := sdkserverinfo.SDKServerInfo()
 		if err != nil {
 			log.Info("kerantest - I couldn't find it.")
 			log.Info(err.Error())
