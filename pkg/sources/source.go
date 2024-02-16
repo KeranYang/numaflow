@@ -184,11 +184,16 @@ func (sp *SourceProcessor) Start(ctx context.Context) error {
 	// if the source is a user-defined source, we create a gRPC client for it.
 	var udsGRPCClient *udsource.GRPCBasedUDSource
 	if sp.VertexInstance.Vertex.IsUDSource() {
+		log.Info("kerantest - I am a udsource, I am looking for server info file...")
 		// Wait for server info to be ready
 		serverInfo, err := sdkserverinfo.SDKServerInfo(sdkserverinfo.WithServerInfoFilePath("/var/run/numaflow/sourcer-server-info"))
 		if err != nil {
+			log.Info("kerantest - I couldn't find it.")
+			log.Info(err.Error())
 			return err
 		}
+		log.Info("kerantest - I found it.")
+		log.Info(serverInfo)
 
 		srcClient, err := sourceclient.New(serverInfo)
 		if err != nil {
