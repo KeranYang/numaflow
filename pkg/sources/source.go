@@ -219,7 +219,7 @@ func (sp *SourceProcessor) Start(ctx context.Context) error {
 	maxMessageSize := sharedutil.LookupEnvIntOr(dfv1.EnvGRPCMaxMessageSize, sdkclient.DefaultGRPCMaxMessageSize)
 	if sp.VertexInstance.Vertex.HasUDTransformer() {
 		// Wait for server info to be ready
-		serverInfo, err := sdkserverinfo.SDKServerInfo(sdkserverinfo.WithServerInfoFilePath("/var/run/numaflow/sourcetransformer-server-info"))
+		serverInfo, err := sdkserverinfo.SDKServerInfo()
 		if err != nil {
 			return err
 		}
