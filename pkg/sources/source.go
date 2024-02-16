@@ -31,7 +31,7 @@ import (
 	"github.com/numaproj/numaflow/pkg/isbsvc"
 	"github.com/numaproj/numaflow/pkg/metrics"
 	"github.com/numaproj/numaflow/pkg/sdkclient"
-	sourceclient "github.com/numaproj/numaflow/pkg/sdkclient/source/client"
+	sourceclient "github.com/numaproj/numaflow/pkg/sdkclient/source"
 	"github.com/numaproj/numaflow/pkg/sdkclient/sourcetransformer"
 	"github.com/numaproj/numaflow/pkg/sdkserverinfo"
 	jsclient "github.com/numaproj/numaflow/pkg/shared/clients/nats"
@@ -186,7 +186,7 @@ func (sp *SourceProcessor) Start(ctx context.Context) error {
 	if sp.VertexInstance.Vertex.IsUDSource() {
 		log.Info("kerantest - I am a udsource, I am looking for server info file...")
 		// Wait for server info to be ready
-		serverInfo, err := sdkserverinfo.SDKServerInfo()
+		serverInfo, err := sdkserverinfo.SDKServerInfo(sdkserverinfo.WithServerInfoFilePath("/var/run/numaflow/sourcer-server-info"))
 		if err != nil {
 			log.Info("kerantest - I couldn't find it.")
 			log.Info(err.Error())
