@@ -79,7 +79,50 @@ func (s *ReduceSDKSuite) testReduceStream(lang string) {
 	done <- struct{}{}
 }
 
-// FIXME(session): add test for keyed session window
+func (s *ReduceSDKSuite) TestReduceSessionJava() {
+	s.testReduceSession("java")
+}
+
+func (s *ReduceSDKSuite) testReduceSession(lang string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	w := s.Given().Pipeline(fmt.Sprintf("@testdata/reduce-session/reduce-session-%s.yaml", lang)).
+		When().
+		CreatePipelineAndWait()
+	defer w.DeletePipelineAndWait()
+	pipelineName := fmt.Sprintf("reduce-session-%s", lang)
+
+	// wait for all the pods to come up
+	w.Expect().VertexPodsRunning()
+
+	count := 0
+	done := make(chan struct{})
+	go func() {
+		// publish messages to source vertex, with event time starting from 60000
+		startTime := 60000
+		for i := 0; true; i++ {
+			select {
+			case <-ctx.Done():
+				return
+			case <-done:
+				return
+			default:
+				if count == 50 {
+					startTime = startTime + (50 * 1000)
+					count = 0
+				} else {
+					startTime = startTime + 1000
+				}
+				eventTime := strconv.Itoa(startTime)
+				w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("1")).WithHeader("X-Numaflow-Event-Time", eventTime))
+				count += 1
+			}
+		}
+	}()
+
+	w.Expect().SinkContains("sink", "50")
+	done <- struct{}{}
+}
 
 func TestSessionSuite(t *testing.T) {
 	suite.Run(t, new(ReduceSDKSuite))
