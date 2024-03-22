@@ -20,6 +20,7 @@ spec:
       udf:
         container:
           # see https://github.com/numaproj/numaflow-java/tree/main/examples/src/main/java/io/numaproj/numaflow/examples/reducesession/counter
+          imagePullPolicy: Always
           image: quay.io/numaio/numaflow-java/session-reduce-count:stable
         groupBy:
           window:

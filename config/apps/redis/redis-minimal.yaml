@@ -28,7 +28,7 @@ metadata:
     app: redis
 data:
   redis-config:  |
-    maxmemory 10mb
+    maxmemory 1000mb
     maxmemory-policy allkeys-lru
     protected-mode no
 ---
@@ -41,7 +41,7 @@ metadata:
   name: redis
 spec:
   serviceName: redis
-  replicas: 1
+  replicas: 2
   minReadySeconds: 10 # by default is 0
   selector:
     matchLabels:
