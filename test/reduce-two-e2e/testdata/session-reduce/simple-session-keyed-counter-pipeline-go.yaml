@@ -22,6 +22,7 @@ spec:
       udf:
         container:
           # see https://github.com/numaproj/numaflow-go/tree/main/pkg/sessionreducer/examples/counter
+          imagePullPolicy: Always
           image: quay.io/numaio/numaflow-go/session-counter:v0.6.1
         groupBy:
           window:
