@@ -121,11 +121,6 @@ func (s *UserDefinedSourceSuite) testSimpleSource(lang string, verifyRate bool) 
 					assert.NoError(s.T(), err)
 					assert.Equal(s.T(), pipelineName, *m[0].Pipeline)
 					oneMinRate := m[0].ProcessingRates["1m"]
-					// the simple source can reach 8k TPS, we don't compare until the pipeline is stable.
-					// using 5000 as a threshold
-					if oneMinRate < 5000 {
-						break
-					}
 					rates = append(rates, oneMinRate)
 				}
 				if !ratesMatch(rates) {
@@ -152,6 +147,11 @@ func ratesMatch(rates []float64) bool {
 		return true
 	}
 	firstVal := rates[0]
+	// the simple source can reach 8k TPS, we don't compare until the pipeline is stable.
+	// using 5000 as a threshold
+	if firstVal < 5000 {
+		return false
+	}
 	for i := 1; i < len(rates); i++ {
 		diff := math.Abs(firstVal - rates[i])
 		if diff > (firstVal * 0.1) {
