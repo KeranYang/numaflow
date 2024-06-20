@@ -66,6 +66,19 @@ func TestUpdateCount(t *testing.T) {
 		assert.Equal(t, 10.0, q.Items()[0].podPartitionCount["pod2"]["partition1"])
 	})
 
+	t.Run("test", func(t *testing.T) {
+		q := sharedqueue.New[*TimestampedCounts](1800)
+		tc := NewTimestampedCounts(TestTime)
+		tc.Update(&PodReadCount{"pod1", map[string]float64{"partition1": 20.0}})
+		q.Append(tc)
+
+		UpdateCount(q, TestTime, &PodReadCount{"pod2", map[string]float64{"partition1": 10.0}})
+
+		assert.Equal(t, 1, q.Length())
+		assert.Equal(t, 20.0, q.Items()[0].podPartitionCount["pod1"]["partition1"])
+		assert.Equal(t, 10.0, q.Items()[0].podPartitionCount["pod2"]["partition1"])
+	})
+
 	t.Run("givenTimeExistsPodExistsCountNotAvailable_whenUpdate_thenNotUpdatePod", func(t *testing.T) {
 		q := sharedqueue.New[*TimestampedCounts](1800)
 		tc := NewTimestampedCounts(TestTime)
