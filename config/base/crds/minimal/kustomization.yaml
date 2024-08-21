@@ -5,4 +5,3 @@ resources:
   - numaflow.numaproj.io_interstepbufferservices.yaml
   - numaflow.numaproj.io_pipelines.yaml
   - numaflow.numaproj.io_vertices.yaml
-  - numaflow.numaproj.io_monovertices.yaml

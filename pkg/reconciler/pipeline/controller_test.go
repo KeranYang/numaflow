@@ -932,7 +932,7 @@ func Test_checkChildrenResourceStatus(t *testing.T) {
 		testObj := testPipelineWithSideinput.DeepCopy()
 		_, err = r.reconcile(ctx, testObj)
 		assert.NoError(t, err)
-		err = r.checkChildrenResourceStatus(ctx, testObj)
+		err = checkChildrenResourceStatus(ctx, cl, testObj)
 		assert.NoError(t, err)
 		for _, c := range testObj.Status.Conditions {
 			if c.Type == string(dfv1.PipelineConditionDaemonServiceHealthy) {

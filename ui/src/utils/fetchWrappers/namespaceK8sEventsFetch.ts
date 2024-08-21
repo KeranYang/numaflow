@@ -70,13 +70,7 @@ export const useNamespaceK8sEventsFetch = ({
     if (vertex) {
       return `${BASE_URL}?objectType=vertex&objectName=${pipeline}-${vertex}`;
     } else if (pipeline) {
-      const isMonoVertex = pipeline.endsWith("(MonoVertex)");
-      const pipelineName = isMonoVertex
-        ? pipeline.replace(/\s*\(.*?\)\s*/g, "").trim()
-        : pipeline;
-      return `${BASE_URL}?objectType=${
-        isMonoVertex ? "monovertex" : "pipeline"
-      }&objectName=${pipelineName}`;
+      return `${BASE_URL}?objectType=pipeline&objectName=${pipeline}`;
     }
     return `${BASE_URL}`;
   }, [namespace, pipeline, vertex]);

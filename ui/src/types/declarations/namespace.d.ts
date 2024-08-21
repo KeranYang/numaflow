@@ -28,7 +28,6 @@ export interface NamespaceSummaryFetchResult {
   data?: NamespaceSummaryData;
   pipelineRawData?: any;
   isbRawData?: any;
-  monoVertexRawData?: any;
   loading: boolean;
   error: any;
   refresh: () => void;
@@ -51,7 +50,6 @@ export interface NamespacePipelineListingProps {
   data: NamespaceSummaryData;
   pipelineData?: Map<string, PipelineData>;
   isbData?: any;
-  monoVertexData?: any;
   refresh: () => void;
 }
 

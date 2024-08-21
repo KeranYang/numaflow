@@ -23,7 +23,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
-	resource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 )
@@ -122,7 +121,7 @@ func TestWithoutReplicas(t *testing.T) {
 	s := &VertexSpec{
 		Replicas: ptr.To[int32](3),
 	}
-	assert.Equal(t, int32(0), *s.DeepCopyWithoutReplicas().Replicas)
+	assert.Equal(t, int32(0), *s.WithOutReplicas().Replicas)
 }
 
 func TestGetVertexReplicas(t *testing.T) {
@@ -199,15 +198,7 @@ func TestGetPodSpec(t *testing.T) {
 			{Name: "test-env", Value: "test-val"},
 		},
 		SideInputsStoreName: "test-store",
-		DefaultResources: corev1.ResourceRequirements{
-			Requests: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("100m"),
-				corev1.ResourceMemory: resource.MustParse("100Mi"),
-			},
-			Limits: corev1.ResourceList{},
-		},
 	}
-
 	t.Run("test source", func(t *testing.T) {
 		testObj := testVertex.DeepCopy()
 		testObj.Spec.Source = &Source{}
@@ -223,18 +214,6 @@ func TestGetPodSpec(t *testing.T) {
 			AutomountServiceAccountToken: ptr.To[bool](true),
 			DNSPolicy:                    corev1.DNSClusterFirstWithHostNet,
 			DNSConfig:                    &corev1.PodDNSConfig{Nameservers: []string{"aaa.aaa"}},
-		}
-		testObj.Spec.ContainerTemplate = &ContainerTemplate{
-			Resources: corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceCPU:    resource.MustParse("200m"),
-					corev1.ResourceMemory: resource.MustParse("200Mi"),
-				},
-				Limits: corev1.ResourceList{
-					corev1.ResourceCPU:    resource.MustParse("200m"),
-					corev1.ResourceMemory: resource.MustParse("200Mi"),
-				},
-			},
 		}
 		s, err := testObj.GetPodSpec(req)
 		assert.NoError(t, err)
@@ -273,14 +252,6 @@ func TestGetPodSpec(t *testing.T) {
 		assert.Contains(t, s.Containers[0].Args, "--type="+string(VertexTypeSource))
 		assert.Equal(t, 1, len(s.InitContainers))
 		assert.Equal(t, CtrInit, s.InitContainers[0].Name)
-		assert.Equal(t, "200m", s.Containers[0].Resources.Requests.Cpu().String())
-		assert.Equal(t, "200m", s.Containers[0].Resources.Limits.Cpu().String())
-		assert.Equal(t, "200Mi", s.Containers[0].Resources.Requests.Memory().String())
-		assert.Equal(t, "200Mi", s.Containers[0].Resources.Limits.Memory().String())
-		assert.Equal(t, "100m", s.InitContainers[0].Resources.Requests.Cpu().String())
-		assert.Equal(t, "100Mi", s.InitContainers[0].Resources.Requests.Memory().String())
-		assert.Equal(t, "0", s.InitContainers[0].Resources.Limits.Cpu().String())
-		assert.Equal(t, "0", s.InitContainers[0].Resources.Limits.Memory().String())
 	})
 
 	t.Run("test sink", func(t *testing.T) {
@@ -450,9 +421,7 @@ func TestGetPodSpec(t *testing.T) {
 	t.Run("test serving source", func(t *testing.T) {
 		testObj := testVertex.DeepCopy()
 		testObj.Spec.Source = &Source{
-			Serving: &ServingSource{
-				Store: &ServingStore{},
-			},
+			Serving: &ServingSource{},
 		}
 		s, err := testObj.GetPodSpec(req)
 		assert.NoError(t, err)
@@ -477,7 +446,7 @@ func TestGetPodSpec(t *testing.T) {
 		assert.Equal(t, CtrInit, s.InitContainers[0].Name)
 
 		assert.Equal(t, CtrServing, s.Containers[1].Name)
-		assert.Equal(t, "test-f-image", s.Containers[1].Image)
+		assert.Equal(t, "numaserve:0.1", s.Containers[1].Image)
 		assert.Equal(t, corev1.PullIfNotPresent, s.Containers[1].ImagePullPolicy)
 		envNames = []string{}
 		for _, e := range s.Containers[1].Env {
@@ -521,8 +490,8 @@ func Test_getType(t *testing.T) {
 
 func TestVertexMarkPhase(t *testing.T) {
 	s := VertexStatus{}
-	s.MarkPhase(VertexPhaseRunning, "reason", "message")
-	assert.Equal(t, VertexPhaseRunning, s.Phase)
+	s.MarkPhase(VertexPhasePending, "reason", "message")
+	assert.Equal(t, VertexPhasePending, s.Phase)
 	assert.Equal(t, "reason", s.Reason)
 	assert.Equal(t, "message", s.Message)
 }
@@ -677,6 +646,47 @@ func TestScalable(t *testing.T) {
 	assert.True(t, v.Scalable())
 }
 
+func Test_Scale_Parameters(t *testing.T) {
+	s := Scale{}
+	assert.Equal(t, int32(0), s.GetMinReplicas())
+	assert.Equal(t, int32(DefaultMaxReplicas), s.GetMaxReplicas())
+	assert.Equal(t, DefaultCooldownSeconds, s.GetScaleUpCooldownSeconds())
+	assert.Equal(t, DefaultCooldownSeconds, s.GetScaleDownCooldownSeconds())
+	assert.Equal(t, DefaultLookbackSeconds, s.GetLookbackSeconds())
+	assert.Equal(t, DefaultReplicasPerScale, s.GetReplicasPerScale())
+	assert.Equal(t, DefaultTargetBufferAvailability, s.GetTargetBufferAvailability())
+	assert.Equal(t, DefaultTargetProcessingSeconds, s.GetTargetProcessingSeconds())
+	assert.Equal(t, DefaultZeroReplicaSleepSeconds, s.GetZeroReplicaSleepSeconds())
+	upcds := uint32(100)
+	downcds := uint32(99)
+	lbs := uint32(101)
+	rps := uint32(3)
+	tps := uint32(102)
+	tbu := uint32(33)
+	zrss := uint32(44)
+	s = Scale{
+		Min:                      ptr.To[int32](2),
+		Max:                      ptr.To[int32](4),
+		ScaleUpCooldownSeconds:   &upcds,
+		ScaleDownCooldownSeconds: &downcds,
+		LookbackSeconds:          &lbs,
+		ReplicasPerScale:         &rps,
+		TargetProcessingSeconds:  &tps,
+		TargetBufferAvailability: &tbu,
+		ZeroReplicaSleepSeconds:  &zrss,
+	}
+	assert.Equal(t, int32(2), s.GetMinReplicas())
+	assert.Equal(t, int32(4), s.GetMaxReplicas())
+	assert.Equal(t, int(upcds), s.GetScaleUpCooldownSeconds())
+	assert.Equal(t, int(downcds), s.GetScaleDownCooldownSeconds())
+	assert.Equal(t, int(lbs), s.GetLookbackSeconds())
+	assert.Equal(t, int(rps), s.GetReplicasPerScale())
+	assert.Equal(t, int(tbu), s.GetTargetBufferAvailability())
+	assert.Equal(t, int(tps), s.GetTargetProcessingSeconds())
+	assert.Equal(t, int(zrss), s.GetZeroReplicaSleepSeconds())
+	s.Max = ptr.To[int32](500)
+	assert.Equal(t, int32(500), s.GetMaxReplicas())
+}
 func Test_GetVertexType(t *testing.T) {
 	t.Run("source vertex", func(t *testing.T) {
 		v := Vertex{

@@ -19,7 +19,6 @@ package udf
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -248,12 +247,6 @@ func (u *ReduceUDFProcessor) Start(ctx context.Context) error {
 
 		// Drop message if it contains the special tag
 		if sharedutil.StringSliceContains(tags, dfv1.MessageTagDrop) {
-			metrics.UserDroppedMessages.With(map[string]string{
-				metrics.LabelVertex:             vertexName,
-				metrics.LabelPipeline:           pipelineName,
-				metrics.LabelVertexType:         string(dfv1.VertexTypeReduceUDF),
-				metrics.LabelVertexReplicaIndex: strconv.Itoa(int(u.VertexInstance.Replica)),
-			}).Inc()
 			return result, nil
 		}
 

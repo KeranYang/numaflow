@@ -5,7 +5,7 @@ CURRENT_DIR=$(shell pwd)
 DIST_DIR=${CURRENT_DIR}/dist
 BINARY_NAME:=numaflow
 DOCKERFILE:=Dockerfile
-DEV_BASE_IMAGE:=debian:bookworm
+DEV_BASE_IMAGE:=alpine:3.17
 RELEASE_BASE_IMAGE:=scratch
 
 BUILD_DATE=$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
@@ -104,7 +104,10 @@ test-code:
 
 test-e2e:
 test-kafka-e2e:
-test-map-e2e:
+test-http-e2e:
+test-nats-e2e:
+test-jetstream-e2e:
+test-sdks-e2e:
 test-reduce-one-e2e:
 test-reduce-two-e2e:
 test-api-e2e:
@@ -112,9 +115,6 @@ test-udsource-e2e:
 test-transformer-e2e:
 test-diamond-e2e:
 test-sideinputs-e2e:
-test-monovertex-e2e:
-test-idle-source-e2e:
-test-builtin-source-e2e:
 test-%:
 	$(MAKE) cleanup-e2e
 	$(MAKE) image e2eapi-image
@@ -195,14 +195,13 @@ codegen:
 	$(MAKE) manifests
 	rm -rf ./vendor
 	go mod tidy
-	$(MAKE) --directory rust/numaflow-models generate
 
 clean:
 	-rm -rf ${CURRENT_DIR}/dist
 
 .PHONY: crds
 crds:
-	./hack/crdgen.sh
+	./hack/crdgen.sh	
 
 .PHONY: manifests
 manifests: crds
@@ -288,12 +287,12 @@ ifneq ($(findstring release,$(GIT_BRANCH)),)
 .PHONY: prepare-release
 prepare-release: check-version-warning clean update-manifests-version codegen
 	git status
-	@git diff --quiet || printf "\n\nPlease run 'git diff' to confirm the file changes are correct.\n\n"
+	@git diff --quiet || echo "\n\nPlease run 'git diff' to confirm the file changes are correct.\n"
 
 .PHONY: release
 release: check-version-warning
 	@echo
-	@echo "1. Make sure you have run 'make prepare-release VERSION=$(VERSION)', and confirmed all the changes are expected."
+	@echo "1. Make sure you have run 'VERSION=$(VERSION) make prepare-release', and confirmed all the changes are expected."
 	@echo
 	@echo "2. Run following commands to commit the changes to the release branch, add give a tag."
 	@echo

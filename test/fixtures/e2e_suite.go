@@ -80,13 +80,12 @@ spec:
 
 type E2ESuite struct {
 	suite.Suite
-	restConfig       *rest.Config
-	isbSvcClient     flowpkg.InterStepBufferServiceInterface
-	pipelineClient   flowpkg.PipelineInterface
-	vertexClient     flowpkg.VertexInterface
-	monoVertexClient flowpkg.MonoVertexInterface
-	kubeClient       kubernetes.Interface
-	stopch           chan struct{}
+	restConfig     *rest.Config
+	isbSvcClient   flowpkg.InterStepBufferServiceInterface
+	pipelineClient flowpkg.PipelineInterface
+	vertexClient   flowpkg.VertexInterface
+	kubeClient     kubernetes.Interface
+	stopch         chan struct{}
 }
 
 func (s *E2ESuite) SetupSuite() {
@@ -99,7 +98,6 @@ func (s *E2ESuite) SetupSuite() {
 	s.isbSvcClient = flowversiond.NewForConfigOrDie(s.restConfig).NumaflowV1alpha1().InterStepBufferServices(Namespace)
 	s.pipelineClient = flowversiond.NewForConfigOrDie(s.restConfig).NumaflowV1alpha1().Pipelines(Namespace)
 	s.vertexClient = flowversiond.NewForConfigOrDie(s.restConfig).NumaflowV1alpha1().Vertices(Namespace)
-	s.monoVertexClient = flowversiond.NewForConfigOrDie(s.restConfig).NumaflowV1alpha1().MonoVertices(Namespace)
 
 	// Clean up resources if any
 	s.deleteResources([]schema.GroupVersionResource{
@@ -142,7 +140,6 @@ func (s *E2ESuite) TearDownSuite() {
 		Wait(3 * time.Second).
 		Expect().
 		ISBSvcDeleted(defaultTimeout)
-
 	s.T().Log("ISB svc is deleted")
 	deleteCMD := fmt.Sprintf("kubectl delete -k ../../config/apps/redis -n %s --ignore-not-found=true", Namespace)
 	s.Given().When().Exec("sh", []string{"-c", deleteCMD}, OutputRegexp(`service "redis" deleted`))
@@ -184,13 +181,12 @@ func (s *E2ESuite) deleteResources(resources []schema.GroupVersionResource) {
 
 func (s *E2ESuite) Given() *Given {
 	return &Given{
-		t:                s.T(),
-		isbSvcClient:     s.isbSvcClient,
-		pipelineClient:   s.pipelineClient,
-		vertexClient:     s.vertexClient,
-		monoVertexClient: s.monoVertexClient,
-		restConfig:       s.restConfig,
-		kubeClient:       s.kubeClient,
+		t:              s.T(),
+		isbSvcClient:   s.isbSvcClient,
+		pipelineClient: s.pipelineClient,
+		vertexClient:   s.vertexClient,
+		restConfig:     s.restConfig,
+		kubeClient:     s.kubeClient,
 	}
 }
 
