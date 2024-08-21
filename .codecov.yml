@@ -7,8 +7,7 @@ ignore:
 - "pkg/client/.*"
 - "vendor/.*"
 - "test/.*"
-- "rust/**/error.rs"
-- "rust/numaflow-models/**" # ignore generated files
+- "serving/src/error.rs"
 coverage:
   status:
     patch: off

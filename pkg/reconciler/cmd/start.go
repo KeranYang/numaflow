@@ -18,6 +18,7 @@ package cmd
 
 import (
 	"context"
+	"reflect"
 	"time"
 
 	"go.uber.org/zap"
@@ -39,8 +40,6 @@ import (
 	dfv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaflow/pkg/reconciler"
 	isbsvcctrl "github.com/numaproj/numaflow/pkg/reconciler/isbsvc"
-	monovtxctrl "github.com/numaproj/numaflow/pkg/reconciler/monovertex"
-	mvtxscaling "github.com/numaproj/numaflow/pkg/reconciler/monovertex/scaling"
 	plctrl "github.com/numaproj/numaflow/pkg/reconciler/pipeline"
 	vertexctrl "github.com/numaproj/numaflow/pkg/reconciler/vertex"
 	"github.com/numaproj/numaflow/pkg/reconciler/vertex/scaling"
@@ -185,6 +184,15 @@ func Start(namespaced bool, managedNamespace string) {
 		handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &dfv1.Pipeline{}, handler.OnlyControllerOwner()),
 		predicate.And(
 			predicate.ResourceVersionChangedPredicate{},
+			predicate.Funcs{
+				UpdateFunc: func(e event.UpdateEvent) bool {
+					if e.ObjectOld == nil || e.ObjectNew == nil {
+						return true
+					}
+					old, _ := e.ObjectOld.(*dfv1.Vertex)
+					new, _ := e.ObjectNew.(*dfv1.Vertex)
+					return !reflect.DeepEqual(new.Spec.WithOutReplicas(), old.Spec.WithOutReplicas())
+				}},
 		)); err != nil {
 		logger.Fatalw("Unable to watch Vertices", zap.Error(err))
 	}
@@ -196,7 +204,7 @@ func Start(namespaced bool, managedNamespace string) {
 		logger.Fatalw("Unable to watch Services", zap.Error(err))
 	}
 
-	// Watch Deployments changes
+	// Watch Deployments with Generation changes
 	if err := pipelineController.Watch(source.Kind(mgr.GetCache(), &appv1.Deployment{}),
 		handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &dfv1.Pipeline{}, handler.OnlyControllerOwner()),
 		predicate.ResourceVersionChangedPredicate{}); err != nil {
@@ -237,55 +245,9 @@ func Start(namespaced bool, managedNamespace string) {
 		logger.Fatalw("Unable to watch Services", zap.Error(err))
 	}
 
-	// MonoVertex controller
-	mvtxAutoscaler := mvtxscaling.NewScaler(mgr.GetClient(), mvtxscaling.WithWorkers(20))
-	monoVertexController, err := controller.New(dfv1.ControllerMonoVertex, mgr, controller.Options{
-		Reconciler: monovtxctrl.NewReconciler(mgr.GetClient(), mgr.GetScheme(), config, image, mvtxAutoscaler, logger, mgr.GetEventRecorderFor(dfv1.ControllerMonoVertex)),
-	})
-	if err != nil {
-		logger.Fatalw("Unable to set up MonoVertex controller", zap.Error(err))
-	}
-
-	// Watch MonoVertices
-	if err := monoVertexController.Watch(source.Kind(mgr.GetCache(), &dfv1.MonoVertex{}), &handler.EnqueueRequestForObject{},
-		predicate.Or(
-			predicate.GenerationChangedPredicate{}, predicate.LabelChangedPredicate{},
-		)); err != nil {
-		logger.Fatalw("Unable to watch MonoVertices", zap.Error(err))
-	}
-
-	// Watch Pods
-	if err := monoVertexController.Watch(source.Kind(mgr.GetCache(), &corev1.Pod{}),
-		handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &dfv1.MonoVertex{}, handler.OnlyControllerOwner()),
-		predicate.ResourceVersionChangedPredicate{},
-		predicate.Funcs{
-			CreateFunc: func(event.CreateEvent) bool { return false }, // Do not watch pod create events
-		}); err != nil {
-		logger.Fatalw("Unable to watch Pods", zap.Error(err))
-	}
-
-	// Watch Services with ResourceVersion changes
-	if err := monoVertexController.Watch(source.Kind(mgr.GetCache(), &corev1.Service{}),
-		handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &dfv1.MonoVertex{}, handler.OnlyControllerOwner()),
-		predicate.ResourceVersionChangedPredicate{}); err != nil {
-		logger.Fatalw("Unable to watch Services", zap.Error(err))
-	}
-
-	// Watch Deployments changes
-	if err := monoVertexController.Watch(source.Kind(mgr.GetCache(), &appv1.Deployment{}),
-		handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &dfv1.MonoVertex{}, handler.OnlyControllerOwner()),
-		predicate.ResourceVersionChangedPredicate{}); err != nil {
-		logger.Fatalw("Unable to watch Deployments", zap.Error(err))
-	}
-
-	// Add Vertex autoscaling runner
+	// Add autoscaling runner
 	if err := mgr.Add(LeaderElectionRunner(autoscaler.Start)); err != nil {
-		logger.Fatalw("Unable to add Vertex autoscaling runner", zap.Error(err))
-	}
-
-	// Add MonoVertex autoscaling runner
-	if err := mgr.Add(LeaderElectionRunner(mvtxAutoscaler.Start)); err != nil {
-		logger.Fatalw("Unable to add MonoVertex autoscaling runner", zap.Error(err))
+		logger.Fatalw("Unable to add autoscaling runner", zap.Error(err))
 	}
 
 	version := numaflow.GetVersion()

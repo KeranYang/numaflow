@@ -20,8 +20,6 @@ package v1alpha1
 
 type InterStepBufferServiceExpansion interface{}
 
-type MonoVertexExpansion interface{}
-
 type PipelineExpansion interface{}
 
 type VertexExpansion interface{}

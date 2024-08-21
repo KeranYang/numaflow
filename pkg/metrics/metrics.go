@@ -31,7 +31,6 @@ const (
 	LabelVertexReplicaIndex = "replica"
 	LabelVertexType         = "vertex_type"
 	LabelPartitionName      = "partition_name"
-	LabelMonoVertexName     = "mvtx_name"
 
 	LabelReason = "reason"
 )
@@ -57,12 +56,6 @@ var (
 		Subsystem: "forwarder",
 		Name:      "read_bytes_total",
 		Help:      "Total number of bytes read",
-	}, []string{LabelVertex, LabelPipeline, LabelVertexType, LabelVertexReplicaIndex, LabelPartitionName})
-
-	ReadDataBytesCount = promauto.NewCounterVec(prometheus.CounterOpts{
-		Subsystem: "forwarder",
-		Name:      "data_read_bytes_total",
-		Help:      "Total number of Data message bytes read",
 	}, []string{LabelVertex, LabelPipeline, LabelVertexType, LabelVertexReplicaIndex, LabelPartitionName})
 
 	// ReadMessagesError is used to indicate the number of errors messages read
@@ -172,12 +165,6 @@ var (
 		Name:      "udf_write_total",
 		Help:      "Total number of Messages Written by UDF",
 	}, []string{LabelVertex, LabelPipeline, LabelVertexType, LabelVertexReplicaIndex, LabelPartitionName})
-
-	UserDroppedMessages = promauto.NewCounterVec(prometheus.CounterOpts{
-		Subsystem: "forwarder",
-		Name:      "ud_drop_total",
-		Help:      "Total messages dropped by the user",
-	}, []string{LabelVertex, LabelPipeline, LabelVertexType, LabelVertexReplicaIndex})
 )
 
 // Source forwarder specific metrics

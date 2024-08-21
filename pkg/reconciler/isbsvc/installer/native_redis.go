@@ -627,19 +627,13 @@ func (r *redisInstaller) CheckChildrenResourceStatus(ctx context.Context) error 
 		Namespace: r.isbSvc.Namespace,
 		Name:      generateRedisStatefulSetName(r.isbSvc),
 	}, &isbStatefulSet); err != nil {
-		if apierrors.IsNotFound(err) {
-			r.isbSvc.Status.MarkChildrenResourceUnHealthy("GetStatefulSetFailed",
-				"StatefulSet not found, might be still under creation")
-			return nil
-		}
-		r.isbSvc.Status.MarkChildrenResourceUnHealthy("GetStatefulSetFailed", err.Error())
 		return err
 	}
 	// calculate the status of the InterStepBufferService by statefulset status and update the status of isbSvc
-	if status, reason, msg := reconciler.CheckStatefulSetStatus(&isbStatefulSet); status {
-		r.isbSvc.Status.MarkChildrenResourceHealthy(reason, msg)
+	if msg, status := getStatefulSetStatus(&isbStatefulSet); status {
+		r.isbSvc.Status.MarkChildrenResourceHealthy("RolloutFinished", msg)
 	} else {
-		r.isbSvc.Status.MarkChildrenResourceUnHealthy(reason, msg)
+		r.isbSvc.Status.MarkChildrenResourceNotHealthy("Progressing", msg)
 	}
 	return nil
 }
