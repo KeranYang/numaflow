@@ -31,7 +31,7 @@ type PipelineInfo struct {
 	Pipeline v1alpha1.Pipeline `json:"pipeline"`
 }
 
-// NewPipelineInfo creates a new PipelineInfo object with the given status and lag
+// NewPipelineInfo creates a new PipelineInfo object with the given status
 func NewPipelineInfo(status string, lag *int64, pl *v1alpha1.Pipeline) PipelineInfo {
 	return PipelineInfo{
 		Name:     pl.Name,

@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strconv"
 	"sync"
 
 	"go.uber.org/zap"
@@ -219,6 +218,11 @@ func (u *MapUDFProcessor) Start(ctx context.Context) error {
 		opts = append(opts, forward.WithUDFUnaryMap(mapHandler))
 	}
 
+	// We can have the vertex running only of the map modes
+	if enableMapUdfStream && enableBatchMapUdf {
+		return fmt.Errorf("vertex cannot have both map stream and batch map modes enabled")
+	}
+
 	for index, bufferPartition := range fromBuffer {
 		// Populate shuffle function map
 		shuffleFuncMap := make(map[string]*shuffle.Shuffle)
@@ -235,13 +239,6 @@ func (u *MapUDFProcessor) Start(ctx context.Context) error {
 
 			// Drop message if it contains the special tag
 			if sharedutil.StringSliceContains(tags, dfv1.MessageTagDrop) {
-				metrics.UserDroppedMessages.With(map[string]string{
-					metrics.LabelVertex:             vertexName,
-					metrics.LabelPipeline:           pipelineName,
-					metrics.LabelVertexType:         string(dfv1.VertexTypeMapUDF),
-					metrics.LabelVertexReplicaIndex: strconv.Itoa(int(u.VertexInstance.Replica)),
-				}).Inc()
-
 				return result, nil
 			}
 

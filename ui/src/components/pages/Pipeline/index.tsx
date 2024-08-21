@@ -2,6 +2,7 @@ import React, { useCallback, useContext, useMemo, createContext } from "react";
 import { useLocation } from "react-router-dom";
 import CircularProgress from "@mui/material/CircularProgress";
 import Box from "@mui/material/Box";
+import { usePipelineViewFetch } from "../../../utils/fetcherHooks/pipelineViewFetch";
 import Graph from "./partials/Graph";
 import {
   SummaryPageLayout,
@@ -9,7 +10,6 @@ import {
   SummarySectionType,
 } from "../../common/SummaryPageLayout";
 import { usePipelineSummaryFetch } from "../../../utils/fetchWrappers/pipelineFetch";
-import { usePipelineViewFetch } from "../../../utils/fetcherHooks/pipelineViewFetch";
 import { usePipelineHealthFetch } from "../../../utils/fetchWrappers/pipelineHealthFetch";
 import { PipelineStatus } from "./partials/PipelineStatus";
 import { PipelineSummaryStatus } from "./partials/PipelineSummaryStatus";
@@ -258,7 +258,6 @@ export function Pipeline({ namespaceId: nsIdProp }: PipelineProps) {
           }}
           namespaceId={namespaceId}
           pipelineId={pipelineId}
-          type={"pipeline"}
           refresh={refresh}
         />
       </GeneratorColorContext.Provider>

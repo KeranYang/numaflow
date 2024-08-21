@@ -50,19 +50,12 @@ export function Namespaces({ namespaceId: nsIdProp }: NamespaceProps) {
   const nsIdParam = query.get("namespace") || "";
   const namespaceId = nsIdProp || nsIdParam;
   const { setSidebarProps, addError } = useContext<AppContextProps>(AppContext);
-  const {
-    data,
-    pipelineRawData,
-    isbRawData,
-    monoVertexRawData,
-    loading,
-    error,
-    refresh,
-  } = useNamespaceSummaryFetch({
-    namespace: namespaceId || "",
-    loadOnRefresh: false,
-    addError,
-  });
+  const { data, pipelineRawData, isbRawData, loading, error, refresh } =
+    useNamespaceSummaryFetch({
+      namespace: namespaceId || "",
+      loadOnRefresh: false,
+      addError,
+    });
 
   const handleK8sEventsClick = useCallback(() => {
     if (!namespaceId || !setSidebarProps) {
@@ -82,11 +75,6 @@ export function Namespaces({ namespaceId: nsIdProp }: NamespaceProps) {
         });
       });
     }
-    if (monoVertexRawData) {
-      Object.keys(monoVertexRawData).forEach((pipelineId) => {
-        pipelines.push(`${pipelineId} (MonoVertex)`);
-      });
-    }
     setSidebarProps({
       type: SidebarType.NAMESPACE_K8s,
       k8sEventsProps: {
@@ -95,7 +83,7 @@ export function Namespaces({ namespaceId: nsIdProp }: NamespaceProps) {
         vertexFilterOptions: vertexMap,
       },
     });
-  }, [namespaceId, setSidebarProps, pipelineRawData, monoVertexRawData]);
+  }, [namespaceId, setSidebarProps, pipelineRawData]);
 
   const defaultPipelinesData = useMemo(() => {
     return [
@@ -292,7 +280,6 @@ export function Namespaces({ namespaceId: nsIdProp }: NamespaceProps) {
         data={data ? data : defaultNamespaceSummaryData}
         pipelineData={pipelineRawData}
         isbData={isbRawData}
-        monoVertexData={monoVertexRawData}
         refresh={refresh}
       />
     );

@@ -23,6 +23,9 @@ import (
 	"fmt"
 	"text/template"
 
+	dfv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
+	"github.com/numaproj/numaflow/pkg/reconciler"
+	sharedutil "github.com/numaproj/numaflow/pkg/shared/util"
 	"go.uber.org/zap"
 	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -32,10 +35,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	dfv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaflow/pkg/reconciler"
-	sharedutil "github.com/numaproj/numaflow/pkg/shared/util"
 )
 
 const (
@@ -619,29 +618,6 @@ func (r *redisInstaller) getPVCs(ctx context.Context) ([]corev1.PersistentVolume
 		return nil, err
 	}
 	return pvcl.Items, nil
-}
-
-func (r *redisInstaller) CheckChildrenResourceStatus(ctx context.Context) error {
-	var isbStatefulSet appv1.StatefulSet
-	if err := r.client.Get(ctx, client.ObjectKey{
-		Namespace: r.isbSvc.Namespace,
-		Name:      generateRedisStatefulSetName(r.isbSvc),
-	}, &isbStatefulSet); err != nil {
-		if apierrors.IsNotFound(err) {
-			r.isbSvc.Status.MarkChildrenResourceUnHealthy("GetStatefulSetFailed",
-				"StatefulSet not found, might be still under creation")
-			return nil
-		}
-		r.isbSvc.Status.MarkChildrenResourceUnHealthy("GetStatefulSetFailed", err.Error())
-		return err
-	}
-	// calculate the status of the InterStepBufferService by statefulset status and update the status of isbSvc
-	if status, reason, msg := reconciler.CheckStatefulSetStatus(&isbStatefulSet); status {
-		r.isbSvc.Status.MarkChildrenResourceHealthy(reason, msg)
-	} else {
-		r.isbSvc.Status.MarkChildrenResourceUnHealthy(reason, msg)
-	}
-	return nil
 }
 
 func generateRedisServiceName(isbSvc *dfv1.InterStepBufferService) string {

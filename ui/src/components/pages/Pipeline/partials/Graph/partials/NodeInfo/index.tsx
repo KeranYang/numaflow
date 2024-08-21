@@ -145,7 +145,6 @@ export default function NodeInfo(props: NodeInfoProps) {
             namespaceId={namespaceId}
             pipelineId={pipelineId}
             vertexId={node.id}
-            type={node?.data?.type}
           />
         </TabPanel>
       )}

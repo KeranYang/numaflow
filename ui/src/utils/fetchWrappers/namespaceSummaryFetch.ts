@@ -12,12 +12,11 @@ import {
 
 const rawDataToNamespaceSummary = (
   rawPipelineData: any[],
-  rawIsbData: any[],
-  rawMonoVertexData: any[]
+  rawIsbData: any[]
 ): NamespaceSummaryData | undefined => {
-  const pipelinesCount =
-    (Array.isArray(rawPipelineData) ? rawPipelineData.length : 0) +
-    (Array.isArray(rawMonoVertexData) ? rawMonoVertexData.length : 0);
+  const pipelinesCount = Array.isArray(rawPipelineData)
+    ? rawPipelineData.length
+    : 0;
   let pipelinesActiveCount = 0;
   let pipelinesInactiveCount = 0;
   let pipelinesHealthyCount = 0;
@@ -55,34 +54,6 @@ const rawDataToNamespaceSummary = (
       pipelineSummaries.push({
         name: pipeline.name,
         status: pipeline.status,
-      });
-    });
-  // adding MonoVertex count to pipeline count
-  Array.isArray(rawMonoVertexData) &&
-    rawMonoVertexData?.forEach((monoVertex: any) => {
-      switch (monoVertex.status) {
-        case "healthy":
-          pipelinesActiveCount++;
-          pipelinesHealthyCount++;
-          break;
-        case "warning":
-          pipelinesActiveCount++;
-          pipelinesWarningCount++;
-          break;
-        case "critical":
-          pipelinesActiveCount++;
-          pipelinesCriticalCount++;
-          break;
-        case "inactive":
-          pipelinesInactiveCount++;
-          break;
-        default:
-          break;
-      }
-      // Add pipeline summary to array
-      pipelineSummaries.push({
-        name: monoVertex.name,
-        status: monoVertex.status,
       });
     });
   Array.isArray(rawIsbData) &&
@@ -171,15 +142,6 @@ export const useNamespaceSummaryFetch = ({
     undefined,
     options
   );
-  const {
-    data: monoVertexData,
-    loading: monoVertexLoading,
-    error: monoVertexError,
-  } = useFetch(
-    `${host}${getBaseHref()}/api/v1/namespaces/${namespace}/mono-vertices`,
-    undefined,
-    options
-  );
 
   useEffect(() => {
     setInterval(() => {
@@ -191,7 +153,7 @@ export const useNamespaceSummaryFetch = ({
   }, []);
 
   useEffect(() => {
-    if (pipelineLoading || isbLoading || monoVertexLoading) {
+    if (pipelineLoading || isbLoading) {
       if (options?.requestKey === "" || loadOnRefresh) {
         // Only set loading true when first load or when loadOnRefresh is true
         setResults({
@@ -203,41 +165,38 @@ export const useNamespaceSummaryFetch = ({
       }
       return;
     }
-    if (pipelineError || isbError || monoVertexError) {
+    if (pipelineError || isbError) {
       if (options?.requestKey === "") {
         // Failed on first load, return error
         setResults({
           data: undefined,
           loading: false,
-          error: pipelineError || isbError || monoVertexError,
+          error: pipelineError || isbError,
           refresh,
         });
       } else {
         // Failed on refresh, add error to app context
-        addError(pipelineError || isbError || monoVertexError);
+        addError(pipelineError || isbError);
       }
       return;
     }
-    if (pipelineData?.errMsg || isbData?.errMsg || monoVertexData?.errMsg) {
+    if (pipelineData?.errMsg || isbData?.errMsg) {
       if (options?.requestKey === "") {
         // Failed on first load, return error
         setResults({
           data: undefined,
           loading: false,
-          error:
-            pipelineData?.errMsg || isbData?.errMsg || monoVertexData?.errMsg,
+          error: pipelineData?.errMsg || isbData?.errMsg,
           refresh,
         });
       } else {
         // Failed on refresh, add error to app context
-        addError(
-          pipelineData?.errMsg || isbData?.errMsg || monoVertexData?.errMsg
-        );
+        addError(pipelineData?.errMsg || isbData?.errMsg);
       }
       return;
     }
-    if (pipelineData && isbData && monoVertexData) {
-      const pipelineMap = pipelineData?.data?.reduce((map: any, obj: any) => {
+    if (pipelineData && isbData) {
+      const pipeLineMap = pipelineData?.data?.reduce((map: any, obj: any) => {
         map[obj.name] = obj;
         return map;
       }, {});
@@ -245,23 +204,14 @@ export const useNamespaceSummaryFetch = ({
         map[obj.name] = obj;
         return map;
       }, {});
-      const monoVertexMap = monoVertexData?.data?.reduce(
-        (map: any, obj: any) => {
-          map[obj.name] = obj;
-          return map;
-        },
-        {}
-      );
       const nsSummary = rawDataToNamespaceSummary(
         pipelineData?.data,
-        isbData?.data,
-        monoVertexData?.data
+        isbData?.data
       );
       setResults({
         data: nsSummary,
-        pipelineRawData: pipelineMap,
+        pipelineRawData: pipeLineMap,
         isbRawData: isbMap,
-        monoVertexRawData: monoVertexMap,
         loading: false,
         error: undefined,
         refresh,
@@ -271,13 +221,10 @@ export const useNamespaceSummaryFetch = ({
   }, [
     pipelineData,
     isbData,
-    monoVertexData,
     pipelineLoading,
     isbLoading,
-    monoVertexLoading,
     pipelineError,
     isbError,
-    monoVertexError,
     loadOnRefresh,
     options,
     refresh,

@@ -45,12 +45,6 @@ var (
 		Help:      "A metric to indicate whether the Pipeline is healthy. '1' means healthy, '0' means unhealthy",
 	}, []string{metrics.LabelNamespace, metrics.LabelISBService})
 
-	MonoVertexHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Subsystem: "controller",
-		Name:      "monovtx_health",
-		Help:      "A metric to indicate whether the MonoVertex is healthy. '1' means healthy, '0' means unhealthy",
-	}, []string{metrics.LabelNamespace, metrics.LabelMonoVertexName})
-
 	// JetStreamISBSvcReplicas indicates the replicas of a JetStream ISB Service.
 	JetStreamISBSvcReplicas = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Subsystem: "controller",
@@ -65,8 +59,8 @@ var (
 		Help:      "A metric indicates the replicas of a Redis ISB Service",
 	}, []string{metrics.LabelNamespace, metrics.LabelISBService})
 
-	// VertexDesiredReplicas indicates the desired replicas of a Vertex.
-	VertexDesiredReplicas = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	// VertexDisiredReplicas indicates the desired replicas of a Vertex.
+	VertexDisiredReplicas = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Subsystem: "controller",
 		Name:      "vertex_desired_replicas",
 		Help:      "A metric indicates the desired replicas of a Vertex",
@@ -78,25 +72,8 @@ var (
 		Name:      "vertex_current_replicas",
 		Help:      "A metric indicates the current replicas of a Vertex",
 	}, []string{metrics.LabelNamespace, metrics.LabelPipeline, metrics.LabelVertex})
-
-	// MonoVertexDesiredReplicas indicates the desired replicas of a MonoVertex.
-	MonoVertexDesiredReplicas = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Subsystem: "controller",
-		Name:      "monovtx_desired_replicas",
-		Help:      "A metric indicates the desired replicas of a MonoVertex",
-	}, []string{metrics.LabelNamespace, metrics.LabelMonoVertexName})
-
-	// MonoVertexCurrentReplicas indicates the current replicas of a MonoVertex.
-	MonoVertexCurrentReplicas = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Subsystem: "controller",
-		Name:      "monovtx_current_replicas",
-		Help:      "A metric indicates the current replicas of a MonoVertex",
-	}, []string{metrics.LabelNamespace, metrics.LabelMonoVertexName})
 )
 
 func init() {
-	ctrlmetrics.Registry.MustRegister(BuildInfo, ISBSvcHealth, PipelineHealth,
-		MonoVertexHealth, JetStreamISBSvcReplicas, RedisISBSvcReplicas,
-		VertexDesiredReplicas, VertexCurrentReplicas, MonoVertexDesiredReplicas,
-		MonoVertexCurrentReplicas)
+	ctrlmetrics.Registry.MustRegister(BuildInfo, ISBSvcHealth, PipelineHealth, JetStreamISBSvcReplicas, RedisISBSvcReplicas, VertexDisiredReplicas, VertexCurrentReplicas)
 }

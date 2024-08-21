@@ -28,7 +28,6 @@ import (
 
 	"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	"github.com/numaproj/numaflow/pkg/shared/logging"
-	"github.com/numaproj/numaflow/pkg/shared/util"
 )
 
 // podInfoSeparator is used as a separator to split the pod key
@@ -42,7 +41,7 @@ type PodTracker struct {
 	pipeline        *v1alpha1.Pipeline
 	log             *zap.SugaredLogger
 	httpClient      metricsHttpClient
-	activePods      *util.UniqueStringList
+	activePods      *UniqueStringList
 	refreshInterval time.Duration
 }
 
@@ -56,7 +55,7 @@ func NewPodTracker(ctx context.Context, p *v1alpha1.Pipeline, opts ...PodTracker
 			},
 			Timeout: time.Second,
 		},
-		activePods:      util.NewUniqueStringList(),
+		activePods:      NewUniqueStringList(),
 		refreshInterval: 30 * time.Second, // Default refresh interval for updating the active pod set
 	}
 

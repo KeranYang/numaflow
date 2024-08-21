@@ -29,7 +29,6 @@ import (
 type NumaflowV1alpha1Interface interface {
 	RESTClient() rest.Interface
 	InterStepBufferServicesGetter
-	MonoVerticesGetter
 	PipelinesGetter
 	VerticesGetter
 }
@@ -41,10 +40,6 @@ type NumaflowV1alpha1Client struct {
 
 func (c *NumaflowV1alpha1Client) InterStepBufferServices(namespace string) InterStepBufferServiceInterface {
 	return newInterStepBufferServices(c, namespace)
-}
-
-func (c *NumaflowV1alpha1Client) MonoVertices(namespace string) MonoVertexInterface {
-	return newMonoVertices(c, namespace)
 }
 
 func (c *NumaflowV1alpha1Client) Pipelines(namespace string) PipelineInterface {

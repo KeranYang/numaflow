@@ -46,7 +46,6 @@ import (
 	dfv1versiond "github.com/numaproj/numaflow/pkg/client/clientset/versioned"
 	dfv1clients "github.com/numaproj/numaflow/pkg/client/clientset/versioned/typed/numaflow/v1alpha1"
 	daemonclient "github.com/numaproj/numaflow/pkg/daemon/client"
-	mvtdaemonclient "github.com/numaproj/numaflow/pkg/mvtxdaemon/client"
 	"github.com/numaproj/numaflow/pkg/shared/util"
 	"github.com/numaproj/numaflow/pkg/webhook/validator"
 	"github.com/numaproj/numaflow/server/authn"
@@ -90,15 +89,14 @@ func WithReadOnlyMode() HandlerOption {
 }
 
 type handler struct {
-	kubeClient            kubernetes.Interface
-	metricsClient         *metricsversiond.Clientset
-	numaflowClient        dfv1clients.NumaflowV1alpha1Interface
-	daemonClientsCache    *lru.Cache[string, daemonclient.DaemonClient]
-	mvtDaemonClientsCache *lru.Cache[string, mvtdaemonclient.MonoVertexDaemonClient]
-	dexObj                *DexObject
-	localUsersAuthObject  *LocalUsersAuthObject
-	healthChecker         *HealthChecker
-	opts                  *handlerOptions
+	kubeClient           kubernetes.Interface
+	metricsClient        *metricsversiond.Clientset
+	numaflowClient       dfv1clients.NumaflowV1alpha1Interface
+	daemonClientsCache   *lru.Cache[string, daemonclient.DaemonClient]
+	dexObj               *DexObject
+	localUsersAuthObject *LocalUsersAuthObject
+	healthChecker        *HealthChecker
+	opts                 *handlerOptions
 }
 
 // NewHandler is used to provide a new instance of the handler type
@@ -120,9 +118,6 @@ func NewHandler(ctx context.Context, dexObj *DexObject, localUsersAuthObject *Lo
 	daemonClientsCache, _ := lru.NewWithEvict[string, daemonclient.DaemonClient](500, func(key string, value daemonclient.DaemonClient) {
 		_ = value.Close()
 	})
-	mvtDaemonClientsCache, _ := lru.NewWithEvict[string, mvtdaemonclient.MonoVertexDaemonClient](500, func(key string, value mvtdaemonclient.MonoVertexDaemonClient) {
-		_ = value.Close()
-	})
 	o := defaultHandlerOptions()
 	for _, opt := range opts {
 		if opt != nil {
@@ -130,15 +125,14 @@ func NewHandler(ctx context.Context, dexObj *DexObject, localUsersAuthObject *Lo
 		}
 	}
 	return &handler{
-		kubeClient:            kubeClient,
-		metricsClient:         metricsClient,
-		numaflowClient:        numaflowClient,
-		daemonClientsCache:    daemonClientsCache,
-		mvtDaemonClientsCache: mvtDaemonClientsCache,
-		dexObj:                dexObj,
-		localUsersAuthObject:  localUsersAuthObject,
-		healthChecker:         NewHealthChecker(ctx),
-		opts:                  o,
+		kubeClient:           kubeClient,
+		metricsClient:        metricsClient,
+		numaflowClient:       numaflowClient,
+		daemonClientsCache:   daemonClientsCache,
+		dexObj:               dexObj,
+		localUsersAuthObject: localUsersAuthObject,
+		healthChecker:        NewHealthChecker(ctx),
+		opts:                 o,
 	}, nil
 }
 
@@ -247,14 +241,13 @@ func (h *handler) GetClusterSummary(c *gin.Context) {
 	}
 
 	type namespaceSummary struct {
-		pipelineSummary   PipelineSummary
-		isbsvcSummary     IsbServiceSummary
-		monoVertexSummary MonoVertexSummary
+		pipelineSummary PipelineSummary
+		isbsvcSummary   IsbServiceSummary
 	}
 	var namespaceSummaryMap = make(map[string]namespaceSummary)
 
 	// get pipeline summary
-	pipelineList, err := h.numaflowClient.Pipelines("").List(c, metav1.ListOptions{})
+	pipelineList, err := h.numaflowClient.Pipelines("").List(context.Background(), metav1.ListOptions{})
 	if err != nil {
 		h.respondWithError(c, fmt.Sprintf("Failed to fetch cluster summary, %s", err.Error()))
 		return
@@ -278,7 +271,7 @@ func (h *handler) GetClusterSummary(c *gin.Context) {
 	}
 
 	// get isbsvc summary
-	isbsvcList, err := h.numaflowClient.InterStepBufferServices("").List(c, metav1.ListOptions{})
+	isbsvcList, err := h.numaflowClient.InterStepBufferServices("").List(context.Background(), metav1.ListOptions{})
 	if err != nil {
 		h.respondWithError(c, fmt.Sprintf("Failed to fetch cluster summary, %s", err.Error()))
 		return
@@ -301,45 +294,19 @@ func (h *handler) GetClusterSummary(c *gin.Context) {
 		namespaceSummaryMap[isbsvc.Namespace] = summary
 	}
 
-	// get mono vertex summary
-	mvtList, err := h.numaflowClient.MonoVertices("").List(c, metav1.ListOptions{})
-	if err != nil {
-		h.respondWithError(c, fmt.Sprintf("Failed to fetch cluster summary, failed to fetch mono vertex list, %s", err.Error()))
-		return
-	}
-	for _, monoVertex := range mvtList.Items {
-		var summary namespaceSummary
-		if value, ok := namespaceSummaryMap[monoVertex.Namespace]; ok {
-			summary = value
-		}
-		status, err := getMonoVertexStatus(&monoVertex)
-		if err != nil {
-			h.respondWithError(c, fmt.Sprintf("Failed to fetch cluster summary, failed to get the status of the mono vertex %s, %s", monoVertex.Name, err.Error()))
-			return
-		}
-		// if the mono vertex is healthy, increment the active count, otherwise increment the inactive count
-		// TODO - add more status types for mono vertex and update the logic here
-		if status == dfv1.MonoVertexStatusHealthy {
-			summary.monoVertexSummary.Active.increment(status)
-		} else {
-			summary.monoVertexSummary.Inactive++
-		}
-		namespaceSummaryMap[monoVertex.Namespace] = summary
-	}
-
 	// get cluster summary
 	var clusterSummary ClusterSummaryResponse
 	// at this moment, if a namespace has neither pipeline nor isbsvc, it will not be included in the namespacedSummaryMap.
 	// since we still want to pass these empty namespaces to the frontend, we add them here.
 	for _, ns := range namespaces {
 		if _, ok := namespaceSummaryMap[ns]; !ok {
-			// if the namespace is not in the namespaceSummaryMap, it means it has none of the pipelines, isbsvc, or mono vertex
+			// if the namespace is not in the namespaceSummaryMap, it means it has neither pipeline nor isbsvc
 			// taking advantage of golang by default initializing the struct with zero value
 			namespaceSummaryMap[ns] = namespaceSummary{}
 		}
 	}
 	for name, summary := range namespaceSummaryMap {
-		clusterSummary = append(clusterSummary, NewNamespaceSummary(name, summary.pipelineSummary, summary.isbsvcSummary, summary.monoVertexSummary))
+		clusterSummary = append(clusterSummary, NewNamespaceSummary(name, summary.pipelineSummary, summary.isbsvcSummary))
 	}
 
 	// sort the cluster summary by namespace in alphabetical order,
@@ -384,7 +351,7 @@ func (h *handler) CreatePipeline(c *gin.Context) {
 		c.JSON(http.StatusOK, NewNumaflowAPIResponse(nil, nil))
 		return
 	}
-	if _, err := h.numaflowClient.Pipelines(ns).Create(c, &pipelineSpec, metav1.CreateOptions{}); err != nil {
+	if _, err := h.numaflowClient.Pipelines(ns).Create(context.Background(), &pipelineSpec, metav1.CreateOptions{}); err != nil {
 		h.respondWithError(c, fmt.Sprintf("Failed to create pipeline %q, %s", pipelineSpec.Name, err.Error()))
 		return
 	}
@@ -410,7 +377,7 @@ func (h *handler) GetPipeline(c *gin.Context) {
 	ns, pipeline := c.Param("namespace"), c.Param("pipeline")
 
 	// get general pipeline info
-	pl, err := h.numaflowClient.Pipelines(ns).Get(c, pipeline, metav1.GetOptions{})
+	pl, err := h.numaflowClient.Pipelines(ns).Get(context.Background(), pipeline, metav1.GetOptions{})
 	if err != nil {
 		h.respondWithError(c, fmt.Sprintf("Failed to fetch pipeline %q namespace %q, %s", pipeline, ns, err.Error()))
 		return
@@ -440,7 +407,7 @@ func (h *handler) GetPipeline(c *gin.Context) {
 	}
 
 	// get pipeline lag
-	client, err := h.getPipelineDaemonClient(ns, pipeline)
+	client, err := h.getDaemonClient(ns, pipeline)
 	if err != nil || client == nil {
 		h.respondWithError(c, fmt.Sprintf("failed to get daemon service client for pipeline %q, %s", pipeline, err.Error()))
 		return
@@ -450,7 +417,7 @@ func (h *handler) GetPipeline(c *gin.Context) {
 		minWM int64 = math.MaxInt64
 		maxWM int64 = math.MinInt64
 	)
-	watermarks, err := client.GetPipelineWatermarks(c, pipeline)
+	watermarks, err := client.GetPipelineWatermarks(context.Background(), pipeline)
 	if err != nil {
 		h.respondWithError(c, fmt.Sprintf("Failed to fetch pipeline: failed to calculate lag for pipeline %q: %s", pipeline, err.Error()))
 		return
@@ -497,7 +464,7 @@ func (h *handler) UpdatePipeline(c *gin.Context) {
 	// dryRun is used to check if the operation is just a validation or an actual update
 	dryRun := strings.EqualFold("true", c.DefaultQuery("dry-run", "false"))
 
-	oldSpec, err := h.numaflowClient.Pipelines(ns).Get(c, pipeline, metav1.GetOptions{})
+	oldSpec, err := h.numaflowClient.Pipelines(ns).Get(context.Background(), pipeline, metav1.GetOptions{})
 	if err != nil {
 		h.respondWithError(c, fmt.Sprintf("Failed to fetch pipeline %q namespace %q, %s", pipeline, ns, err.Error()))
 		return
@@ -533,7 +500,7 @@ func (h *handler) UpdatePipeline(c *gin.Context) {
 	}
 
 	oldSpec.Spec = updatedSpec.Spec
-	if _, err := h.numaflowClient.Pipelines(ns).Update(c, oldSpec, metav1.UpdateOptions{}); err != nil {
+	if _, err := h.numaflowClient.Pipelines(ns).Update(context.Background(), oldSpec, metav1.UpdateOptions{}); err != nil {
 		h.respondWithError(c, fmt.Sprintf("Failed to update pipeline %q, %s", pipeline, err.Error()))
 		return
 	}
@@ -551,15 +518,13 @@ func (h *handler) DeletePipeline(c *gin.Context) {
 
 	ns, pipeline := c.Param("namespace"), c.Param("pipeline")
 
-	if err := h.numaflowClient.Pipelines(ns).Delete(c, pipeline, metav1.DeleteOptions{}); err != nil {
+	if err := h.numaflowClient.Pipelines(ns).Delete(context.Background(), pipeline, metav1.DeleteOptions{}); err != nil {
 		h.respondWithError(c, fmt.Sprintf("Failed to delete pipeline %q, %s", pipeline, err.Error()))
 		return
 	}
 
 	// cleanup client after successfully deleting pipeline
-	// NOTE: if a pipeline was deleted by not through UI, the cache will not be updated,
-	// the entry becomes invalid and will be evicted only after the cache is full.
-	h.daemonClientsCache.Remove(pipelineDaemonSvcAddress(ns, pipeline))
+	h.daemonClientsCache.Remove(daemonSvcAddress(ns, pipeline))
 
 	c.JSON(http.StatusOK, NewNumaflowAPIResponse(nil, nil))
 }
@@ -586,7 +551,7 @@ func (h *handler) PatchPipeline(c *gin.Context) {
 		return
 	}
 
-	if _, err := h.numaflowClient.Pipelines(ns).Patch(c, pipeline, types.MergePatchType, patchSpec, metav1.PatchOptions{}); err != nil {
+	if _, err := h.numaflowClient.Pipelines(ns).Patch(context.Background(), pipeline, types.MergePatchType, patchSpec, metav1.PatchOptions{}); err != nil {
 		h.respondWithError(c, fmt.Sprintf("Failed to patch pipeline %q, %s", pipeline, err.Error()))
 		return
 	}
@@ -628,7 +593,7 @@ func (h *handler) CreateInterStepBufferService(c *gin.Context) {
 		return
 	}
 
-	if _, err := h.numaflowClient.InterStepBufferServices(ns).Create(c, &isbsvcSpec, metav1.CreateOptions{}); err != nil {
+	if _, err := h.numaflowClient.InterStepBufferServices(ns).Create(context.Background(), &isbsvcSpec, metav1.CreateOptions{}); err != nil {
 		h.respondWithError(c, fmt.Sprintf("Failed to create interstepbuffer service %q, %s", isbsvcSpec.Name, err.Error()))
 		return
 	}
@@ -651,7 +616,7 @@ func (h *handler) ListInterStepBufferServices(c *gin.Context) {
 func (h *handler) GetInterStepBufferService(c *gin.Context) {
 	ns, isbsvcName := c.Param("namespace"), c.Param("isb-service")
 
-	isbsvc, err := h.numaflowClient.InterStepBufferServices(ns).Get(c, isbsvcName, metav1.GetOptions{})
+	isbsvc, err := h.numaflowClient.InterStepBufferServices(ns).Get(context.Background(), isbsvcName, metav1.GetOptions{})
 	if err != nil {
 		h.respondWithError(c, fmt.Sprintf("Failed to fetch interstepbuffer service %q namespace %q, %s", isbsvcName, ns, err.Error()))
 		return
@@ -680,7 +645,7 @@ func (h *handler) UpdateInterStepBufferService(c *gin.Context) {
 	// dryRun is used to check if the operation is just a validation or an actual update
 	dryRun := strings.EqualFold("true", c.DefaultQuery("dry-run", "false"))
 
-	isbSVC, err := h.numaflowClient.InterStepBufferServices(ns).Get(c, isbsvcName, metav1.GetOptions{})
+	isbSVC, err := h.numaflowClient.InterStepBufferServices(ns).Get(context.Background(), isbsvcName, metav1.GetOptions{})
 	if err != nil {
 		h.respondWithError(c, fmt.Sprintf("Failed to get the interstep buffer service: namespace %q isb-services %q: %s", ns, isbsvcName, err.Error()))
 		return
@@ -703,7 +668,7 @@ func (h *handler) UpdateInterStepBufferService(c *gin.Context) {
 		return
 	}
 	isbSVC.Spec = updatedSpec.Spec
-	updatedISBSvc, err := h.numaflowClient.InterStepBufferServices(ns).Update(c, isbSVC, metav1.UpdateOptions{})
+	updatedISBSvc, err := h.numaflowClient.InterStepBufferServices(ns).Update(context.Background(), isbSVC, metav1.UpdateOptions{})
 	if err != nil {
 		h.respondWithError(c, fmt.Sprintf("Failed to update the interstep buffer service: namespace %q isb-services %q: %s", ns, isbsvcName, err.Error()))
 		return
@@ -720,7 +685,7 @@ func (h *handler) DeleteInterStepBufferService(c *gin.Context) {
 
 	ns, isbsvcName := c.Param("namespace"), c.Param("isb-service")
 
-	pipelines, err := h.numaflowClient.Pipelines(ns).List(c, metav1.ListOptions{})
+	pipelines, err := h.numaflowClient.Pipelines(ns).List(context.Background(), metav1.ListOptions{})
 	if err != nil {
 		h.respondWithError(c, fmt.Sprintf("Failed to get pipelines in namespace %q, %s", ns, err.Error()))
 		return
@@ -733,7 +698,7 @@ func (h *handler) DeleteInterStepBufferService(c *gin.Context) {
 		}
 	}
 
-	err = h.numaflowClient.InterStepBufferServices(ns).Delete(c, isbsvcName, metav1.DeleteOptions{})
+	err = h.numaflowClient.InterStepBufferServices(ns).Delete(context.Background(), isbsvcName, metav1.DeleteOptions{})
 	if err != nil {
 		h.respondWithError(c, fmt.Sprintf("Failed to delete the interstep buffer service: namespace %q isb-service %q: %s",
 			ns, isbsvcName, err.Error()))
@@ -747,13 +712,13 @@ func (h *handler) DeleteInterStepBufferService(c *gin.Context) {
 func (h *handler) ListPipelineBuffers(c *gin.Context) {
 	ns, pipeline := c.Param("namespace"), c.Param("pipeline")
 
-	client, err := h.getPipelineDaemonClient(ns, pipeline)
+	client, err := h.getDaemonClient(ns, pipeline)
 	if err != nil || client == nil {
 		h.respondWithError(c, fmt.Sprintf("failed to get daemon service client for pipeline %q, %s", pipeline, err.Error()))
 		return
 	}
 
-	buffers, err := client.ListPipelineBuffers(c, pipeline)
+	buffers, err := client.ListPipelineBuffers(context.Background(), pipeline)
 	if err != nil {
 		h.respondWithError(c, fmt.Sprintf("Failed to get the Inter-Step buffers for pipeline %q: %s", pipeline, err.Error()))
 		return
@@ -766,13 +731,13 @@ func (h *handler) ListPipelineBuffers(c *gin.Context) {
 func (h *handler) GetPipelineWatermarks(c *gin.Context) {
 	ns, pipeline := c.Param("namespace"), c.Param("pipeline")
 
-	client, err := h.getPipelineDaemonClient(ns, pipeline)
+	client, err := h.getDaemonClient(ns, pipeline)
 	if err != nil || client == nil {
 		h.respondWithError(c, fmt.Sprintf("failed to get daemon service client for pipeline %q, %s", pipeline, err.Error()))
 		return
 	}
 
-	watermarks, err := client.GetPipelineWatermarks(c, pipeline)
+	watermarks, err := client.GetPipelineWatermarks(context.Background(), pipeline)
 	if err != nil {
 		h.respondWithError(c, fmt.Sprintf("Failed to get the watermarks for pipeline %q: %s", pipeline, err.Error()))
 		return
@@ -801,7 +766,7 @@ func (h *handler) UpdateVertex(c *gin.Context) {
 		dryRun = strings.EqualFold("true", c.DefaultQuery("dry-run", "false"))
 	)
 
-	oldPipelineSpec, err := h.numaflowClient.Pipelines(ns).Get(c, pipeline, metav1.GetOptions{})
+	oldPipelineSpec, err := h.numaflowClient.Pipelines(ns).Get(context.Background(), pipeline, metav1.GetOptions{})
 	if err != nil {
 		h.respondWithError(c, fmt.Sprintf("Failed to update the vertex: namespace %q pipeline %q vertex %q: %s", ns,
 			pipeline, inputVertexName, err.Error()))
@@ -839,7 +804,7 @@ func (h *handler) UpdateVertex(c *gin.Context) {
 	}
 
 	oldPipelineSpec.Spec = newPipelineSpec.Spec
-	if _, err := h.numaflowClient.Pipelines(ns).Update(c, oldPipelineSpec, metav1.UpdateOptions{}); err != nil {
+	if _, err := h.numaflowClient.Pipelines(ns).Update(context.Background(), oldPipelineSpec, metav1.UpdateOptions{}); err != nil {
 		h.respondWithError(c, fmt.Sprintf("Failed to update the vertex: namespace %q pipeline %q vertex %q: %s",
 			ns, pipeline, inputVertexName, err.Error()))
 		return
@@ -852,13 +817,13 @@ func (h *handler) UpdateVertex(c *gin.Context) {
 func (h *handler) GetVerticesMetrics(c *gin.Context) {
 	ns, pipeline := c.Param("namespace"), c.Param("pipeline")
 
-	pl, err := h.numaflowClient.Pipelines(ns).Get(c, pipeline, metav1.GetOptions{})
+	pl, err := h.numaflowClient.Pipelines(ns).Get(context.Background(), pipeline, metav1.GetOptions{})
 	if err != nil {
 		h.respondWithError(c, fmt.Sprintf("Failed to get the vertices metrics: namespace %q pipeline %q: %s", ns, pipeline, err.Error()))
 		return
 	}
 
-	client, err := h.getPipelineDaemonClient(ns, pipeline)
+	client, err := h.getDaemonClient(ns, pipeline)
 	if err != nil || client == nil {
 		h.respondWithError(c, fmt.Sprintf("failed to get daemon service client for pipeline %q, %s", pipeline, err.Error()))
 		return
@@ -866,7 +831,7 @@ func (h *handler) GetVerticesMetrics(c *gin.Context) {
 
 	var results = make(map[string][]*daemon.VertexMetrics)
 	for _, vertex := range pl.Spec.Vertices {
-		metrics, err := client.GetVertexMetrics(c, pipeline, vertex.Name)
+		metrics, err := client.GetVertexMetrics(context.Background(), pipeline, vertex.Name)
 		if err != nil {
 			h.respondWithError(c, fmt.Sprintf("Failed to get the vertices metrics: namespace %q pipeline %q vertex %q: %s", ns, pipeline, vertex.Name, err.Error()))
 			return
@@ -882,7 +847,7 @@ func (h *handler) ListVertexPods(c *gin.Context) {
 	ns, pipeline, vertex := c.Param("namespace"), c.Param("pipeline"), c.Param("vertex")
 
 	limit, _ := strconv.ParseInt(c.Query("limit"), 10, 64)
-	pods, err := h.kubeClient.CoreV1().Pods(ns).List(c, metav1.ListOptions{
+	pods, err := h.kubeClient.CoreV1().Pods(ns).List(context.Background(), metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s,%s=%s", dfv1.KeyPipelineName, pipeline, dfv1.KeyVertexName, vertex),
 		Limit:         limit,
 		Continue:      c.Query("continue"),
@@ -901,7 +866,7 @@ func (h *handler) ListPodsMetrics(c *gin.Context) {
 	ns := c.Param("namespace")
 
 	limit, _ := strconv.ParseInt(c.Query("limit"), 10, 64)
-	metrics, err := h.metricsClient.MetricsV1beta1().PodMetricses(ns).List(c, metav1.ListOptions{
+	metrics, err := h.metricsClient.MetricsV1beta1().PodMetricses(ns).List(context.Background(), metav1.ListOptions{
 		Limit:    limit,
 		Continue: c.Query("continue"),
 	})
@@ -971,7 +936,7 @@ func (h *handler) GetNamespaceEvents(c *gin.Context) {
 	limit, _ := strconv.ParseInt(c.Query("limit"), 10, 64)
 	var err error
 	var events *corev1.EventList
-	if events, err = h.kubeClient.CoreV1().Events(ns).List(c, metav1.ListOptions{
+	if events, err = h.kubeClient.CoreV1().Events(ns).List(context.Background(), metav1.ListOptions{
 		Limit:    limit,
 		Continue: c.Query("continue"),
 	}); err != nil {
@@ -1016,18 +981,18 @@ func (h *handler) GetPipelineStatus(c *gin.Context) {
 	// Get the vertex level health of the pipeline
 	resourceHealth, err := h.healthChecker.getPipelineResourceHealth(h, ns, pipeline)
 	if err != nil {
-		h.respondWithError(c, fmt.Sprintf("Failed to get the resourceHealth for pipeline %q: %s", pipeline, err.Error()))
+		h.respondWithError(c, fmt.Sprintf("Failed to get the dataStatus for pipeline %q: %s", pipeline, err.Error()))
 		return
 	}
 
 	// Get a new daemon client for the given pipeline
-	client, err := h.getPipelineDaemonClient(ns, pipeline)
+	client, err := h.getDaemonClient(ns, pipeline)
 	if err != nil || client == nil {
 		h.respondWithError(c, fmt.Sprintf("failed to get daemon service client for pipeline %q, %s", pipeline, err.Error()))
 		return
 	}
 	// Get the data criticality for the given pipeline
-	dataStatus, err := client.GetPipelineStatus(c, pipeline)
+	dataStatus, err := client.GetPipelineStatus(context.Background(), pipeline)
 	if err != nil {
 		h.respondWithError(c, fmt.Sprintf("Failed to get the dataStatus for pipeline %q: %s", pipeline, err.Error()))
 		return
@@ -1037,145 +1002,6 @@ func (h *handler) GetPipelineStatus(c *gin.Context) {
 	// We combine both the states to get the final dataStatus of the pipeline
 	response := NewHealthResponse(resourceHealth.Status, dataStatus.GetStatus(),
 		resourceHealth.Message, dataStatus.GetMessage(), resourceHealth.Code, dataStatus.GetCode())
-
-	c.JSON(http.StatusOK, NewNumaflowAPIResponse(nil, response))
-}
-
-// ListMonoVertices is used to provide all the mono vertices in a namespace.
-func (h *handler) ListMonoVertices(c *gin.Context) {
-	ns := c.Param("namespace")
-	mvtList, err := getMonoVertices(h, ns)
-	if err != nil {
-		h.respondWithError(c, fmt.Sprintf("Failed to fetch all mono vertices for namespace %q, %s", ns, err.Error()))
-		return
-	}
-	c.JSON(http.StatusOK, NewNumaflowAPIResponse(nil, mvtList))
-}
-
-// GetMonoVertex is used to provide the spec of a given mono vertex
-func (h *handler) GetMonoVertex(c *gin.Context) {
-	ns, monoVertex := c.Param("namespace"), c.Param("mono-vertex")
-	// get general mono vertex info
-	mvt, err := h.numaflowClient.MonoVertices(ns).Get(c, monoVertex, metav1.GetOptions{})
-	if err != nil {
-		h.respondWithError(c, fmt.Sprintf("Failed to fetch mono vertex %q in namespace %q, %s", mvt, ns, err.Error()))
-		return
-	}
-	// set mono vertex kind and apiVersion
-	mvt.Kind = dfv1.MonoVertexGroupVersionKind.Kind
-	mvt.APIVersion = dfv1.SchemeGroupVersion.String()
-	// get mono vertex status
-	status, err := getMonoVertexStatus(mvt)
-	if err != nil {
-		h.respondWithError(c, fmt.Sprintf("Failed to fetch mono vertex %q from namespace %q, %s", monoVertex, ns, err.Error()))
-		return
-	}
-	monoVertexResp := NewMonoVertexInfo(status, mvt)
-	c.JSON(http.StatusOK, NewNumaflowAPIResponse(nil, monoVertexResp))
-}
-
-// CreateMonoVertex is used to create a mono vertex
-func (h *handler) CreateMonoVertex(c *gin.Context) {
-	if h.opts.readonly {
-		errMsg := "Failed to perform this operation in read only mode"
-		c.JSON(http.StatusForbidden, NewNumaflowAPIResponse(&errMsg, nil))
-		return
-	}
-
-	ns := c.Param("namespace")
-	// dryRun is used to check if the operation is just a validation or an actual creation
-	dryRun := strings.EqualFold("true", c.DefaultQuery("dry-run", "false"))
-
-	var monoVertexSpec dfv1.MonoVertex
-	if err := bindJson(c, &monoVertexSpec); err != nil {
-		h.respondWithError(c, fmt.Sprintf("Failed to decode JSON request body to mono vertex spec, %s", err.Error()))
-		return
-	}
-
-	if requestedNs := monoVertexSpec.Namespace; !isValidNamespaceSpec(requestedNs, ns) {
-		h.respondWithError(c, fmt.Sprintf("namespace mismatch, expected %s, got %s", ns, requestedNs))
-		return
-	}
-	monoVertexSpec.Namespace = ns
-	// if the validation flag "dryRun" is set to true, return without creating the pipeline
-	if dryRun {
-		c.JSON(http.StatusOK, NewNumaflowAPIResponse(nil, nil))
-		return
-	}
-	if _, err := h.numaflowClient.MonoVertices(ns).Create(c, &monoVertexSpec, metav1.CreateOptions{}); err != nil {
-		h.respondWithError(c, fmt.Sprintf("Failed to create mono vertex %q, %s", monoVertexSpec.Name, err.Error()))
-		return
-	}
-	c.JSON(http.StatusOK, NewNumaflowAPIResponse(nil, nil))
-}
-
-// ListMonoVertexPods is used to provide all the pods of a mono vertex
-func (h *handler) ListMonoVertexPods(c *gin.Context) {
-	ns, monoVertex := c.Param("namespace"), c.Param("mono-vertex")
-	limit, _ := strconv.ParseInt(c.Query("limit"), 10, 64)
-	pods, err := h.kubeClient.CoreV1().Pods(ns).List(c, metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("%s=%s", dfv1.KeyMonoVertexName, monoVertex),
-		Limit:         limit,
-		Continue:      c.Query("continue"),
-	})
-	if err != nil {
-		h.respondWithError(c, fmt.Sprintf("Failed to get a list of pods: namespace %q mono vertex %q: %s",
-			ns, monoVertex, err.Error()))
-		return
-	}
-	c.JSON(http.StatusOK, NewNumaflowAPIResponse(nil, pods.Items))
-}
-
-// GetMonoVertexMetrics is used to provide information about one mono vertex, including processing rates.
-func (h *handler) GetMonoVertexMetrics(c *gin.Context) {
-	ns, monoVertex := c.Param("namespace"), c.Param("mono-vertex")
-
-	client, err := h.getMonoVertexDaemonClient(ns, monoVertex)
-	if err != nil || client == nil {
-		h.respondWithError(c, fmt.Sprintf("failed to get daemon service client for mono vertex %q, %s", monoVertex, err.Error()))
-		return
-	}
-
-	metrics, err := client.GetMonoVertexMetrics(c)
-	if err != nil {
-		h.respondWithError(c, fmt.Sprintf("Failed to get the mono vertex metrics: namespace %q mono vertex %q: %s", ns, monoVertex, err.Error()))
-		return
-	}
-
-	c.JSON(http.StatusOK, NewNumaflowAPIResponse(nil, metrics))
-}
-
-// GetMonoVertexHealth is used to the health information about a mono vertex
-// We use two checks to determine the health of the mono vertex:
-// 1. Resource Health: It is based on the health of the mono vertex deployment and pods.
-// 2. Data Criticality: It is based on the data movement of the mono vertex
-func (h *handler) GetMonoVertexHealth(c *gin.Context) {
-	ns, monoVertex := c.Param("namespace"), c.Param("mono-vertex")
-
-	// Resource level health
-	resourceHealth, err := h.healthChecker.getMonoVtxResourceHealth(h, ns, monoVertex)
-	if err != nil {
-		h.respondWithError(c, fmt.Sprintf("Failed to get the resourceHealth for MonoVertex %q: %s", monoVertex, err.Error()))
-		return
-	}
-
-	// Create a new daemon client to get the data status
-	client, err := h.getMonoVertexDaemonClient(ns, monoVertex)
-	if err != nil || client == nil {
-		h.respondWithError(c, fmt.Sprintf("failed to get daemon service client for mono vertex %q, %s", monoVertex, err.Error()))
-		return
-	}
-	// Data level health status
-	dataHealth, err := client.GetMonoVertexStatus(c)
-	if err != nil {
-		h.respondWithError(c, fmt.Sprintf("Failed to get the mono vertex dataStatus: namespace %q mono vertex %q: %s", ns, monoVertex, err.Error()))
-		return
-	}
-
-	// Create a response string based on the vertex health and data criticality
-	// We combine both the states to get the final dataStatus of the pipeline
-	response := NewHealthResponse(resourceHealth.Status, dataHealth.GetStatus(),
-		resourceHealth.Message, dataHealth.GetMessage(), resourceHealth.Code, dataHealth.GetCode())
 
 	c.JSON(http.StatusOK, NewNumaflowAPIResponse(nil, response))
 }
@@ -1236,24 +1062,6 @@ func getIsbServices(h *handler, namespace string) (ISBServices, error) {
 	return isbList, nil
 }
 
-// getMonoVertices is a utility used to fetch all the mono vertices in a given namespace
-func getMonoVertices(h *handler, namespace string) (MonoVertices, error) {
-	mvtList, err := h.numaflowClient.MonoVertices(namespace).List(context.Background(), metav1.ListOptions{})
-	if err != nil {
-		return nil, err
-	}
-	var resList MonoVertices
-	for _, mvt := range mvtList.Items {
-		status, err := getMonoVertexStatus(&mvt)
-		if err != nil {
-			return nil, err
-		}
-		resp := NewMonoVertexInfo(status, &mvt)
-		resList = append(resList, resp)
-	}
-	return resList, nil
-}
-
 // GetPipelineStatus is used to provide the status of a given pipeline
 // TODO(API): Change the Daemon service to return the consolidated status of the pipeline
 // to save on multiple calls to the daemon service
@@ -1282,11 +1090,6 @@ func getIsbServiceStatus(isbsvc *dfv1.InterStepBufferService) (string, error) {
 		retStatus = ISBServiceStatusCritical
 	}
 	return retStatus, nil
-}
-
-func getMonoVertexStatus(mvt *dfv1.MonoVertex) (string, error) {
-	// TODO - add more logic to determine the status of a mono vertex
-	return dfv1.MonoVertexStatusHealthy, nil
 }
 
 // validatePipelineSpec is used to validate the pipeline spec during create and update
@@ -1374,54 +1177,26 @@ func validatePipelinePatch(patch []byte) error {
 	return nil
 }
 
-func pipelineDaemonSvcAddress(ns, pipelineName string) string {
-	// the format is consistent with what we defined in GetDaemonServiceURL in `pkg/apis/numaflow/v1alpha1/pipeline_types.go`
-	// do not change it without changing the other.
-	return fmt.Sprintf("%s.%s.svc:%d", fmt.Sprintf("%s-daemon-svc", pipelineName), ns, dfv1.DaemonServicePort)
+func daemonSvcAddress(ns, pipeline string) string {
+	return fmt.Sprintf("%s.%s.svc:%d", fmt.Sprintf("%s-daemon-svc", pipeline), ns, dfv1.DaemonServicePort)
 }
 
-func monoVertexDaemonSvcAddress(ns, monoVertexName string) string {
-	// the format is consistent with what we defined in GetDaemonServiceURL in `pkg/apis/numaflow/v1alpha1/mono_vertex_types.go`
-	// do not change it without changing the other.
-	return fmt.Sprintf("%s.%s.svc:%d", fmt.Sprintf("%s-mv-daemon-svc", monoVertexName), ns, dfv1.MonoVertexDaemonServicePort)
-}
-
-func (h *handler) getPipelineDaemonClient(ns, pipeline string) (daemonclient.DaemonClient, error) {
-	if dClient, ok := h.daemonClientsCache.Get(pipelineDaemonSvcAddress(ns, pipeline)); !ok {
+func (h *handler) getDaemonClient(ns, pipeline string) (daemonclient.DaemonClient, error) {
+	if dClient, ok := h.daemonClientsCache.Get(daemonSvcAddress(ns, pipeline)); !ok {
 		var err error
 		var c daemonclient.DaemonClient
 		// Default to use gRPC client
 		if strings.EqualFold(h.opts.daemonClientProtocol, "http") {
-			c, err = daemonclient.NewRESTfulDaemonServiceClient(pipelineDaemonSvcAddress(ns, pipeline))
+			c, err = daemonclient.NewRESTfulDaemonServiceClient(daemonSvcAddress(ns, pipeline))
 		} else {
-			c, err = daemonclient.NewGRPCDaemonServiceClient(pipelineDaemonSvcAddress(ns, pipeline))
+			c, err = daemonclient.NewGRPCDaemonServiceClient(daemonSvcAddress(ns, pipeline))
 		}
 		if err != nil {
 			return nil, err
 		}
-		h.daemonClientsCache.Add(pipelineDaemonSvcAddress(ns, pipeline), c)
+		h.daemonClientsCache.Add(daemonSvcAddress(ns, pipeline), c)
 		return c, nil
 	} else {
 		return dClient, nil
-	}
-}
-
-func (h *handler) getMonoVertexDaemonClient(ns, mvtName string) (mvtdaemonclient.MonoVertexDaemonClient, error) {
-	if mvtDaemonClient, ok := h.mvtDaemonClientsCache.Get(monoVertexDaemonSvcAddress(ns, mvtName)); !ok {
-		var err error
-		var c mvtdaemonclient.MonoVertexDaemonClient
-		// Default to use gRPC client
-		if strings.EqualFold(h.opts.daemonClientProtocol, "http") {
-			c, err = mvtdaemonclient.NewRESTfulClient(monoVertexDaemonSvcAddress(ns, mvtName))
-		} else {
-			c, err = mvtdaemonclient.NewGRPCClient(monoVertexDaemonSvcAddress(ns, mvtName))
-		}
-		if err != nil {
-			return nil, err
-		}
-		h.mvtDaemonClientsCache.Add(monoVertexDaemonSvcAddress(ns, mvtName), c)
-		return c, nil
-	} else {
-		return mvtDaemonClient, nil
 	}
 }
