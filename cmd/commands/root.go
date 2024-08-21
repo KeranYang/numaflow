@@ -51,5 +51,4 @@ func init() {
 	rootCmd.AddCommand(NewSideInputsManagerCommand())
 	rootCmd.AddCommand(NewSideInputsSynchronizerCommand())
 	rootCmd.AddCommand(NewDexServerInitCommand())
-	rootCmd.AddCommand(NewMonoVtxDaemonServerCommand())
 }

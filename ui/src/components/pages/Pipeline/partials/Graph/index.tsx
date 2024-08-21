@@ -64,7 +64,6 @@ import source from "../../../../../images/source.png";
 import map from "../../../../../images/map.png";
 import reduce from "../../../../../images/reduce.png";
 import sink from "../../../../../images/sink.png";
-import monoVertex from "../../../../../images/monoVertex.svg";
 import input from "../../../../../images/input0.svg";
 import generator from "../../../../../images/generator0.svg";
 
@@ -162,7 +161,6 @@ const Flow = (props: FlowProps) => {
     refresh,
     namespaceId,
     data,
-    type,
   } = props;
 
   const onIsLockedChange = useCallback(
@@ -319,11 +317,7 @@ const Flow = (props: FlowProps) => {
                 fontSize: "1.4rem",
               }}
               onClick={handlePlayClick}
-              disabled={
-                type === "monoVertex"
-                  ? true
-                  : data?.pipeline?.status?.phase === RUNNING
-              }
+              disabled={data?.pipeline?.status?.phase === RUNNING}
             >
               Resume
             </Button>
@@ -339,10 +333,8 @@ const Flow = (props: FlowProps) => {
               }}
               onClick={handlePauseClick}
               disabled={
-                type === "monoVertex"
-                  ? true
-                  : data?.pipeline?.status?.phase === PAUSED ||
-                    data?.pipeline?.status?.phase === PAUSING
+                data?.pipeline?.status?.phase === PAUSED ||
+                data?.pipeline?.status?.phase === PAUSING
               }
             >
               Pause
@@ -521,18 +513,10 @@ const Flow = (props: FlowProps) => {
             <Typography sx={{ fontSize: "1.6rem" }}>Legend</Typography>
           </AccordionSummary>
           <AccordionDetails>
-            {type === "monoVertex" && (
-              <div className={"legend-title"}>
-                <img src={monoVertex} alt={"monoVertex"} />
-                <div className={"legend-text"}>MonoVertex</div>
-              </div>
-            )}
-            {type === "pipeline" && (
-              <div className={"legend-title"}>
-                <img src={source} alt={"source"} />
-                <div className={"legend-text"}>Source</div>
-              </div>
-            )}
+            <div className={"legend-title"}>
+              <img src={source} alt={"source"} />
+              <div className={"legend-text"}>Source</div>
+            </div>
             {isMap && (
               <div className={"legend-title"}>
                 <img src={map} alt={"map"} />
@@ -545,12 +529,10 @@ const Flow = (props: FlowProps) => {
                 <div className={"legend-text"}>Reduce</div>
               </div>
             )}
-            {type === "pipeline" && (
-              <div className={"legend-title"}>
-                <img src={sink} alt={"sink"} />
-                <div className={"legend-text"}>Sink</div>
-              </div>
-            )}
+            <div className={"legend-title"}>
+              <img src={sink} alt={"sink"} />
+              <div className={"legend-text"}>Sink</div>
+            </div>
             {isSideInput && (
               <div className={"legend-title"}>
                 <img src={input} width={22} alt={"input"} />
@@ -587,7 +569,7 @@ const getHiddenValue = (edges: Edge[]) => {
 };
 
 export default function Graph(props: GraphProps) {
-  const { data, namespaceId, pipelineId, type, refresh } = props;
+  const { data, namespaceId, pipelineId, refresh } = props;
   const { sidebarProps, setSidebarProps } =
     useContext<AppContextProps>(AppContext);
 
@@ -851,7 +833,6 @@ export default function Graph(props: GraphProps) {
               refresh={refresh}
               namespaceId={namespaceId}
               data={data}
-              type={type}
             />
           </ReactFlowProvider>
         </HighlightContext.Provider>

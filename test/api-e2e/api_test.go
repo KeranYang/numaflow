@@ -1,18 +1,3 @@
-/*
-Copyright 2022 The Numaproj Authors.
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package api_e2e
 
 import (
@@ -137,7 +122,7 @@ func (s *APISuite) TestISBSVCReplica1() {
 	assert.Contains(s.T(), deleteISBSVC, deleteISBSVCSuccessExpect)
 }
 
-func (s *APISuite) TestAPIsForIsbAndPipelineAndMonoVertex() {
+func (s *APISuite) TestPipeline0() {
 	defer s.Given().When().UXServerPodPortForward(8145, 8443).TerminateAllPodPortForwards()
 
 	namespaceBody := HTTPExpect(s.T(), "https://localhost:8145").GET("/api/v1/namespaces").
@@ -173,20 +158,10 @@ func (s *APISuite) TestAPIsForIsbAndPipelineAndMonoVertex() {
 		Status(200).Body().Raw()
 	assert.Contains(s.T(), resumePipeline1, patchPipelineSuccessExpect)
 
-	// create a mono vertex
-	var mv1 v1alpha1.MonoVertex
-	err = json.Unmarshal(testMonoVertex1, &mv1)
-	assert.NoError(s.T(), err)
-	createMonoVertex := HTTPExpect(s.T(), "https://localhost:8145").POST(fmt.Sprintf("/api/v1/namespaces/%s/mono-vertices", Namespace)).WithJSON(mv1).
-		Expect().
-		Status(200).Body().Raw()
-	var createMonoVertexSuccessExpect = `"data":null`
-	assert.Contains(s.T(), createMonoVertex, createMonoVertexSuccessExpect)
-
 	clusterSummaryBody := HTTPExpect(s.T(), "https://localhost:8145").GET("/api/v1/cluster-summary").
 		Expect().
 		Status(200).Body().Raw()
-	var clusterSummaryExpect = `{"isEmpty":false,"namespace":"numaflow-system","pipelineSummary":{"active":{"Healthy":2,"Warning":0,"Critical":0},"inactive":0},"isbServiceSummary":{"active":{"Healthy":1,"Warning":0,"Critical":0},"inactive":0},"monoVertexSummary":{"active":{"Healthy":1,"Warning":0,"Critical":0},"inactive":0}}`
+	var clusterSummaryExpect = `{"isEmpty":false,"namespace":"numaflow-system","pipelineSummary":{"active":{"Healthy":2,"Warning":0,"Critical":0},"inactive":0},"isbServiceSummary":{"active":{"Healthy":1,"Warning":0,"Critical":0},"inactive":0}}`
 	assert.Contains(s.T(), clusterSummaryBody, clusterSummaryExpect)
 
 	listPipelineBody := HTTPExpect(s.T(), "https://localhost:8145").GET(fmt.Sprintf("/api/v1/namespaces/%s/pipelines", Namespace)).
@@ -204,14 +179,9 @@ func (s *APISuite) TestAPIsForIsbAndPipelineAndMonoVertex() {
 	var deletePipelineSuccessExpect = `"data":null`
 	assert.Contains(s.T(), deletePipeline1, deletePipelineSuccessExpect)
 	assert.Contains(s.T(), deletePipeline2, deletePipelineSuccessExpect)
-
-	listMonoVertexBody := HTTPExpect(s.T(), "https://localhost:8145").GET(fmt.Sprintf("/api/v1/namespaces/%s/mono-vertices", Namespace)).
-		Expect().
-		Status(200).Body().Raw()
-	assert.Contains(s.T(), listMonoVertexBody, testMonoVertex1Name)
 }
 
-func (s *APISuite) TestAPIsForMetricsAndWatermarkAndPods() {
+func (s *APISuite) TestPipeline1() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 

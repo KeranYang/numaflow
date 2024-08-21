@@ -11,7 +11,6 @@ export interface PodsProps {
   namespaceId: string;
   pipelineId: string;
   vertexId: string;
-  type: string;
 }
 
 export interface PodContainerSpec {

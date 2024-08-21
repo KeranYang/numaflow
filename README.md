@@ -36,7 +36,7 @@ Numaflow, created by the Intuit Argo team to address community needs for continu
 
 ## Roadmap
 
-- Mono Vertex to bypass ISB for simple use cases (1.4)
+- Map Streaming (1.3)
 
 ## Demo
 

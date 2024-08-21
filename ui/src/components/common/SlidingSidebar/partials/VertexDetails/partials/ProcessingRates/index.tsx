@@ -13,14 +13,12 @@ import "./style.css";
 export interface ProcessingRatesProps {
   vertexId: string;
   pipelineId: string;
-  type: string;
   vertexMetrics: any;
 }
 
 export function ProcessingRates({
   vertexMetrics,
   pipelineId,
-  type,
   vertexId,
 }: ProcessingRatesProps) {
   const [foundRates, setFoundRates] = useState<PipelineVertexMetric[]>([]);
@@ -29,15 +27,13 @@ export function ProcessingRates({
     if (!vertexMetrics || !pipelineId || !vertexId) {
       return;
     }
-    const vertexData =
-      type === "monoVertex" ? [vertexMetrics] : vertexMetrics[vertexId];
+    const vertexData = vertexMetrics[vertexId];
     if (!vertexData) {
       return;
     }
     const rates: PipelineVertexMetric[] = [];
     vertexData.forEach((item: any, index: number) => {
-      const key = type === "monoVertex" ? "monoVertex" : "pipeline";
-      if (item?.[key] !== pipelineId || !item.processingRates) {
+      if (item.pipeline !== pipelineId || !item.processingRates) {
         return; // continue
       }
       rates.push({
@@ -68,7 +64,7 @@ export function ProcessingRates({
         <Table stickyHeader>
           <TableHead>
             <TableRow>
-              {type !== "monoVertex" && <TableCell>Partition</TableCell>}
+              <TableCell>Partition</TableCell>
               <TableCell>1m</TableCell>
               <TableCell>5m</TableCell>
               <TableCell>15m</TableCell>
@@ -85,9 +81,7 @@ export function ProcessingRates({
             {!!foundRates.length &&
               foundRates.map((metric) => (
                 <TableRow key={metric.partition}>
-                  {type !== "monoVertex" && (
-                    <TableCell>{metric.partition}</TableCell>
-                  )}
+                  <TableCell>{metric.partition}</TableCell>
                   <TableCell>{metric.oneM}/sec</TableCell>
                   <TableCell>{metric.fiveM}/sec</TableCell>
                   <TableCell>{metric.fifteenM}/sec</TableCell>

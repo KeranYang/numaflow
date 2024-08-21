@@ -51,7 +51,3 @@ func (eri *externalRedisInstaller) Uninstall(ctx context.Context) error {
 	eri.logger.Info("Nothing to uninstall")
 	return nil
 }
-
-func (eri *externalRedisInstaller) CheckChildrenResourceStatus(ctx context.Context) error {
-	return nil
-}

@@ -38,7 +38,6 @@ AbstractPodTemplate
 <a href="#numaflow.numaproj.io/v1alpha1.DaemonTemplate">DaemonTemplate</a>,
 <a href="#numaflow.numaproj.io/v1alpha1.JetStreamBufferService">JetStreamBufferService</a>,
 <a href="#numaflow.numaproj.io/v1alpha1.JobTemplate">JobTemplate</a>,
-<a href="#numaflow.numaproj.io/v1alpha1.MonoVertexSpec">MonoVertexSpec</a>,
 <a href="#numaflow.numaproj.io/v1alpha1.NativeRedis">NativeRedis</a>,
 <a href="#numaflow.numaproj.io/v1alpha1.SideInputsManagerTemplate">SideInputsManagerTemplate</a>,
 <a href="#numaflow.numaproj.io/v1alpha1.VertexTemplate">VertexTemplate</a>)
@@ -1481,7 +1480,6 @@ ContainerTemplate
 <a href="#numaflow.numaproj.io/v1alpha1.DaemonTemplate">DaemonTemplate</a>,
 <a href="#numaflow.numaproj.io/v1alpha1.JetStreamBufferService">JetStreamBufferService</a>,
 <a href="#numaflow.numaproj.io/v1alpha1.JobTemplate">JobTemplate</a>,
-<a href="#numaflow.numaproj.io/v1alpha1.MonoVertexSpec">MonoVertexSpec</a>,
 <a href="#numaflow.numaproj.io/v1alpha1.NativeRedis">NativeRedis</a>,
 <a href="#numaflow.numaproj.io/v1alpha1.SideInputsManagerTemplate">SideInputsManagerTemplate</a>,
 <a href="#numaflow.numaproj.io/v1alpha1.VertexTemplate">VertexTemplate</a>)
@@ -1610,7 +1608,6 @@ DaemonTemplate
 <p>
 
 (<em>Appears on:</em>
-<a href="#numaflow.numaproj.io/v1alpha1.MonoVertexSpec">MonoVertexSpec</a>,
 <a href="#numaflow.numaproj.io/v1alpha1.Templates">Templates</a>)
 </p>
 
@@ -2825,192 +2822,6 @@ Description
 <td>
 
 <code>StartCommand</code></br> <em> string </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>DefaultResources</code></br> <em>
-<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#resourcerequirements-v1-core">
-Kubernetes core/v1.ResourceRequirements </a> </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-</tbody>
-
-</table>
-
-<h3 id="numaflow.numaproj.io/v1alpha1.GetMonoVertexDaemonDeploymentReq">
-
-GetMonoVertexDaemonDeploymentReq
-</h3>
-
-<p>
-
-</p>
-
-<table>
-
-<thead>
-
-<tr>
-
-<th>
-
-Field
-</th>
-
-<th>
-
-Description
-</th>
-
-</tr>
-
-</thead>
-
-<tbody>
-
-<tr>
-
-<td>
-
-<code>Image</code></br> <em> string </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>PullPolicy</code></br> <em>
-<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#pullpolicy-v1-core">
-Kubernetes core/v1.PullPolicy </a> </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>Env</code></br> <em>
-<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#envvar-v1-core">
-\[\]Kubernetes core/v1.EnvVar </a> </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>DefaultResources</code></br> <em>
-<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#resourcerequirements-v1-core">
-Kubernetes core/v1.ResourceRequirements </a> </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-</tbody>
-
-</table>
-
-<h3 id="numaflow.numaproj.io/v1alpha1.GetMonoVertexPodSpecReq">
-
-GetMonoVertexPodSpecReq
-</h3>
-
-<p>
-
-</p>
-
-<table>
-
-<thead>
-
-<tr>
-
-<th>
-
-Field
-</th>
-
-<th>
-
-Description
-</th>
-
-</tr>
-
-</thead>
-
-<tbody>
-
-<tr>
-
-<td>
-
-<code>Image</code></br> <em> string </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>PullPolicy</code></br> <em>
-<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#pullpolicy-v1-core">
-Kubernetes core/v1.PullPolicy </a> </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>Env</code></br> <em>
-<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#envvar-v1-core">
-\[\]Kubernetes core/v1.EnvVar </a> </em>
 </td>
 
 <td>
@@ -4270,6 +4081,12 @@ BufferServiceConfig </a> </em>
 
 <td>
 
+<p>
+
+ObservedGeneration stores the generation value observed by the
+controller.
+</p>
+
 </td>
 
 </tr>
@@ -5399,817 +5216,6 @@ Description
 <td>
 
 <code>labels</code></br> <em> map\[string\]string </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-</tbody>
-
-</table>
-
-<h3 id="numaflow.numaproj.io/v1alpha1.MonoVertex">
-
-MonoVertex
-</h3>
-
-<p>
-
-</p>
-
-<table>
-
-<thead>
-
-<tr>
-
-<th>
-
-Field
-</th>
-
-<th>
-
-Description
-</th>
-
-</tr>
-
-</thead>
-
-<tbody>
-
-<tr>
-
-<td>
-
-<code>metadata</code></br> <em>
-<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#objectmeta-v1-meta">
-Kubernetes meta/v1.ObjectMeta </a> </em>
-</td>
-
-<td>
-
-Refer to the Kubernetes API documentation for the fields of the
-<code>metadata</code> field.
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>spec</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.MonoVertexSpec"> MonoVertexSpec
-</a> </em>
-</td>
-
-<td>
-
-<br/> <br/>
-<table>
-
-<tr>
-
-<td>
-
-<code>replicas</code></br> <em> int32 </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>source</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.Source"> Source </a> </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>sink</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.Sink"> Sink </a> </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>AbstractPodTemplate</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.AbstractPodTemplate">
-AbstractPodTemplate </a> </em>
-</td>
-
-<td>
-
-<p>
-
-(Members of <code>AbstractPodTemplate</code> are embedded into this
-type.)
-</p>
-
-<em>(Optional)</em>
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>containerTemplate</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.ContainerTemplate">
-ContainerTemplate </a> </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-<p>
-
-Container template for the main numa container.
-</p>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>volumes</code></br> <em>
-<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#volume-v1-core">
-\[\]Kubernetes core/v1.Volume </a> </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>limits</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.MonoVertexLimits">
-MonoVertexLimits </a> </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-<p>
-
-Limits define the limitations such as buffer read batch size for all the
-vertices of a pipeline, will override pipeline level settings
-</p>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>scale</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.Scale"> Scale </a> </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-<p>
-
-Settings for autoscaling
-</p>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>initContainers</code></br> <em>
-<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#container-v1-core">
-\[\]Kubernetes core/v1.Container </a> </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-<p>
-
-List of customized init containers belonging to the pod. More info:
-<a href="https://kubernetes.io/docs/concepts/workloads/pods/init-containers/">https://kubernetes.io/docs/concepts/workloads/pods/init-containers/</a>
-</p>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>sidecars</code></br> <em>
-<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#container-v1-core">
-\[\]Kubernetes core/v1.Container </a> </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-<p>
-
-List of customized sidecar containers belonging to the pod.
-</p>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>daemonTemplate</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.DaemonTemplate"> DaemonTemplate
-</a> </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-<p>
-
-Template for the daemon service deployment.
-</p>
-
-</td>
-
-</tr>
-
-</table>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>status</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.MonoVertexStatus">
-MonoVertexStatus </a> </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-</td>
-
-</tr>
-
-</tbody>
-
-</table>
-
-<h3 id="numaflow.numaproj.io/v1alpha1.MonoVertexLimits">
-
-MonoVertexLimits
-</h3>
-
-<p>
-
-(<em>Appears on:</em>
-<a href="#numaflow.numaproj.io/v1alpha1.MonoVertexSpec">MonoVertexSpec</a>)
-</p>
-
-<p>
-
-</p>
-
-<table>
-
-<thead>
-
-<tr>
-
-<th>
-
-Field
-</th>
-
-<th>
-
-Description
-</th>
-
-</tr>
-
-</thead>
-
-<tbody>
-
-<tr>
-
-<td>
-
-<code>readBatchSize</code></br> <em> uint64 </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-<p>
-
-Read batch size from the source.
-</p>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>readTimeout</code></br> <em>
-<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
-Kubernetes meta/v1.Duration </a> </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-<p>
-
-Read timeout duration from the source.
-</p>
-
-</td>
-
-</tr>
-
-</tbody>
-
-</table>
-
-<h3 id="numaflow.numaproj.io/v1alpha1.MonoVertexPhase">
-
-MonoVertexPhase (<code>string</code> alias)
-</p>
-
-</h3>
-
-<p>
-
-(<em>Appears on:</em>
-<a href="#numaflow.numaproj.io/v1alpha1.MonoVertexStatus">MonoVertexStatus</a>)
-</p>
-
-<p>
-
-</p>
-
-<h3 id="numaflow.numaproj.io/v1alpha1.MonoVertexSpec">
-
-MonoVertexSpec
-</h3>
-
-<p>
-
-(<em>Appears on:</em>
-<a href="#numaflow.numaproj.io/v1alpha1.MonoVertex">MonoVertex</a>)
-</p>
-
-<p>
-
-</p>
-
-<table>
-
-<thead>
-
-<tr>
-
-<th>
-
-Field
-</th>
-
-<th>
-
-Description
-</th>
-
-</tr>
-
-</thead>
-
-<tbody>
-
-<tr>
-
-<td>
-
-<code>replicas</code></br> <em> int32 </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>source</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.Source"> Source </a> </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>sink</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.Sink"> Sink </a> </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>AbstractPodTemplate</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.AbstractPodTemplate">
-AbstractPodTemplate </a> </em>
-</td>
-
-<td>
-
-<p>
-
-(Members of <code>AbstractPodTemplate</code> are embedded into this
-type.)
-</p>
-
-<em>(Optional)</em>
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>containerTemplate</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.ContainerTemplate">
-ContainerTemplate </a> </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-<p>
-
-Container template for the main numa container.
-</p>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>volumes</code></br> <em>
-<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#volume-v1-core">
-\[\]Kubernetes core/v1.Volume </a> </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>limits</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.MonoVertexLimits">
-MonoVertexLimits </a> </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-<p>
-
-Limits define the limitations such as buffer read batch size for all the
-vertices of a pipeline, will override pipeline level settings
-</p>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>scale</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.Scale"> Scale </a> </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-<p>
-
-Settings for autoscaling
-</p>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>initContainers</code></br> <em>
-<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#container-v1-core">
-\[\]Kubernetes core/v1.Container </a> </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-<p>
-
-List of customized init containers belonging to the pod. More info:
-<a href="https://kubernetes.io/docs/concepts/workloads/pods/init-containers/">https://kubernetes.io/docs/concepts/workloads/pods/init-containers/</a>
-</p>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>sidecars</code></br> <em>
-<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#container-v1-core">
-\[\]Kubernetes core/v1.Container </a> </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-<p>
-
-List of customized sidecar containers belonging to the pod.
-</p>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>daemonTemplate</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.DaemonTemplate"> DaemonTemplate
-</a> </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-<p>
-
-Template for the daemon service deployment.
-</p>
-
-</td>
-
-</tr>
-
-</tbody>
-
-</table>
-
-<h3 id="numaflow.numaproj.io/v1alpha1.MonoVertexStatus">
-
-MonoVertexStatus
-</h3>
-
-<p>
-
-(<em>Appears on:</em>
-<a href="#numaflow.numaproj.io/v1alpha1.MonoVertex">MonoVertex</a>)
-</p>
-
-<p>
-
-</p>
-
-<table>
-
-<thead>
-
-<tr>
-
-<th>
-
-Field
-</th>
-
-<th>
-
-Description
-</th>
-
-</tr>
-
-</thead>
-
-<tbody>
-
-<tr>
-
-<td>
-
-<code>Status</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.Status"> Status </a> </em>
-</td>
-
-<td>
-
-<p>
-
-(Members of <code>Status</code> are embedded into this type.)
-</p>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>phase</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.MonoVertexPhase">
-MonoVertexPhase </a> </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>replicas</code></br> <em> uint32 </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>selector</code></br> <em> string </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>reason</code></br> <em> string </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>message</code></br> <em> string </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>lastUpdated</code></br> <em>
-<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#time-v1-meta">
-Kubernetes meta/v1.Time </a> </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>lastScaledAt</code></br> <em>
-<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#time-v1-meta">
-Kubernetes meta/v1.Time </a> </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>observedGeneration</code></br> <em> int64 </em>
 </td>
 
 <td>
@@ -7675,6 +6681,12 @@ Kubernetes meta/v1.Time </a> </em>
 
 <td>
 
+<p>
+
+ObservedGeneration stores the generation value observed by the
+controller.
+</p>
+
 </td>
 
 </tr>
@@ -8311,8 +7323,7 @@ Scale
 <p>
 
 (<em>Appears on:</em>
-<a href="#numaflow.numaproj.io/v1alpha1.AbstractVertex">AbstractVertex</a>,
-<a href="#numaflow.numaproj.io/v1alpha1.MonoVertexSpec">MonoVertexSpec</a>)
+<a href="#numaflow.numaproj.io/v1alpha1.AbstractVertex">AbstractVertex</a>)
 </p>
 
 <p>
@@ -9140,8 +8151,7 @@ Sink
 <p>
 
 (<em>Appears on:</em>
-<a href="#numaflow.numaproj.io/v1alpha1.AbstractVertex">AbstractVertex</a>,
-<a href="#numaflow.numaproj.io/v1alpha1.MonoVertexSpec">MonoVertexSpec</a>)
+<a href="#numaflow.numaproj.io/v1alpha1.AbstractVertex">AbstractVertex</a>)
 </p>
 
 <p>
@@ -9331,8 +8341,7 @@ Source
 <p>
 
 (<em>Appears on:</em>
-<a href="#numaflow.numaproj.io/v1alpha1.AbstractVertex">AbstractVertex</a>,
-<a href="#numaflow.numaproj.io/v1alpha1.MonoVertexSpec">MonoVertexSpec</a>)
+<a href="#numaflow.numaproj.io/v1alpha1.AbstractVertex">AbstractVertex</a>)
 </p>
 
 <p>
@@ -9501,9 +8510,7 @@ Status
 
 (<em>Appears on:</em>
 <a href="#numaflow.numaproj.io/v1alpha1.InterStepBufferServiceStatus">InterStepBufferServiceStatus</a>,
-<a href="#numaflow.numaproj.io/v1alpha1.MonoVertexStatus">MonoVertexStatus</a>,
-<a href="#numaflow.numaproj.io/v1alpha1.PipelineStatus">PipelineStatus</a>,
-<a href="#numaflow.numaproj.io/v1alpha1.VertexStatus">VertexStatus</a>)
+<a href="#numaflow.numaproj.io/v1alpha1.PipelineStatus">PipelineStatus</a>)
 </p>
 
 <p>
@@ -10868,54 +9875,9 @@ Description
 
 <td>
 
-<code>Status</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.Status"> Status </a> </em>
-</td>
-
-<td>
-
-<p>
-
-(Members of <code>Status</code> are embedded into this type.)
-</p>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
 <code>phase</code></br> <em>
 <a href="#numaflow.numaproj.io/v1alpha1.VertexPhase"> VertexPhase </a>
 </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>replicas</code></br> <em> uint32 </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>selector</code></br> <em> string </em>
 </td>
 
 <td>
@@ -10954,9 +9916,7 @@ Description
 
 <td>
 
-<code>lastScaledAt</code></br> <em>
-<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#time-v1-meta">
-Kubernetes meta/v1.Time </a> </em>
+<code>replicas</code></br> <em> uint32 </em>
 </td>
 
 <td>
@@ -10969,7 +9929,22 @@ Kubernetes meta/v1.Time </a> </em>
 
 <td>
 
-<code>observedGeneration</code></br> <em> int64 </em>
+<code>selector</code></br> <em> string </em>
+</td>
+
+<td>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>lastScaledAt</code></br> <em>
+<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#time-v1-meta">
+Kubernetes meta/v1.Time </a> </em>
 </td>
 
 <td>
