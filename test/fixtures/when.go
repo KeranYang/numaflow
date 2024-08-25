@@ -314,6 +314,25 @@ func (w *When) StreamISBLogs() *When {
 	return w
 }
 
+func (w *When) StreamE2EPodLogs() *When {
+	w.t.Helper()
+	ctx := context.Background()
+	fieldSelector := fmt.Sprintf("metadata.name=%s,status.phase=Running", e2eAPIPodName)
+	podList, err := w.kubeClient.CoreV1().Pods(Namespace).List(ctx, metav1.ListOptions{FieldSelector: fieldSelector})
+	if err != nil {
+		w.t.Fatalf("Error getting the e2e api pod: %v", err)
+	}
+	for _, pod := range podList.Items {
+		stopCh := make(chan struct{}, 1)
+		streamPodLogs(ctx, w.kubeClient, Namespace, pod.Name, "main", stopCh)
+		if w.streamLogsStopChannels == nil {
+			w.streamLogsStopChannels = make(map[string]chan struct{})
+		}
+		w.streamLogsStopChannels[pod.Name+":main"] = stopCh
+	}
+	return w
+}
+
 func (w *When) StreamControllerLogs() *When {
 	w.t.Helper()
 	ctx := context.Background()

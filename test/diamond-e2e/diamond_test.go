@@ -37,7 +37,6 @@ type DiamondSuite struct {
 }
 
 func (s *DiamondSuite) TestJoinOnReducePipeline() {
-
 	// the reduce feature is not supported with redis ISBSVC
 	if strings.ToUpper(os.Getenv("ISBSVC")) == "REDIS" {
 		s.T().SkipNow()

@@ -91,7 +91,6 @@ func (is *IdleSourceSuite) TestIdleKeyedReducePipelineWithHttpSource() {
 }
 
 func (is *IdleSourceSuite) TestIdleKeyedReducePipelineWithKafkaSource() {
-
 	// the reduce feature is not supported with redis ISBSVC
 	if strings.ToUpper(os.Getenv("ISBSVC")) == "REDIS" {
 		is.T().SkipNow()

@@ -44,7 +44,6 @@ func (r *ReduceSuite) TestReduceStreamJava() {
 }
 
 func (r *ReduceSuite) testReduceStream(lang string) {
-
 	// the reduce feature is not supported with redis ISBSVC
 	if strings.ToUpper(os.Getenv("ISBSVC")) == "REDIS" {
 		r.T().SkipNow()
@@ -83,7 +82,7 @@ func (r *ReduceSuite) testReduceStream(lang string) {
 	// There should be no other values.
 	w.Expect().RedisSinkContains(pipelineName+"-sink", "102")
 	w.Expect().RedisSinkNotContains(pipelineName+"-sink", "99")
-	w.Expect().RedisSinkNotContains(pipelineName+"sink", "105")
+	w.Expect().RedisSinkNotContains(pipelineName+"-sink", "105")
 	done <- struct{}{}
 }
 

@@ -178,7 +178,6 @@ func (s *FunctionalSuite) TestUDFFiltering() {
 }
 
 func (s *FunctionalSuite) TestDropOnFull() {
-
 	// the drop on full feature is not supported with redis ISBSVC
 	if strings.ToUpper(os.Getenv("ISBSVC")) == "REDIS" {
 		s.T().SkipNow()
@@ -228,7 +227,6 @@ func (s *FunctionalSuite) TestDropOnFull() {
 }
 
 func (s *FunctionalSuite) TestWatermarkEnabled() {
-
 	// the watermark feature is not supported with redis ISBSVC
 	if strings.ToUpper(os.Getenv("ISBSVC")) == "REDIS" {
 		s.T().SkipNow()
