@@ -28,6 +28,7 @@ spec:
         groupBy:
           window:
             session:
+              # if the session is inactive for 10s, the session will be closed
               timeout: 10s
           keyed: true
           storage:
