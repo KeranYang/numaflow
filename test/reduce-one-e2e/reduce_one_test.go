@@ -1,5 +1,3 @@
-//go:build test
-
 /*
 Copyright 2022 The Numaproj Authors.
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +17,7 @@ package reduce_one_e2e
 
 import (
 	"context"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -204,8 +203,11 @@ func (r *ReduceSuite) TestSimpleReducePipelineFailOverUsingWAL() {
 				if i == 5 {
 					// Kill the reducer pods during processing to trigger failover.
 					w.Expect().VertexPodsRunning()
+					start := time.Now()
 					w.Exec("/bin/sh", []string{"-c", args}, CheckPodKillSucceeded)
 					w.Expect().VertexPodsRunning()
+					elapsed := time.Since(start)
+					log.Printf("keran is testing - Failover took %s", elapsed)
 				}
 				w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("1")).WithHeader("X-Numaflow-Event-Time", eventTime)).
 					SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("2")).WithHeader("X-Numaflow-Event-Time", eventTime)).

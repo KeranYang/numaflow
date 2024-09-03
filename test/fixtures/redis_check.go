@@ -99,7 +99,10 @@ type CheckFunc func() bool
 func runChecks(ctx context.Context, performChecks CheckFunc) bool {
 	ticker := time.NewTicker(retryInterval)
 	defer ticker.Stop()
-
+	// First check immediately
+	if performChecks() {
+		return true
+	}
 	for {
 		select {
 		case <-ctx.Done():

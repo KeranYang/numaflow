@@ -46,6 +46,7 @@ const (
 	// please exercise caution when updating this value, as it may cause e2e tests to be flaky.
 	// if updated, consider running the entire e2e test suite multiple times to ensure stability.
 	defaultTimeout = 90 * time.Second
+	e2eAPIPodName  = "e2e-api-pod"
 
 	LogSourceVertexStarted    = "Start processing source messages"
 	SinkVertexStarted         = "Start processing sink messages"
@@ -120,7 +121,7 @@ func (s *E2ESuite) SetupSuite() {
 		CreateISBSvc().
 		WaitForISBSvcReady()
 	s.T().Log("ISB svc is ready")
-	err = PodPortForward(s.restConfig, Namespace, "e2e-api-pod", 8378, 8378, s.stopch)
+	err = PodPortForward(s.restConfig, Namespace, e2eAPIPodName, 8378, 8378, s.stopch)
 	s.CheckError(err)
 
 	// Create Redis resources used for sink data validation.
@@ -129,6 +130,8 @@ func (s *E2ESuite) SetupSuite() {
 	createCMD := fmt.Sprintf("kubectl apply -k ../../config/apps/redis -n %s", Namespace)
 	s.Given().When().Exec("sh", []string{"-c", createCMD}, OutputRegexp("service/redis created"))
 	s.T().Log("Redis resources are ready")
+
+	s.Given().When().StreamE2EPodLogs()
 }
 
 func (s *E2ESuite) TearDownSuite() {
@@ -155,6 +158,9 @@ func (s *E2ESuite) TearDownSuite() {
 	deleteRedisCMD := fmt.Sprintf("kubectl delete -k ../../config/apps/redis -n %s --ignore-not-found=true", Namespace)
 	s.Given().When().Exec("sh", []string{"-c", deleteRedisCMD}, OutputRegexp(`service "redis" deleted`))
 	s.T().Log("Redis resources are deleted")
+
+	s.Given().When().TerminateAllPodLogs()
+
 	close(s.stopch)
 }
 
