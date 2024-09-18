@@ -19,6 +19,7 @@ package nats
 import (
 	"context"
 	"fmt"
+	"log"
 	"testing"
 	"time"
 
@@ -67,6 +68,8 @@ func Test_Single(t *testing.T) {
 	defer cancel()
 	server := natstest.RunNatsServer(t)
 	defer server.Shutdown()
+
+	log.Printf("NATS server running on %s", server.Addr().String())
 
 	url := "127.0.0.1"
 	testSubject := "test-single"
