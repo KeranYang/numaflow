@@ -27,7 +27,6 @@ import (
 func RunNatsServer(t *testing.T) *server.Server {
 	t.Helper()
 	opts := natstestserver.DefaultTestOptions
-	opts.Port = -1 // Random port
 	return natstestserver.RunServer(&opts)
 }
 
