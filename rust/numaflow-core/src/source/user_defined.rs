@@ -12,7 +12,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tonic::transport::Channel;
 use tonic::{Request, Streaming};
 
-/// SourceReader reads messages from a source.
+/// SourceReader reads messages from a source. Test
 #[derive(Debug)]
 pub(crate) struct Source {
     read_tx: mpsc::Sender<ReadRequest>,
