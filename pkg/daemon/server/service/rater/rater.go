@@ -260,7 +260,7 @@ func (r *Rater) getPodReadCounts(vertexName, podName string) *PodReadCount {
 		podReadCount := &PodReadCount{podName, partitionReadCount}
 		return podReadCount
 	} else {
-		r.log.Infof("[vertex name %s, pod name %s]: Metric %q is unavailable, the pod might haven't started processing data", vertexName, podName, readTotalMetricName)
+		r.log.Debugf("[vertex name %s, pod name %s]: Metric %q is unavailable, the pod might haven't started processing data", vertexName, podName, readTotalMetricName)
 		return nil
 	}
 }

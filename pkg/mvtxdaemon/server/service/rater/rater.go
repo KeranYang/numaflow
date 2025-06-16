@@ -217,7 +217,7 @@ func (r *Rater) getPodReadCounts(podName string, result map[string]*dto.MetricFa
 		podReadCount := &PodMetricsCount{podName, metricsList[0].Untyped.GetValue()}
 		return podReadCount
 	} else {
-		r.log.Infof("[Pod name %s]: Metric %q is unavailable, the pod might haven't started processing data", podName, monoVtxReadMetricName)
+		r.log.Debugf("[Pod name %s]: Metric %q is unavailable, the pod might haven't started processing data", podName, monoVtxReadMetricName)
 		return nil
 	}
 }
