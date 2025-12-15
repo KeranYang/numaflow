@@ -29,9 +29,9 @@ const ENV_NUMAFLOW_SERVING_SPEC: &str = "NUMAFLOW_SERVING_SPEC";
 const ENV_NUMAFLOW_POD: &str = "NUMAFLOW_POD";
 
 pub fn generate_certs() -> Result<(Certificate, KeyPair), String> {
-    let CertifiedKey { cert, key_pair } = generate_simple_self_signed(vec!["localhost".into()])
-        .map_err(|e| format!("Failed to generate cert {:?}", e))?;
-    Ok((cert, key_pair))
+    let CertifiedKey { cert, signing_key } = generate_simple_self_signed(vec!["localhost".into()])
+        .map_err(|e| format!("Failed to generate cert {e:?}"))?;
+    Ok((cert, signing_key))
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -124,19 +124,6 @@ impl Default for Settings {
             jetstream_url: "localhost:4222",
         }
     }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Serving {
-    #[serde(rename = "msgIDHeaderKey")]
-    pub msg_id_header_key: Option<String>,
-    #[serde(rename = "store")]
-    pub callback_storage: CallbackStorageConfig,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct CallbackStorageConfig {
-    pub url: String,
 }
 
 /// This implementation is to load settings from env variables
@@ -300,10 +287,16 @@ impl TryFrom<HashMap<String, String>> for Settings {
     }
 }
 
-// Retrieve value from mounted secret volume
-// "/var/numaflow/secrets/${secretRef.name}/${secretRef.key}" is expected to be the file path
+#[cfg(test)]
+const SECRET_BASE_PATH: &str = "/tmp/numaflow";
+
+#[cfg(not(test))]
+const SECRET_BASE_PATH: &str = "/var/numaflow/secrets";
+
+/// Retrieve value from mounted secret volume
+/// "/var/numaflow/secrets/${secretRef.name}/${secretRef.key}" is expected to be the file path
 pub(crate) fn get_secret_from_volume(name: &str, key: &str) -> Result<String, String> {
-    let path = format!("/var/numaflow/secrets/{name}/{key}");
+    let path = format!("{SECRET_BASE_PATH}/{name}/{key}");
     let val = std::fs::read_to_string(path.clone())
         .map_err(|e| format!("Reading secret from file {path}: {e:?}"))?;
     Ok(val.trim().into())

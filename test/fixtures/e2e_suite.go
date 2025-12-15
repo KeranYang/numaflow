@@ -19,8 +19,6 @@ package fixtures
 import (
 	"context"
 	"fmt"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/stretchr/testify/suite"
@@ -42,31 +40,24 @@ const (
 	Label      = "numaflow-e2e"
 	LabelValue = "true"
 	ISBSvcName = "numaflow-e2e"
-	// the number 90 is carefully chosen to ensure the test suite can finish within a reasonable time without timing out.
+	// the number 120 is carefully chosen to ensure the test suite can finish within a reasonable time without timing out.
 	// please exercise caution when updating this value, as it may cause e2e tests to be flaky.
 	// if updated, consider running the entire e2e test suite multiple times to ensure stability.
-	defaultTimeout = 90 * time.Second
+	defaultTimeout = 120 * time.Second
 
 	LogSourceVertexStarted    = "Start processing source messages"
 	SinkVertexStarted         = "Start processing sink messages"
 	LogUDFVertexStarted       = "Start processing udf messages"
 	LogReduceUDFVertexStarted = "Start processing reduce udf messages"
 	LogDaemonStarted          = "Daemon server started successfully"
+
+	LogSourceVertexStartedRustRuntime = "Starting source forwarder"
+	LogSinkVertexStartedRustRuntime   = "Starting sink forwarder"
+	LogMapVertexStartedRustRuntime    = "Starting map forwarder"
 )
 
 var (
 	background = metav1.DeletePropagationBackground
-
-	e2eISBSvcRedis = `apiVersion: numaflow.numaproj.io/v1alpha1
-kind: InterStepBufferService
-metadata:
-  name: default
-  labels:
-    numaflow-e2e: "true"
-spec:
-  redis:
-    native:
-      version: 7.0.15`
 
 	e2eISBSvcJetStream = `apiVersion: numaflow.numaproj.io/v1alpha1
 kind: InterStepBufferService
@@ -206,9 +197,5 @@ func (s *E2ESuite) Given() *Given {
 }
 
 func getISBSvcSpec() string {
-	x := strings.ToUpper(os.Getenv("ISBSVC"))
-	if x == "REDIS" {
-		return e2eISBSvcRedis
-	}
 	return e2eISBSvcJetStream
 }

@@ -4,6 +4,7 @@ use crate::config::CustomResourceType;
 use bytes::Bytes;
 use config::Settings;
 use numaflow_monitor::runtime;
+use pipeline::forwarder;
 use tokio::signal;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -27,13 +28,15 @@ mod config;
 
 /// Internal message structure that is passed around.
 mod message;
+/// Metadata conversion utilities and types.
+mod metadata;
 /// Shared entities that can be used orthogonal to different modules.
 mod shared;
 /// [Sink] serves as the endpoint for processed data that has been outputted from the platform,
 /// which is then sent to an external system or application.
 ///
 /// [Sink]: https://numaflow.numaproj.io/user-guide/sinks/overview/
-mod sink;
+mod sinker;
 /// [Source] is responsible for reliable reading data from an unbounded source into Numaflow.
 ///
 /// [Source]: https://numaflow.numaproj.io/user-guide/sources/overview/
@@ -67,6 +70,9 @@ mod mapper;
 /// [Watermark]: https://numaflow.numaproj.io/core-concepts/watermarks/
 mod watermark;
 
+/// Type configuration trait for Numaflow components.
+pub(crate) mod typ;
+
 /// [Reduce] is a function which "collects" a group of items and then perform some "reduction" operation
 /// on all of them, thus reducing them to a single value.
 ///
@@ -95,7 +101,7 @@ pub async fn run() -> Result<()> {
             if let Err(e) = monovertex::start_forwarder(cln_token, &config).await {
                 if let Error::Grpc(e) = e {
                     error!(error=?e, "Monovertex failed because of UDF failure");
-                    runtime::persist_application_error(e);
+                    runtime::persist_application_error(*e);
                 } else {
                     error!(?e, "Error running monovertex");
                     runtime::persist_application_error(Status::with_details(
@@ -112,10 +118,10 @@ pub async fn run() -> Result<()> {
         }
         CustomResourceType::Pipeline(config) => {
             info!("Starting pipeline forwarder with config: {:#?}", config);
-            if let Err(e) = pipeline::start_forwarder(cln_token, config).await {
+            if let Err(e) = forwarder::start_forwarder(cln_token, config).await {
                 if let Error::Grpc(e) = e {
                     error!(error=?e, "Pipeline failed because of UDF failure");
-                    runtime::persist_application_error(e);
+                    runtime::persist_application_error(*e);
                 } else {
                     error!(?e, "Error running pipeline");
                     runtime::persist_application_error(Status::with_details(

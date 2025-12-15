@@ -29,7 +29,7 @@ impl TryInto<Bytes> for Callback {
 
     fn try_into(self) -> Result<Bytes, Self::Error> {
         let value = serde_json::to_string(&self)
-            .map_err(|e| Error::Other(format!("Failed to serialize callback: {}", e)))?;
+            .map_err(|e| Error::Other(format!("Failed to serialize callback: {e}")))?;
         Ok(Bytes::from(value))
     }
 }
@@ -39,7 +39,7 @@ impl TryFrom<Bytes> for Callback {
 
     fn try_from(value: Bytes) -> Result<Self, Self::Error> {
         serde_json::from_slice(&value)
-            .map_err(|e| Error::Other(format!("Failed to deserialize callback: {}", e)))
+            .map_err(|e| Error::Other(format!("Failed to deserialize callback: {e}")))
     }
 }
 
@@ -54,14 +54,14 @@ pub(crate) struct Response {
 #[derive(Clone)]
 pub struct CallbackHandler {
     semaphore: Arc<Semaphore>,
-    store: Store,
+    store: Arc<Store>,
     /// the client to callback to the request originating pod/container
-    vertex_name: String,
+    vertex_name: &'static str,
 }
 
 impl CallbackHandler {
     pub async fn new(
-        vertex_name: String,
+        vertex_name: &'static str,
         js_context: Context,
         store_name: &'static str,
         concurrency_limit: usize,
@@ -74,7 +74,7 @@ impl CallbackHandler {
         Self {
             semaphore,
             vertex_name,
-            store,
+            store: Arc::new(store),
         }
     }
 
@@ -94,16 +94,16 @@ impl CallbackHandler {
             .collect();
 
         let callback_payload = Callback {
-            vertex: self.vertex_name.clone(),
+            vertex: self.vertex_name.to_string(),
             id: id.clone(),
             cb_time,
             responses,
             from_vertex: previous_vertex,
         };
-        let vertex_name = self.vertex_name.clone();
+        let vertex_name = self.vertex_name;
 
         let permit = Arc::clone(&self.semaphore).acquire_owned().await.unwrap();
-        let store = self.store.clone();
+        let store = Arc::clone(&self.store);
         let handle = tokio::spawn(async move {
             let timestamp = Utc::now().timestamp_nanos_opt().unwrap();
             let callbacks_key = format!("cb.{pod_hash}.{id}.{vertex_name}.{timestamp}");
@@ -111,15 +111,14 @@ impl CallbackHandler {
 
             let _permit = permit;
             let value = serde_json::to_string(&callback_payload).expect("Failed to serialize");
-            let result = Retry::retry(
+            let result = Retry::new(
                 interval,
                 async || match store.put(&callbacks_key, Bytes::from(value.clone())).await {
                     Ok(resp) => Ok(resp),
                     Err(e) => {
                         warn!(error = ?e, "Failed to write callback to store, retrying..");
                         Err(Error::Other(format!(
-                            "Failed to write callback to store: {}",
-                            e
+                            "Failed to write callback to store: {e}"
                         )))
                     }
                 },
@@ -174,7 +173,7 @@ mod tests {
         };
 
         let callback_handler =
-            CallbackHandler::new("test_vertex".to_string(), context.clone(), store_name, 1).await;
+            CallbackHandler::new("test_vertex", context.clone(), store_name, 1).await;
 
         callback_handler
             .callback(

@@ -21,6 +21,7 @@ option java_package = "io.numaproj.numaflow.accumulator.v1";
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
+import "metadata.proto";
 
 
 package accumulator.v1;
@@ -44,6 +45,8 @@ message Payload {
   google.protobuf.Timestamp watermark = 4;
   string id = 5;
   map<string, string> headers = 6;
+  // Metadata is the metadata of the message
+  metadata.Metadata metadata = 7;
 }
 
 // AccumulatorRequest represents a request element.
@@ -62,7 +65,6 @@ message AccumulatorRequest {
 
   Payload payload = 1;
   WindowOperation operation = 2;
-  optional Handshake handshake = 3;
 }
 
 
@@ -80,19 +82,12 @@ message AccumulatorResponse {
   // window represents a window to which the result belongs.
   KeyedWindow window = 2;
   repeated string tags = 3;
-  optional Handshake handshake = 4;
   // EOF represents the end of the response for a window.
-  bool EOF = 5;
+  bool EOF = 4;
 }
 
 
 // ReadyResponse is the health check result.
 message ReadyResponse {
   bool ready = 1;
-}
-
-// Handshake message between client and server to indicate the start of transmission.
-message Handshake {
-  // Required field indicating the start of transmission.
-  bool sot = 1;
 }

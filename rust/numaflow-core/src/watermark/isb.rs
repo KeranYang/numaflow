@@ -3,11 +3,10 @@
 //! of the watermark published by the previous vertices for each partition and fetches the lowest
 //! watermark among them. It tracks the watermarks of all the inflight messages for each partition,
 //! and publishes the lowest watermark. The watermark published to the ISB will always be monotonically
-//! increasing. Fetch and publish will be two different flows, but we will have natural ordering
-//! because we use actor model. Since we do streaming within the vertex we have to track the
-//! messages so that even if any messages get stuck we consider them while publishing watermarks.
-//! Starts a background task to publish idle watermarks for the downstream idle partitions, idle
-//! partitions are those partitions where we have not published any watermark for a certain time.
+//! increasing. Since we do streaming within the vertex we have to track the messages so that even if
+//! any messages get stuck we consider them while publishing watermarks. Starts a background task to
+//! publish idle watermarks for the downstream idle partitions, idle partitions are those partitions
+//! where we have not published any watermark for a certain time.
 //!
 //!
 //! **Fetch Flow**
@@ -19,172 +18,236 @@
 //! ```text
 //! (Write to ISB) -------> (Publish Watermark) ------> (Remove tracked Offset)
 //! ```
-use std::cmp::Ordering;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::Mutex;
 use std::time::Duration;
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::Receiver;
+use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
-use tracing::error;
+use tracing::warn;
 
-use crate::config::pipeline::ToVertexConfig;
 use crate::config::pipeline::isb::Stream;
 use crate::config::pipeline::watermark::EdgeWatermarkConfig;
-use crate::error::{Error, Result};
+use crate::config::pipeline::{ToVertexConfig, VertexType};
+use crate::error::Result;
 use crate::message::{IntOffset, Offset};
-use crate::reduce::reducer::aligned::windower::WindowManager;
+use crate::reduce::reducer::WindowManager;
+use crate::tracker::Tracker;
 use crate::watermark::idle::isb::ISBIdleDetector;
 use crate::watermark::isb::wm_fetcher::ISBWatermarkFetcher;
 use crate::watermark::isb::wm_publisher::ISBWatermarkPublisher;
 use crate::watermark::processor::manager::ProcessorManager;
-use crate::watermark::wmb::Watermark;
+use crate::watermark::wmb::{WMB, Watermark};
 
 pub(crate) mod wm_fetcher;
 pub(crate) mod wm_publisher;
 
-/// Messages that can be sent to the [ISBWatermarkActor].
-enum ISBWaterMarkActorMessage {
-    Fetch {
-        offset: IntOffset,
-        oneshot_tx: tokio::sync::oneshot::Sender<Result<Watermark>>,
-    },
-    Publish {
-        stream: Stream,
-        offset: i64,
-        watermark: i64,
-        is_idle: bool,
-    },
-    FetchHeadIdle {
-        oneshot_tx: tokio::sync::oneshot::Sender<Result<Watermark>>,
-    },
-}
-
-/// Tuple of offset and watermark. We will use this to track the inflight messages.
-#[derive(Eq, PartialEq, Debug, Clone)]
-struct OffsetWatermark {
-    /// offset can be -1 if watermark cannot be derived.
-    offset: i64,
-    watermark: Watermark,
-}
-
-/// Ordering will be based on the offset in OffsetWatermark
-impl Ord for OffsetWatermark {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.offset.cmp(&other.offset)
-    }
-}
-
-impl PartialOrd for OffsetWatermark {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-/// EdgeWatermarkActor comprises EdgeFetcher and EdgePublisher.
-/// Only responsible for the actual fetch and publish operations.
-struct ISBWatermarkActor {
+/// Shared state for ISBWatermarkHandle.
+/// Contains all computation logic and data structures.
+struct ISBWatermarkState {
     fetcher: ISBWatermarkFetcher,
     publisher: ISBWatermarkPublisher,
+    idle_manager: ISBIdleDetector,
+    /// Window manager is used to compute the minimum watermark for the reduce vertex.
+    window_manager: Option<WindowManager>,
+    latest_fetched_wm: Watermark,
+    tracker: Tracker,
+    from_partitions: Vec<u16>,
 }
 
-impl ISBWatermarkActor {
-    fn new(fetcher: ISBWatermarkFetcher, publisher: ISBWatermarkPublisher) -> Self {
-        Self { fetcher, publisher }
-    }
-
-    /// run listens for messages and handles them
-    async fn run(mut self, mut receiver: Receiver<ISBWaterMarkActorMessage>) {
-        while let Some(message) = receiver.recv().await {
-            if let Err(e) = self.handle_message(message).await {
-                error!("error handling watermark actor message: {:?}", e);
-            }
+impl ISBWatermarkState {
+    fn new(
+        fetcher: ISBWatermarkFetcher,
+        publisher: ISBWatermarkPublisher,
+        idle_manager: ISBIdleDetector,
+        window_manager: Option<WindowManager>,
+        tracker: Tracker,
+        from_partitions: Vec<u16>,
+    ) -> Self {
+        Self {
+            fetcher,
+            publisher,
+            idle_manager,
+            window_manager,
+            latest_fetched_wm: Watermark::from_timestamp_millis(-1)
+                .expect("failed to parse timestamp"),
+            tracker,
+            from_partitions,
         }
     }
 
-    async fn handle_message(&mut self, message: ISBWaterMarkActorMessage) -> Result<()> {
-        match message {
-            // fetches the watermark for the given offset
-            ISBWaterMarkActorMessage::Fetch { offset, oneshot_tx } => {
-                self.handle_fetch_watermark(offset, oneshot_tx).await
-            }
-
-            // publishes the watermark for the given stream and offset
-            ISBWaterMarkActorMessage::Publish {
-                stream,
-                offset,
-                watermark,
-                is_idle,
-            } => {
-                self.handle_publish_watermark(stream, offset, watermark, is_idle)
-                    .await
-            }
-
-            // fetches the head idle watermark
-            ISBWaterMarkActorMessage::FetchHeadIdle { oneshot_tx } => {
-                self.handle_fetch_head_idle_watermark(oneshot_tx).await
-            }
-        }
-    }
-
-    // fetches the watermark for the given offset and sends the response back via oneshot channel
-    async fn handle_fetch_watermark(
-        &mut self,
-        offset: IntOffset,
-        oneshot_tx: tokio::sync::oneshot::Sender<Result<Watermark>>,
-    ) -> Result<()> {
+    /// Fetches the watermark for the given offset
+    fn fetch_watermark(&mut self, offset: IntOffset) -> Watermark {
         let watermark = self
             .fetcher
             .fetch_watermark(offset.offset, offset.partition_idx);
 
-        oneshot_tx
-            .send(Ok(watermark))
-            .map_err(|_| Error::Watermark("failed to send response".to_string()))
+        self.latest_fetched_wm = std::cmp::max(watermark, self.latest_fetched_wm);
+        watermark
     }
 
-    // publishes the watermark for the given stream and offset
-    async fn handle_publish_watermark(
-        &mut self,
-        stream: Stream,
-        offset: i64,
-        watermark: i64,
-        is_idle: bool,
-    ) -> Result<()> {
+    /// Fetches the head watermark
+    fn fetch_head_watermark(&mut self, from_vertex: Option<&str>, partition_idx: u16) -> Watermark {
+        self.fetcher
+            .fetch_head_watermark(from_vertex, partition_idx)
+    }
+
+    /// Fetches the head idle WMB for a specific partition
+    fn fetch_head_idle_wmb(&mut self, partition_idx: u16) -> Option<WMB> {
+        let wmb = self.fetcher.fetch_head_idle_wmb(partition_idx);
+
+        if let Some(wmb) = wmb {
+            self.latest_fetched_wm = std::cmp::max(
+                self.latest_fetched_wm,
+                Watermark::from_timestamp_millis(wmb.watermark).expect("failed to parse time"),
+            );
+        }
+
+        wmb
+    }
+
+    /// publishes the watermark for the given stream and offset
+    async fn publish_watermark(&mut self, stream: Stream, offset: IntOffset) {
+        // Compute the minimum watermark
+        let min_wm = self.compute_min_watermark().await;
+
+        // Publish the watermark
         self.publisher
-            .publish_watermark(&stream, offset, watermark, is_idle)
+            .publish_watermark(&stream, offset.offset, min_wm.timestamp_millis(), false)
             .await;
-        Ok(())
+
+        // Reset idle state for this stream
+        self.idle_manager.reset_idle(&stream).await;
     }
 
-    // fetches the head idle watermark and sends the response back via oneshot channel
-    async fn handle_fetch_head_idle_watermark(
-        &mut self,
-        oneshot_tx: tokio::sync::oneshot::Sender<Result<Watermark>>,
-    ) -> Result<()> {
-        let watermark = self.fetcher.fetch_head_idle_watermark();
-        oneshot_tx
-            .send(Ok(watermark))
-            .map_err(|_| Error::Watermark("failed to send response".to_string()))
+    /// Publishes idle watermark. We can directly publish idle watermark with min watermark any time
+    /// of because we are publishing based on the lowest watermark in the system. This cannot be true
+    /// if min-watermark is -1. This means that we do not have data
+    async fn publish_idle_watermark(&mut self) {
+        // Compute the minimum watermark
+        let min_wm = self.compute_min_watermark().await;
+
+        // if the computed min watermark is -1, means there is no data (no windows and inflight messages)
+        // we should also check if the tracker indicates the prev-vertex is idling
+        let min_wm = if min_wm.timestamp_millis() == -1 {
+            // Check if the tracker indicates the reader is idling, only when we are completely idle
+            // we can fetch and publish the head idle watermark.
+            let idle_head_wmb = self.get_idle_watermark().await;
+
+            // -1 does not strictly represent idling, so we cannot publish the idle watermark
+            if idle_head_wmb.timestamp_millis() == -1 {
+                return;
+            }
+            idle_head_wmb
+        } else {
+            min_wm
+        };
+
+        // we now know the lowest watermark to publish to the streams that are idling, and we have a
+        // barrier offset which can be used safely to publish the idle watermark.
+
+        // Identify the streams that are idle and publish the idle watermark
+        let idle_streams = self.idle_manager.fetch_idle_streams().await;
+        for stream in idle_streams.iter() {
+            if let Ok(offset) = self.idle_manager.fetch_idle_offset(stream).await {
+                // publish the watermark
+                self.publisher
+                    .publish_watermark(stream, offset, min_wm.timestamp_millis(), true)
+                    .await;
+
+                self.idle_manager.update_idle_metadata(stream, offset).await;
+            }
+        }
+    }
+
+    /// Computes the minimum watermark based on window manager and inflight messages. This will return
+    /// -1 if there are no windows and no inflight messages. That means we are not doing anything, this
+    /// does not mean we are idling, it could be just that we cannot read from ISB due to errors, etc.
+    /// If it returns -1, we should check if the tracker indicates the reader is idling.
+    async fn compute_min_watermark(&self) -> Watermark {
+        // If window manager is configured, we can use the oldest window's end time - 1ms as the
+        // watermark.
+        if let Some(window_manager) = &self.window_manager {
+            let oldest_window_end_time = match window_manager {
+                WindowManager::Aligned(aligned_manager) => {
+                    aligned_manager.oldest_window().map(|w| w.end_time)
+                }
+                WindowManager::Unaligned(unaligned_manager) => {
+                    unaligned_manager.oldest_window_end_time()
+                }
+            };
+
+            if let Some(oldest_window_et) = oldest_window_end_time {
+                // we should also compare it with the latest fetched watermark because sometimes
+                // the window end time can be greater than the watermark of the messages in the window.
+                // in that case we should use the latest fetched watermark.
+                return std::cmp::min(
+                    self.latest_fetched_wm,
+                    Watermark::from_timestamp_millis(oldest_window_et.timestamp_millis() - 1)
+                        .expect("failed to parse time"),
+                );
+            }
+        }
+
+        // if window manager is not configured, we should use the lowest watermark among all the
+        // inflight messages.
+        self.get_lowest_watermark()
+            .await
+            .unwrap_or(Watermark::from_timestamp_millis(-1).unwrap())
+    }
+
+    /// Gets the lowest idle watermark among all the partitions. If we cannot determine the lowest
+    /// watermark, we return -1.
+    /// We achieve this via "optimistic locking", when we set idle status to true in tracker, we will
+    /// be setting the Head WMB offset. Here we will make sure that for every partition, the Head WMB
+    /// saved in the idle status matches the Head WMB offset in the partition's timeline.
+    async fn get_idle_watermark(&mut self) -> Watermark {
+        let idle_offsets = self.tracker.get_idle_offset().await.unwrap_or_default();
+
+        // iterate over all the partitions and check if they are idling by fetching the head idle wmb
+        // and comparing it with the tracker's idle state.
+        let mut min_wm = i64::MAX;
+        for partition_idx in self.from_partitions.iter() {
+            // if tracker's offset is none means, that partitions is not idling, we can skip publishing
+            // the head idle wmb.
+            let Some(Some(idle_offset)) = idle_offsets.get(partition_idx) else {
+                return Watermark::from_timestamp_millis(-1).unwrap();
+            };
+
+            let wmb = self.fetcher.fetch_head_idle_wmb(*partition_idx);
+            let Some(wmb) = wmb else {
+                return Watermark::from_timestamp_millis(-1).unwrap();
+            };
+
+            // if the offset doesn't match, that means it's not idling anymore
+            if wmb.offset != *idle_offset {
+                return Watermark::from_timestamp_millis(-1).unwrap();
+            }
+
+            if wmb.watermark < min_wm {
+                min_wm = wmb.watermark;
+            }
+        }
+        if min_wm == i64::MAX {
+            min_wm = -1;
+        }
+        Watermark::from_timestamp_millis(min_wm).expect("failed to parse time")
+    }
+
+    /// Gets the lowest watermark among all the inflight requests using the tracker
+    async fn get_lowest_watermark(&self) -> Option<Watermark> {
+        if let Ok(lowest_watermark) = self.tracker.lowest_watermark().await {
+            Some(Watermark::from_timestamp_millis(lowest_watermark.timestamp_millis()).unwrap())
+        } else {
+            None
+        }
     }
 }
 
-/// Handle to interact with the EdgeWatermarkActor, exposes methods to fetch and publish watermarks
-/// for the edges. Contains all the computation logic.
+/// Handle to interact with the ISB watermark state, exposes methods to fetch and publish watermarks
+/// for the edges. Cloneable handle with shared state protected by Arc<Mutex>.
 #[derive(Clone)]
 pub(crate) struct ISBWatermarkHandle {
-    sender: mpsc::Sender<ISBWaterMarkActorMessage>,
-    /// BTreeSet is used to track the watermarks of the inflight messages because we frequently
-    /// need to get the lowest watermark among the inflight messages and BTreeSet provides O(1)
-    /// time complexity for getting the lowest watermark, even though insertion and deletion are
-    /// O(log n). If we use map or hashset, our lowest watermark fetch call would be O(n) even
-    /// though insertion and deletion are O(1). We do almost same amount insertion, deletion and
-    /// getting the lowest watermark so BTreeSet is the best choice.
-    offset_set: Arc<Mutex<HashMap<u16, BTreeSet<OffsetWatermark>>>>,
-    idle_manager: ISBIdleDetector,
-    /// Window manager is used to compute the minimum watermark for the reduce vertex.
-    window_manager: Option<WindowManager>,
-    latest_fetched_wm: Arc<Mutex<Watermark>>,
+    state: Arc<Mutex<ISBWatermarkState>>,
 }
 
 impl ISBWatermarkHandle {
@@ -193,26 +256,32 @@ impl ISBWatermarkHandle {
     pub(crate) async fn new(
         vertex_name: &'static str,
         vertex_replica: u16,
+        vertex_type: VertexType,
         idle_timeout: Duration,
         js_context: async_nats::jetstream::Context,
         config: &EdgeWatermarkConfig,
         to_vertex_configs: &[ToVertexConfig],
         cln_token: CancellationToken,
         window_manager: Option<WindowManager>,
+        tracker: Tracker,
+        from_partitions: Vec<u16>,
     ) -> Result<Self> {
-        let (sender, receiver) = mpsc::channel(100);
-
         // create a processor manager map (from_vertex -> ProcessorManager)
         let mut processor_managers = HashMap::new();
         for from_bucket_config in &config.from_vertex_config {
-            let processor_manager =
-                ProcessorManager::new(js_context.clone(), from_bucket_config).await?;
+            let processor_manager = ProcessorManager::new(
+                js_context.clone(),
+                from_bucket_config,
+                vertex_type,
+                vertex_replica,
+            )
+            .await?;
             processor_managers.insert(from_bucket_config.vertex, processor_manager);
         }
         let fetcher =
             ISBWatermarkFetcher::new(processor_managers, &config.from_vertex_config).await?;
 
-        let processor_name = format!("{}-{}", vertex_name, vertex_replica);
+        let processor_name = format!("{vertex_name}-{vertex_replica}");
         let publisher = ISBWatermarkPublisher::new(
             processor_name,
             js_context.clone(),
@@ -223,22 +292,20 @@ impl ISBWatermarkHandle {
         let idle_manager =
             ISBIdleDetector::new(idle_timeout, to_vertex_configs, js_context.clone()).await;
 
-        let actor = ISBWatermarkActor::new(fetcher, publisher);
-        tokio::spawn(async move { actor.run(receiver).await });
-
-        let isb_watermark_handle = Self {
-            sender,
-            offset_set: Arc::new(Mutex::new(HashMap::new())),
-            idle_manager,
+        let state = Arc::new(Mutex::new(ISBWatermarkState::new(
+            fetcher,
+            publisher,
+            idle_manager.clone(),
             window_manager,
-            latest_fetched_wm: Arc::new(Mutex::new(
-                Watermark::from_timestamp_millis(-1).expect("failed to parse timestamp"),
-            )),
-        };
+            tracker.clone(),
+            from_partitions,
+        )));
+
+        let isb_watermark_handle = Self { state };
 
         // start a task to keep publishing idle watermarks every idle_timeout
         tokio::spawn({
-            let mut isb_watermark_handle = isb_watermark_handle.clone();
+            let isb_watermark_handle = isb_watermark_handle.clone();
             let mut interval_ticker = tokio::time::interval(idle_timeout);
             let cln_token = cln_token.clone();
             async move {
@@ -260,199 +327,55 @@ impl ISBWatermarkHandle {
 
     /// Fetches the watermark for the given offset, if we are not able to compute the watermark we
     /// return -1.
-    pub(crate) async fn fetch_watermark(&mut self, offset: Offset) -> Watermark {
+    pub(crate) async fn fetch_watermark(&self, offset: Offset) -> Watermark {
         let Offset::Int(offset) = offset else {
-            error!(?offset, "Invalid offset type, cannot compute watermark");
+            warn!(?offset, "Invalid offset type, cannot compute watermark");
             return Watermark::from_timestamp_millis(-1).expect("failed to parse time");
         };
 
-        let (oneshot_tx, oneshot_rx) = tokio::sync::oneshot::channel();
-        if let Err(e) = self
-            .sender
-            .send(ISBWaterMarkActorMessage::Fetch { offset, oneshot_tx })
-            .await
-        {
-            error!(?e, "Failed to send message");
-            return Watermark::from_timestamp_millis(-1).expect("failed to parse time");
-        }
+        // Acquire lock, fetch watermark, and release immediately
+        let mut state = self.state.lock().await;
+        state.fetch_watermark(offset)
+    }
 
-        match oneshot_rx.await {
-            Ok(watermark) => {
-                let wm = watermark.unwrap_or_else(|e| {
-                    error!(?e, "Failed to fetch watermark");
-                    Watermark::from_timestamp_millis(-1).expect("failed to parse time")
-                });
+    /// Fetches the head watermark using the watermark fetcher. This returns the minimum
+    /// of the head watermarks across all processors for the specified partition.
+    pub(crate) async fn fetch_head_watermark(
+        &self,
+        from_vertex: Option<&str>,
+        partition_idx: u16,
+    ) -> Watermark {
+        // Acquire lock, fetch watermark, and release immediately
+        let mut state = self.state.lock().await;
+        state.fetch_head_watermark(from_vertex, partition_idx)
+    }
 
-                // Update the latest fetched watermark
-                let mut latest_fetched_wm = self
-                    .latest_fetched_wm
-                    .lock()
-                    .expect("failed to acquire lock");
-                *latest_fetched_wm = std::cmp::max(wm, *latest_fetched_wm);
-
-                wm
-            }
-            Err(e) => {
-                error!(?e, "Failed to receive response");
-                Watermark::from_timestamp_millis(-1).expect("failed to parse time")
-            }
-        }
+    /// Fetches the head idle WMB for the given partition. Returns the minimum idle WMB across all
+    /// processors for the specified partition, but only if all active processors are idle for that
+    /// partition.
+    pub(crate) async fn fetch_head_idle_wmb(&self, partition_idx: u16) -> Option<WMB> {
+        // Acquire lock, fetch WMB, and release immediately
+        let mut state = self.state.lock().await;
+        state.fetch_head_idle_wmb(partition_idx)
     }
 
     /// publish_watermark publishes the watermark for the given stream and offset.
-    pub(crate) async fn publish_watermark(&mut self, stream: Stream, offset: Offset) {
+    pub(crate) async fn publish_watermark(&self, stream: Stream, offset: Offset) {
         let Offset::Int(offset) = offset else {
-            error!(?offset, "Invalid offset type, cannot publish watermark");
+            warn!(?offset, "Invalid offset type, cannot publish watermark");
             return;
         };
 
-        // Compute the minimum watermark
-        let min_wm = self.compute_min_watermark().await;
-
-        // Send the publish watermark message to the actor
-        self.sender
-            .send(ISBWaterMarkActorMessage::Publish {
-                stream: stream.clone(),
-                offset: offset.offset,
-                watermark: min_wm.timestamp_millis(),
-                is_idle: false,
-            })
-            .await
-            .unwrap_or_else(|e| {
-                error!("Failed to send message: {:?}", e);
-            });
-
-        // Reset idle state for this stream
-        self.idle_manager.reset_idle(&stream).await;
-    }
-
-    /// remove_offset removes the offset from the tracked offsets.
-    pub(crate) async fn remove_offset(&mut self, offset: Offset) {
-        let Offset::Int(offset) = offset else {
-            error!(?offset, "Invalid offset type, cannot remove offset");
-            return;
-        };
-
-        // Remove the offset from the tracked offsets
-        let mut offset_set = self.offset_set.lock().expect("failed to acquire lock");
-        if let Some(set) = offset_set.get_mut(&offset.partition_idx) {
-            if let Some(&OffsetWatermark { watermark, .. }) =
-                set.iter().find(|ow| ow.offset == offset.offset)
-            {
-                set.remove(&OffsetWatermark {
-                    offset: offset.offset,
-                    watermark,
-                });
-            }
-        }
-    }
-
-    /// insert_offset inserts the offset to the tracked offsets.
-    pub(crate) async fn insert_offset(&mut self, offset: Offset, watermark: Option<Watermark>) {
-        let Offset::Int(offset) = offset else {
-            error!(?offset, "Invalid offset type, cannot insert offset");
-            return;
-        };
-
-        let wm = watermark
-            .unwrap_or(Watermark::from_timestamp_millis(-1).expect("failed to parse time"));
-
-        // Insert the offset and watermark to the tracked offsets
-        let mut offset_set = self.offset_set.lock().expect("failed to acquire lock");
-        let set = offset_set.entry(offset.partition_idx).or_default();
-        set.insert(OffsetWatermark {
-            offset: offset.offset,
-            watermark: wm,
-        });
+        // Acquire lock, perform operation, and release immediately
+        let mut state = self.state.lock().await;
+        state.publish_watermark(stream, offset).await;
     }
 
     /// publishes the idle watermark for the downstream idle partitions.
-    pub(crate) async fn publish_idle_watermark(&mut self) {
-        // Compute the minimum watermark
-        let mut min_wm = self.compute_min_watermark().await;
-
-        // if the computed min watermark is -1, means there is no data (no windows and inflight messages)
-        // we should fetch the head idle watermark and publish it to downstream.
-        if min_wm.timestamp_millis() == -1 {
-            let (oneshot_tx, oneshot_rx) = tokio::sync::oneshot::channel();
-            if let Err(e) = self
-                .sender
-                .send(ISBWaterMarkActorMessage::FetchHeadIdle { oneshot_tx })
-                .await
-            {
-                error!(?e, "Failed to send message");
-                return;
-            }
-
-            min_wm = match oneshot_rx.await {
-                Ok(watermark) => watermark.unwrap_or_else(|e| {
-                    error!(?e, "Failed to fetch head idle watermark");
-                    Watermark::from_timestamp_millis(-1).expect("failed to parse time")
-                }),
-                Err(e) => {
-                    error!(?e, "Failed to receive response");
-                    Watermark::from_timestamp_millis(-1).expect("failed to parse time")
-                }
-            };
-        }
-
-        // Identify the streams that are idle and publish the idle watermark
-        let idle_streams = self.idle_manager.fetch_idle_streams().await;
-        for stream in idle_streams.iter() {
-            if let Ok(offset) = self.idle_manager.fetch_idle_offset(stream).await {
-                // publish the watermark
-                self.sender
-                    .send(ISBWaterMarkActorMessage::Publish {
-                        stream: stream.clone(),
-                        offset,
-                        watermark: min_wm.timestamp_millis(),
-                        is_idle: true,
-                    })
-                    .await
-                    .unwrap_or_else(|e| {
-                        error!("Failed to send message: {:?}", e);
-                    });
-
-                self.idle_manager.update_idle_metadata(stream, offset).await;
-            }
-        }
-    }
-
-    /// Computes the minimum watermark based on window manager and inflight messages.
-    async fn compute_min_watermark(&self) -> Watermark {
-        // If window manager is configured, we can use the oldest window's end time - 1ms as the
-        // watermark.
-        if let Some(window_manager) = &self.window_manager {
-            if let Some(oldest_window) = window_manager.oldest_window() {
-                // we should also compare it with the latest fetched watermark because sometimes
-                // the window end time can be greater than the watermark of the messages in the window.
-                // in that case we should use the latest fetched watermark.
-                let latest_fetched_wm = self
-                    .latest_fetched_wm
-                    .lock()
-                    .expect("failed to acquire lock");
-                return std::cmp::min(
-                    *latest_fetched_wm,
-                    Watermark::from_timestamp_millis(oldest_window.end_time.timestamp_millis() - 1)
-                        .expect("failed to parse time"),
-                );
-            }
-        }
-
-        // if window manager is not configured, we should use the lowest watermark among all the
-        // inflight messages.
-        self.get_lowest_watermark()
-            .await
-            .unwrap_or(Watermark::from_timestamp_millis(-1).unwrap())
-    }
-
-    /// Gets the lowest watermark among all the inflight requests
-    async fn get_lowest_watermark(&self) -> Option<Watermark> {
-        let offset_set = self.offset_set.lock().expect("failed to acquire lock");
-        offset_set
-            .values()
-            .filter_map(|set| set.iter().next().map(|ow| ow.watermark))
-            .min()
+    pub(crate) async fn publish_idle_watermark(&self) {
+        // Acquire lock, perform operation, and release immediately
+        let mut state = self.state.lock().await;
+        state.publish_idle_watermark().await;
     }
 }
 
@@ -465,8 +388,27 @@ mod tests {
     use super::*;
     use crate::config::pipeline::isb::{BufferWriterConfig, Stream};
     use crate::config::pipeline::watermark::BucketConfig;
-    use crate::message::IntOffset;
+    use crate::message::{IntOffset, Message};
+    use crate::tracker::Tracker;
     use crate::watermark::wmb::WMB;
+
+    // Helper function to create test messages
+    fn create_test_message(
+        offset: i64,
+        partition_idx: u16,
+        watermark_millis: Option<i64>,
+    ) -> Message {
+        let watermark =
+            watermark_millis.map(|millis| chrono::DateTime::from_timestamp_millis(millis).unwrap());
+        Message {
+            offset: Offset::Int(IntOffset {
+                offset,
+                partition_idx,
+            }),
+            watermark,
+            ..Default::default()
+        }
+    }
 
     #[cfg(feature = "nats-tests")]
     #[tokio::test]
@@ -483,17 +425,32 @@ mod tests {
 
         let from_bucket_config = BucketConfig {
             vertex: "from_vertex",
-            partitions: 1,
+            partitions: vec![0],
             ot_bucket: ot_bucket_name,
             hb_bucket: hb_bucket_name,
+            delay: None,
         };
 
         let to_bucket_config = BucketConfig {
             vertex: "to_vertex",
-            partitions: 1,
+            partitions: vec![0],
             ot_bucket: to_ot_bucket_name,
             hb_bucket: to_hb_bucket_name,
+            delay: None,
         };
+
+        let _ = js_context
+            .delete_key_value(ot_bucket_name.to_string())
+            .await;
+        let _ = js_context
+            .delete_key_value(hb_bucket_name.to_string())
+            .await;
+        let _ = js_context
+            .delete_key_value(to_ot_bucket_name.to_string())
+            .await;
+        let _ = js_context
+            .delete_key_value(to_hb_bucket_name.to_string())
+            .await;
 
         // create key value stores
         js_context
@@ -536,10 +493,12 @@ mod tests {
             from_vertex_config: vec![from_bucket_config.clone()],
             to_vertex_config: vec![to_bucket_config.clone()],
         };
+        let tracker = Tracker::new(None, CancellationToken::new());
 
-        let mut handle = ISBWatermarkHandle::new(
+        let handle = ISBWatermarkHandle::new(
             vertex_name,
             0,
+            VertexType::MapUDF,
             Duration::from_millis(100),
             js_context.clone(),
             &edge_config,
@@ -551,32 +510,22 @@ mod tests {
                     ..Default::default()
                 },
                 conditions: None,
+                to_vertex_type: VertexType::Sink,
             }],
             CancellationToken::new(),
             None,
+            tracker.clone(),
+            vec![0],
         )
         .await
         .expect("Failed to create ISBWatermarkHandle");
 
-        handle
-            .insert_offset(
-                Offset::Int(IntOffset {
-                    offset: 1,
-                    partition_idx: 0,
-                }),
-                Some(Watermark::from_timestamp_millis(100).unwrap()),
-            )
-            .await;
+        // Insert test messages into the tracker
+        let message1 = create_test_message(1, 0, Some(100));
+        let message2 = create_test_message(2, 0, Some(200));
 
-        handle
-            .insert_offset(
-                Offset::Int(IntOffset {
-                    offset: 2,
-                    partition_idx: 0,
-                }),
-                Some(Watermark::from_timestamp_millis(200).unwrap()),
-            )
-            .await;
+        tracker.insert(&message1).await.unwrap();
+        tracker.insert(&message2).await.unwrap();
 
         handle
             .publish_watermark(
@@ -593,36 +542,39 @@ mod tests {
             .await;
 
         let ot_bucket = js_context
-            .get_key_value(ot_bucket_name)
+            .get_key_value(to_ot_bucket_name)
             .await
             .expect("Failed to get ot bucket");
 
-        let mut wmb_found = true;
-        for _ in 0..10 {
-            let wmb = ot_bucket
-                .get("test-vertex-0")
-                .await
-                .expect("Failed to get wmb");
+        let timeout_duration = Duration::from_secs(1);
+        let result = tokio::time::timeout(timeout_duration, async {
+            loop {
+                let wmb = ot_bucket
+                    .get("test-vertex-0")
+                    .await
+                    .expect("Failed to get wmb");
 
-            if let Some(wmb) = wmb {
-                let wmb: WMB = wmb.try_into().unwrap();
-                assert_eq!(wmb.watermark, 100);
-                wmb_found = true;
+                if let Some(wmb) = wmb {
+                    let wmb: WMB = wmb.try_into().unwrap();
+                    assert_eq!(wmb.watermark, 100);
+                    break;
+                }
+                sleep(Duration::from_millis(10)).await;
             }
-            sleep(Duration::from_millis(10)).await;
-        }
+        })
+        .await;
 
-        if !wmb_found {
+        if result.is_err() {
             panic!("WMB not found");
         }
 
-        // remove the smaller offset and then publish watermark and see
-        handle
-            .remove_offset(Offset::Int(IntOffset {
+        tracker
+            .delete(&Offset::Int(IntOffset {
                 offset: 1,
                 partition_idx: 0,
             }))
-            .await;
+            .await
+            .unwrap();
 
         handle
             .publish_watermark(
@@ -638,42 +590,27 @@ mod tests {
             )
             .await;
 
-        let mut wmb_found = true;
-        for _ in 0..10 {
-            let wmb = ot_bucket
-                .get("test-vertex-0")
-                .await
-                .expect("Failed to get wmb");
+        let timeout_duration = Duration::from_secs(1);
+        let result = tokio::time::timeout(timeout_duration, async {
+            loop {
+                let wmb = ot_bucket
+                    .get("test-vertex-0")
+                    .await
+                    .expect("Failed to get wmb");
 
-            if let Some(wmb) = wmb {
-                let wmb: WMB = wmb.try_into().unwrap();
-                assert_eq!(wmb.watermark, 200);
-                wmb_found = true;
+                if let Some(wmb) = wmb {
+                    let wmb: WMB = wmb.try_into().unwrap();
+                    assert_eq!(wmb.watermark, 200);
+                    break;
+                }
+                sleep(Duration::from_millis(10)).await;
             }
-            sleep(Duration::from_millis(10)).await;
-        }
+        })
+        .await;
 
-        if !wmb_found {
+        if result.is_err() {
             panic!("WMB not found");
         }
-
-        // delete the stores
-        js_context
-            .delete_key_value(ot_bucket_name.to_string())
-            .await
-            .unwrap();
-        js_context
-            .delete_key_value(hb_bucket_name.to_string())
-            .await
-            .unwrap();
-        js_context
-            .delete_key_value(to_ot_bucket_name.to_string())
-            .await
-            .unwrap();
-        js_context
-            .delete_key_value(to_hb_bucket_name.to_string())
-            .await
-            .unwrap();
     }
 
     #[cfg(feature = "nats-tests")]
@@ -689,10 +626,18 @@ mod tests {
 
         let from_bucket_config = BucketConfig {
             vertex: "from_vertex",
-            partitions: 1,
+            partitions: vec![0],
             ot_bucket: ot_bucket_name,
             hb_bucket: hb_bucket_name,
+            delay: None,
         };
+
+        let _ = js_context
+            .delete_key_value(ot_bucket_name.to_string())
+            .await;
+        let _ = js_context
+            .delete_key_value(hb_bucket_name.to_string())
+            .await;
 
         // create key value stores
         js_context
@@ -717,10 +662,12 @@ mod tests {
             from_vertex_config: vec![from_bucket_config.clone()],
             to_vertex_config: vec![from_bucket_config.clone()],
         };
+        let tracker = Tracker::new(None, CancellationToken::new());
 
-        let mut handle = ISBWatermarkHandle::new(
+        let handle = ISBWatermarkHandle::new(
             vertex_name,
             0,
+            VertexType::MapUDF,
             Duration::from_millis(100),
             js_context.clone(),
             &edge_config,
@@ -732,68 +679,63 @@ mod tests {
                     ..Default::default()
                 },
                 conditions: None,
+                to_vertex_type: VertexType::Sink,
             }],
             CancellationToken::new(),
             None,
+            tracker.clone(),
+            vec![0],
         )
         .await
         .expect("Failed to create ISBWatermarkHandle");
 
         let mut fetched_watermark = -1;
         // publish watermark and try fetching to see if something is getting published
-        for i in 0..10 {
-            let offset = Offset::Int(IntOffset {
-                offset: i,
-                partition_idx: 0,
-            });
-
-            handle
-                .insert_offset(
-                    offset.clone(),
-                    Some(Watermark::from_timestamp_millis(i * 100).unwrap()),
-                )
-                .await;
-
-            handle
-                .publish_watermark(
-                    Stream {
-                        name: "test_stream",
-                        vertex: "from_vertex",
-                        partition: 0,
-                    },
-                    Offset::Int(IntOffset {
-                        offset: i,
-                        partition_idx: 0,
-                    }),
-                )
-                .await;
-
-            let watermark = handle
-                .fetch_watermark(Offset::Int(IntOffset {
-                    offset: 3,
+        let timeout_duration = Duration::from_secs(1);
+        let result = tokio::time::timeout(timeout_duration, async {
+            for i in 0..10 {
+                let offset = Offset::Int(IntOffset {
+                    offset: i,
                     partition_idx: 0,
-                }))
-                .await;
+                });
 
-            if watermark.timestamp_millis() != -1 {
-                fetched_watermark = watermark.timestamp_millis();
-                break;
+                // Insert message into tracker
+                let message = create_test_message(i, 0, Some(i * 100));
+                tracker.insert(&message).await.unwrap();
+
+                handle
+                    .publish_watermark(
+                        Stream {
+                            name: "test_stream",
+                            vertex: "from_vertex",
+                            partition: 0,
+                        },
+                        Offset::Int(IntOffset {
+                            offset: i,
+                            partition_idx: 0,
+                        }),
+                    )
+                    .await;
+
+                let watermark = handle
+                    .fetch_watermark(Offset::Int(IntOffset {
+                        offset: 3,
+                        partition_idx: 0,
+                    }))
+                    .await;
+
+                if watermark.timestamp_millis() != -1 {
+                    fetched_watermark = watermark.timestamp_millis();
+                    break;
+                }
+                sleep(Duration::from_millis(10)).await;
+                tracker.delete(&offset).await.unwrap();
             }
-            sleep(Duration::from_millis(10)).await;
-            handle.remove_offset(offset.clone()).await;
-        }
+        })
+        .await;
 
+        assert!(result.is_ok(), "Timeout occurred while fetching watermark");
         assert_ne!(fetched_watermark, -1);
-
-        // delete the stores
-        js_context
-            .delete_key_value(ot_bucket_name.to_string())
-            .await
-            .unwrap();
-        js_context
-            .delete_key_value(hb_bucket_name.to_string())
-            .await
-            .unwrap();
     }
 
     #[cfg(feature = "nats-tests")]
@@ -811,17 +753,33 @@ mod tests {
 
         let from_bucket_config = BucketConfig {
             vertex: "from_vertex",
-            partitions: 1,
+            partitions: vec![0],
             ot_bucket: ot_bucket_name,
             hb_bucket: hb_bucket_name,
+            delay: None,
         };
 
         let to_bucket_config = BucketConfig {
             vertex: "to_vertex",
-            partitions: 1,
+            partitions: vec![0],
             ot_bucket: to_ot_bucket_name,
             hb_bucket: to_hb_bucket_name,
+            delay: None,
         };
+
+        // delete the stores
+        let _ = js_context
+            .delete_key_value(ot_bucket_name.to_string())
+            .await;
+        let _ = js_context
+            .delete_key_value(hb_bucket_name.to_string())
+            .await;
+        let _ = js_context
+            .delete_key_value(to_ot_bucket_name.to_string())
+            .await;
+        let _ = js_context
+            .delete_key_value(to_hb_bucket_name.to_string())
+            .await;
 
         // create key value stores
         js_context
@@ -864,10 +822,12 @@ mod tests {
             from_vertex_config: vec![from_bucket_config.clone()],
             to_vertex_config: vec![to_bucket_config.clone()],
         };
+        let tracker = Tracker::new(None, CancellationToken::new());
 
-        let mut handle = ISBWatermarkHandle::new(
+        let _handle = ISBWatermarkHandle::new(
             vertex_name,
             0,
+            VertexType::MapUDF,
             Duration::from_millis(10), // Set idle timeout to a very short duration
             js_context.clone(),
             &edge_config,
@@ -879,24 +839,20 @@ mod tests {
                     ..Default::default()
                 },
                 conditions: None,
+                to_vertex_type: VertexType::Sink,
             }],
             CancellationToken::new(),
             None,
+            tracker.clone(),
+            vec![0],
         )
         .await
         .expect("Failed to create ISBWatermarkHandle");
 
-        // Insert multiple offsets
+        // Insert multiple offsets into tracker
         for i in 1..=3 {
-            handle
-                .insert_offset(
-                    Offset::Int(IntOffset {
-                        offset: i,
-                        partition_idx: 0,
-                    }),
-                    Some(Watermark::from_timestamp_millis(i * 100).unwrap()),
-                )
-                .await;
+            let message = create_test_message(i, 0, Some(i * 100));
+            tracker.insert(&message).await.unwrap();
         }
 
         // Wait for the idle timeout to trigger
@@ -908,40 +864,139 @@ mod tests {
             .await
             .expect("Failed to get ot bucket");
 
-        let mut wmb_found = false;
-        for _ in 0..10 {
-            if let Some(wmb) = ot_bucket
-                .get("test-vertex-0")
-                .await
-                .expect("Failed to get wmb")
-            {
-                let wmb: WMB = wmb.try_into().unwrap();
-                if wmb.idle {
-                    wmb_found = true;
-                    break;
+        let timeout_duration = Duration::from_secs(1);
+        let result = tokio::time::timeout(timeout_duration, async {
+            loop {
+                if let Some(wmb) = ot_bucket
+                    .get("test-vertex-0")
+                    .await
+                    .expect("Failed to get wmb")
+                {
+                    let wmb: WMB = wmb.try_into().unwrap();
+                    if wmb.idle {
+                        break;
+                    }
                 }
+                tokio::time::sleep(Duration::from_millis(10)).await;
             }
-            tokio::time::sleep(Duration::from_millis(10)).await;
+        })
+        .await;
+
+        assert!(result.is_ok(), "Idle watermark not found");
+    }
+
+    #[cfg(feature = "nats-tests")]
+    #[tokio::test]
+    async fn test_fetch_head_watermark() {
+        let client = async_nats::connect("localhost:4222").await.unwrap();
+        let js_context = jetstream::new(client);
+
+        let ot_bucket_name = "test_fetch_head_watermark_OT";
+        let hb_bucket_name = "test_fetch_head_watermark_PROCESSORS";
+
+        let vertex_name = "test-vertex";
+
+        let from_bucket_config = BucketConfig {
+            vertex: "from_vertex",
+            partitions: vec![0],
+            ot_bucket: ot_bucket_name,
+            hb_bucket: hb_bucket_name,
+            delay: None,
+        };
+
+        let _ = js_context
+            .delete_key_value(ot_bucket_name.to_string())
+            .await;
+        let _ = js_context
+            .delete_key_value(hb_bucket_name.to_string())
+            .await;
+
+        // create key value stores
+        js_context
+            .create_key_value(Config {
+                bucket: ot_bucket_name.to_string(),
+                history: 1,
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+
+        js_context
+            .create_key_value(Config {
+                bucket: hb_bucket_name.to_string(),
+                history: 1,
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+
+        let edge_config = EdgeWatermarkConfig {
+            from_vertex_config: vec![from_bucket_config.clone()],
+            to_vertex_config: vec![from_bucket_config.clone()],
+        };
+        let tracker = Tracker::new(None, CancellationToken::new());
+
+        let handle = ISBWatermarkHandle::new(
+            vertex_name,
+            0,
+            VertexType::MapUDF,
+            Duration::from_millis(100),
+            js_context.clone(),
+            &edge_config,
+            &[ToVertexConfig {
+                name: "from_vertex",
+                partitions: 0,
+                writer_config: BufferWriterConfig {
+                    streams: vec![Stream::new("test_stream", "from_vertex", 0)],
+                    ..Default::default()
+                },
+                conditions: None,
+                to_vertex_type: VertexType::Sink,
+            }],
+            CancellationToken::new(),
+            None,
+            tracker.clone(),
+            vec![0],
+        )
+        .await
+        .expect("Failed to create ISBWatermarkHandle");
+
+        let mut fetched_watermark = -1;
+        // publish watermark and try fetching to see if something is getting published
+        for i in 0..10 {
+            let offset = Offset::Int(IntOffset {
+                offset: i,
+                partition_idx: 0,
+            });
+
+            // Insert message into tracker
+            let message = create_test_message(i, 0, Some(i * 100));
+            tracker.insert(&message).await.unwrap();
+
+            handle
+                .publish_watermark(
+                    Stream {
+                        name: "test_stream",
+                        vertex: "from_vertex",
+                        partition: 0,
+                    },
+                    Offset::Int(IntOffset {
+                        offset: i,
+                        partition_idx: 0,
+                    }),
+                )
+                .await;
+
+            let watermark = handle.fetch_head_watermark(None, 0).await;
+
+            if watermark.timestamp_millis() != -1 {
+                fetched_watermark = watermark.timestamp_millis();
+                break;
+            }
+            sleep(Duration::from_millis(10)).await;
+            tracker.delete(&offset).await.unwrap();
         }
 
-        assert!(wmb_found, "Idle watermark not found");
-
-        // delete the stores
-        js_context
-            .delete_key_value(ot_bucket_name.to_string())
-            .await
-            .unwrap();
-        js_context
-            .delete_key_value(hb_bucket_name.to_string())
-            .await
-            .unwrap();
-        js_context
-            .delete_key_value(to_ot_bucket_name.to_string())
-            .await
-            .unwrap();
-        js_context
-            .delete_key_value(to_hb_bucket_name.to_string())
-            .await
-            .unwrap();
+        assert_ne!(fetched_watermark, -1);
     }
 }

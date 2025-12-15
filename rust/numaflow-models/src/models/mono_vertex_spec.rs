@@ -50,10 +50,10 @@ pub struct MonoVertexSpec {
     /// NodeSelector is a selector which must be true for the pod to fit on a node. Selector which must match a node's labels for the pod to be scheduled on that node. More info: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
     #[serde(rename = "nodeSelector", skip_serializing_if = "Option::is_none")]
     pub node_selector: Option<::std::collections::HashMap<String, String>>,
-    /// The priority value. Various system components use this field to find the priority of the Redis pod. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/
+    /// The priority value. Various system components use this field to find the priority of the pod. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/
     #[serde(rename = "priority", skip_serializing_if = "Option::is_none")]
     pub priority: Option<i32>,
-    /// If specified, indicates the Redis pod's priority. \"system-node-critical\" and \"system-cluster-critical\" are two special keywords which indicate the highest priorities with the former being the highest priority. Any other name must be defined by creating a PriorityClass object with that name. If not specified, the pod priority will be default or zero if there is no default. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/
+    /// If specified, indicates the pod's priority. \"system-node-critical\" and \"system-cluster-critical\" are two special keywords which indicate the highest priorities with the former being the highest priority. Any other name must be defined by creating a PriorityClass object with that name. If not specified, the pod priority will be default or zero if there is no default. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/
     #[serde(rename = "priorityClassName", skip_serializing_if = "Option::is_none")]
     pub priority_class_name: Option<String>,
     #[serde(rename = "replicas", skip_serializing_if = "Option::is_none")]
@@ -81,6 +81,8 @@ pub struct MonoVertexSpec {
     /// If specified, the pod's tolerations.
     #[serde(rename = "tolerations", skip_serializing_if = "Option::is_none")]
     pub tolerations: Option<Vec<k8s_openapi::api::core::v1::Toleration>>,
+    #[serde(rename = "udf", skip_serializing_if = "Option::is_none")]
+    pub udf: Option<Box<crate::models::Udf>>,
     #[serde(rename = "updateStrategy", skip_serializing_if = "Option::is_none")]
     pub update_strategy: Option<Box<crate::models::UpdateStrategy>>,
     #[serde(rename = "volumes", skip_serializing_if = "Option::is_none")]
@@ -114,6 +116,7 @@ impl MonoVertexSpec {
             sink: None,
             source: None,
             tolerations: None,
+            udf: None,
             update_strategy: None,
             volumes: None,
         }

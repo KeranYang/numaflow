@@ -32,7 +32,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	dfv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaflow/pkg/isb"
 	mvtxdaemonclient "github.com/numaproj/numaflow/pkg/mvtxdaemon/client"
 	"github.com/numaproj/numaflow/pkg/shared/logging"
 )
@@ -228,28 +227,49 @@ func (s *Scaler) scaleOneMonoVertex(ctx context.Context, key string, worker int)
 		totalRate = rate.GetValue()
 	}
 	pending, existing := vMetrics.Pendings["default"]
-	if !existing || pending.GetValue() < 0 || pending.GetValue() == isb.PendingNotAvailable {
+	if !existing || pending.GetValue() < 0 || pending.GetValue() == dfv1.PendingNotAvailable {
 		// Pending not available, we don't do anything
 		log.Infof("MonoVertex %s has no pending messages information, skip scaling.", monoVtxName)
 		return nil
 	} else {
 		totalPending = pending.GetValue()
 	}
-
 	desired := s.desiredReplicas(ctx, monoVtx, totalRate, totalPending)
-	log.Infof("Calculated desired replica number of MonoVertex %q is: %d.", monoVtx.Name, desired)
-	max := monoVtx.Spec.Scale.GetMaxReplicas()
-	min := monoVtx.Spec.Scale.GetMinReplicas()
-	if desired > max {
-		desired = max
-		log.Infof("Calculated desired replica number %d of MonoVertex %q is greater than max, using max %d.", desired, monoVtxName, max)
+
+	// Check if rate limiting is configured and we're hitting the limit
+	// For MonoVertex, the rate limit is defined at Source by how many times the `Read` is called per second multiplied
+	// by the `readBatchSize`.
+	if monoVtx.Spec.Limits != nil && monoVtx.Spec.Limits.RateLimit != nil && monoVtx.Spec.Limits.RateLimit.Max != nil {
+		maxRate := float64(*monoVtx.Spec.Limits.RateLimit.Max * monoVtx.Spec.Limits.GetReadBatchSize())
+		// Round up to the nearest integer because we don't want to scale up if we are almost at the rate limit
+		// e.g., RateLimit is 1000, current rate is 999.9, we don't want to scale up
+		currentRate := math.Ceil(totalRate)
+
+		if currentRate >= maxRate {
+			// Calculate desired replicas to see if we would scale up
+			current := int32(monoVtx.Status.Replicas)
+
+			// Only skip if we would be scaling up
+			if desired > current {
+				log.Infof("MonoVertex %s would scale up but is at rate limit, skip scaling up.", monoVtxName)
+				return nil
+			}
+		}
 	}
-	if desired < min {
-		desired = min
-		log.Infof("Calculated desired replica number %d of MonoVertex %q is smaller than min, using min %d.", desired, monoVtxName, min)
+
+	log.Infof("Calculated desired replica number of MonoVertex %q is: %d.", monoVtx.Name, desired)
+	maxReplicas := monoVtx.Spec.Scale.GetMaxReplicas()
+	minReplicas := monoVtx.Spec.Scale.GetMinReplicas()
+	if desired > maxReplicas {
+		desired = maxReplicas
+		log.Infof("Calculated desired replica number %d of MonoVertex %q is greater than max, using max %d.", desired, monoVtxName, maxReplicas)
+	}
+	if desired < minReplicas {
+		desired = minReplicas
+		log.Infof("Calculated desired replica number %d of MonoVertex %q is smaller than min, using min %d.", desired, monoVtxName, minReplicas)
 	}
 	current := int32(monoVtx.Status.Replicas)
-	if current > max || current < min { // Someone might have manually scaled up/down the MonoVertex
+	if current > maxReplicas || current < minReplicas { // Someone might have manually scaled up/down the MonoVertex
 		return s.patchMonoVertexReplicas(ctx, monoVtx, desired)
 	}
 	if desired < current {

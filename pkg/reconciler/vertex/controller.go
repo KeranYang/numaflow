@@ -192,13 +192,15 @@ func (r *vertexReconciler) reconcile(ctx context.Context, vertex *dfv1.Vertex) (
 		readyPods = desiredReplicas
 	}
 	vertex.Status.ReadyReplicas = uint32(readyPods)
-	if healthy, reason, msg := reconciler.CheckPodsStatus(&podList); healthy {
+	if healthy, reason, msg, transientUnhealthy := reconciler.CheckPodsStatus(&podList); healthy {
 		vertex.Status.MarkPodHealthy(reason, msg)
 	} else {
-		// Do not need to explicitly requeue, since the it keeps watching the status change of the pods
 		vertex.Status.MarkPodNotHealthy(reason, msg)
+		if transientUnhealthy {
+			// If it's unhealthy caused by restart in the last N mins, need to explicitly requeue.
+			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+		}
 	}
-
 	return ctrl.Result{}, nil
 }
 
@@ -377,6 +379,8 @@ func (r *vertexReconciler) orchestratePodsFromTo(ctx context.Context, vertex *df
 				annotations[dfv1.KeyDefaultContainer] = dfv1.CtrUdtransformer
 			} else if vertex.HasFallbackUDSink() {
 				annotations[dfv1.KeyDefaultContainer] = dfv1.CtrFallbackUdsink
+			} else if vertex.HasOnSuccessUDSink() {
+				annotations[dfv1.KeyDefaultContainer] = dfv1.CtrOnSuccessUdsink
 			}
 			pod := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
@@ -600,7 +604,7 @@ func (r *vertexReconciler) findExistingPods(ctx context.Context, vertex *dfv1.Ve
 	}
 	result := make(map[string]corev1.Pod)
 	for _, v := range pods.Items {
-		if !v.DeletionTimestamp.IsZero() {
+		if r.isTerminatingPod(&v) {
 			// Ignore pods being deleted
 			continue
 		}
@@ -611,6 +615,12 @@ func (r *vertexReconciler) findExistingPods(ctx context.Context, vertex *dfv1.Ve
 		}
 	}
 	return result, nil
+}
+
+func (r *vertexReconciler) isTerminatingPod(pod *corev1.Pod) bool {
+	// A pod is terminating if its deletion timestamp is set (i.e., non-nil)
+	// It is also terminating if its status phase is in "Failed" or "Succeeded"
+	return !pod.DeletionTimestamp.IsZero() || pod.Status.Phase == corev1.PodFailed || pod.Status.Phase == corev1.PodSucceeded
 }
 
 func (r *vertexReconciler) findExistingServices(ctx context.Context, vertex *dfv1.Vertex) (map[string]corev1.Service, error) {

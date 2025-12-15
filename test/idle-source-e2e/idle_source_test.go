@@ -27,9 +27,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
-	"os"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -40,16 +38,12 @@ import (
 
 //go:generate kubectl -n numaflow-system delete statefulset zookeeper kafka-broker --ignore-not-found=true
 //go:generate kubectl apply -k ../../config/apps/kafka -n numaflow-system
-// Wait for zookeeper to come up
-//go:generate sleep 60
 
 type IdleSourceSuite struct {
 	E2ESuite
 }
 
 func (is *IdleSourceSuite) TestIdleKeyedReducePipelineWithHttpSource() {
-
-	is.T().SkipNow()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
@@ -65,7 +59,7 @@ func (is *IdleSourceSuite) TestIdleKeyedReducePipelineWithHttpSource() {
 	done := make(chan struct{})
 	go func() {
 		// publish messages to source vertex, with event time starting from 0
-		startTime := 0
+		startTime := int(time.Now().UnixMilli())
 		for i := 0; true; i++ {
 			select {
 			case <-ctx.Done():
@@ -73,11 +67,12 @@ func (is *IdleSourceSuite) TestIdleKeyedReducePipelineWithHttpSource() {
 			case <-done:
 				return
 			default:
-				startTime = startTime + 1000
+				startTime = startTime + 100
 				eventTime := strconv.Itoa(startTime)
 				w.SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("1")).WithHeader("X-Numaflow-Event-Time", eventTime)).
 					SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("2")).WithHeader("X-Numaflow-Event-Time", eventTime)).
 					SendMessageTo(pipelineName, "in", NewHttpPostRequest().WithBody([]byte("3")).WithHeader("X-Numaflow-Event-Time", eventTime))
+				time.Sleep(100 * time.Millisecond)
 			}
 		}
 	}()
@@ -85,17 +80,12 @@ func (is *IdleSourceSuite) TestIdleKeyedReducePipelineWithHttpSource() {
 	// since the key can be even or odd and the window duration is 10s
 	// the sum should be 20(for even) and 40(for odd)
 	w.Expect().
-		RedisSinkContains("http-idle-source-sink", "20", SinkCheckWithTimeout(300*time.Second)).
-		RedisSinkContains("http-idle-source-sink", "40", SinkCheckWithTimeout(300*time.Second))
+		RedisSinkContains("http-idle-source-sink", "200", SinkCheckWithTimeout(300*time.Second)).
+		RedisSinkContains("http-idle-source-sink", "400", SinkCheckWithTimeout(300*time.Second))
 	done <- struct{}{}
 }
 
 func (is *IdleSourceSuite) TestIdleKeyedReducePipelineWithKafkaSource() {
-
-	// the reduce feature is not supported with redis ISBSVC
-	if strings.ToUpper(os.Getenv("ISBSVC")) == "REDIS" {
-		is.T().SkipNow()
-	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
@@ -128,7 +118,7 @@ func (is *IdleSourceSuite) TestIdleKeyedReducePipelineWithKafkaSource() {
 				if i < 600 {
 					SendMessage(topic, "data", generateMsg("2", startTime), 1)
 				}
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(10 * time.Millisecond)
 				startTime = startTime.Add(1 * time.Second)
 			}
 		}

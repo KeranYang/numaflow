@@ -31,6 +31,49 @@ import "k8s.io/apimachinery/pkg/util/intstr/generated.proto";
 // Package-wide variables from generator "generated".
 option go_package = "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1";
 
+// AWSAssumeRole contains the configuration for AWS STS assume role authentication
+// This can be used with any AWS service (SQS, S3, DynamoDB, etc.)
+message AWSAssumeRole {
+  // RoleARN is the Amazon Resource Name (ARN) of the role to assume.
+  // This is a required field when assume role is enabled.
+  // Example: "arn:aws:iam::123456789012:role/CrossAccount-Service-Role"
+  optional string roleArn = 1;
+
+  // SessionName is an identifier for the assumed role session.
+  // This appears in AWS CloudTrail logs to help identify the source of API calls.
+  // If not specified, a default session name will be generated based on the service context.
+  // +optional
+  optional string sessionName = 2;
+
+  // DurationSeconds is the duration (in seconds) of the role session.
+  // Valid values: 900-43200 (15 minutes to 12 hours)
+  // Defaults to 3600 (1 hour) if not specified.
+  // The actual session duration is constrained by the maximum session duration
+  // setting of the IAM role being assumed.
+  // +optional
+  optional int32 durationSeconds = 3;
+
+  // ExternalID is a unique identifier that might be required when you assume a role
+  // in another account. This is commonly used as an additional security measure
+  // for cross-account role access.
+  // +optional
+  optional string externalID = 4;
+
+  // Policy is an IAM policy document (JSON string) that you want to use as an inline session policy.
+  // This parameter is optional. When specified, the session permissions are the intersection of
+  // the IAM role's identity-based policy and the session policies.
+  // This allows further restriction of permissions for the specific service operations.
+  // +optional
+  optional string policy = 5;
+
+  // PolicyARNs is a list of Amazon Resource Names (ARNs) of IAM managed policies
+  // that you want to use as managed session policies.
+  // The policies must exist in the same account as the role.
+  // This allows attaching existing managed policies to further restrict session permissions.
+  // +optional
+  repeated string policyArns = 6;
+}
+
 // AbstractPodTemplate provides a template for pod customization in vertices, daemon deployments and so on.
 message AbstractPodTemplate {
   // Metadata sets the pods's metadata, i.e. annotations and labels
@@ -61,7 +104,7 @@ message AbstractPodTemplate {
   // +patchStrategy=merge
   repeated .k8s.io.api.core.v1.LocalObjectReference imagePullSecrets = 5;
 
-  // If specified, indicates the Redis pod's priority. "system-node-critical"
+  // If specified, indicates the pod's priority. "system-node-critical"
   // and "system-cluster-critical" are two special keywords which indicate the
   // highest priorities with the former being the highest priority. Any other
   // name must be defined by creating a PriorityClass object with that name.
@@ -72,7 +115,7 @@ message AbstractPodTemplate {
   optional string priorityClassName = 6;
 
   // The priority value. Various system components use this field to find the
-  // priority of the Redis pod. When Priority Admission Controller is enabled,
+  // priority of the pod. When Priority Admission Controller is enabled,
   // it prevents users from setting this field. The admission controller populates
   // this field from PriorityClassName.
   // The higher the value, the higher the priority.
@@ -150,6 +193,10 @@ message AbstractSink {
   // SQS sink is used to write the data to the AWS SQS.
   // +optional
   optional SqsSink sqs = 6;
+
+  // Pulsar sink is used to write the data to the Apache Pulsar.
+  // +optional
+  optional PulsarSink pulsar = 7;
 }
 
 message AbstractVertex {
@@ -277,8 +324,6 @@ message Blackhole {
 }
 
 message BufferServiceConfig {
-  optional RedisConfig redis = 1;
-
   optional JetStreamConfig jetstream = 2;
 }
 
@@ -437,17 +482,6 @@ message ForwardConditions {
   optional TagConditions tags = 1;
 }
 
-message Function {
-  // +kubebuilder:validation:Enum=cat;filter
-  optional string name = 1;
-
-  // +optional
-  repeated string args = 2;
-
-  // +optional
-  map<string, string> kwargs = 3;
-}
-
 // GSSAPI represents a SASL GSSAPI config
 message GSSAPI {
   optional string serviceName = 1;
@@ -587,48 +621,6 @@ message GetMonoVertexPodSpecReq {
   optional .k8s.io.api.core.v1.ResourceRequirements defaultResources = 4;
 }
 
-message GetRedisServiceSpecReq {
-  map<string, string> labels = 1;
-
-  optional int32 redisContainerPort = 2;
-
-  optional int32 sentinelContainerPort = 3;
-}
-
-message GetRedisStatefulSetSpecReq {
-  optional string serviceName = 1;
-
-  map<string, string> labels = 2;
-
-  optional string redisImage = 3;
-
-  optional string sentinelImage = 4;
-
-  optional string metricsExporterImage = 5;
-
-  optional string initContainerImage = 6;
-
-  optional int32 redisContainerPort = 7;
-
-  optional int32 sentinelContainerPort = 8;
-
-  optional int32 redisMetricsContainerPort = 9;
-
-  optional string credentialSecretName = 10;
-
-  optional bool tlsEnabled = 11;
-
-  optional string pvcNameIfNeeded = 12;
-
-  optional string confConfigMapName = 13;
-
-  optional string scriptsConfigMapName = 14;
-
-  optional string healthConfigMapName = 15;
-
-  optional .k8s.io.api.core.v1.ResourceRequirements defaultResources = 16;
-}
-
 message GetServingPipelineResourceReq {
   optional BufferServiceConfig isbSvcConfig = 1;
 
@@ -711,6 +703,11 @@ message IdleSource {
 
   // IncrementBy is the duration to be added to the current watermark to progress the watermark when source is idling.
   optional .k8s.io.apimachinery.pkg.apis.meta.v1.Duration incrementBy = 3;
+
+  // InitSourceDelay is the duration after which, if source doesn't produce any data, the watermark is initialized
+  // with the current wall clock time.
+  // +optional
+  optional .k8s.io.apimachinery.pkg.apis.meta.v1.Duration initSourceDelay = 4;
 }
 
 // InterStepBuffer configuration specifically for the pipeline.
@@ -748,8 +745,6 @@ message InterStepBufferServiceList {
 }
 
 message InterStepBufferServiceSpec {
-  optional RedisBufferService redis = 1;
-
   optional JetStreamBufferService jetstream = 2;
 }
 
@@ -846,13 +841,31 @@ message JetStreamSource {
   // Stream represents the name of the stream.
   optional string stream = 2;
 
+  // Consumer represents the name of the consumer of the stream
+  // If not specified, a consumer with name `numaflow-pipeline_name-vertex_name-stream_name` will be created.
+  // If a consumer name is specified, a consumer with that name will be created if it doesn't exist on the stream.
+  // +optional
+  optional string consumer = 3;
+
+  // The point in the stream from which to receive messages.
+  // https://docs.nats.io/nats-concepts/jetstream/consumers#deliverpolicy
+  // Valid options are: "all", "new", "last", "last_per_subject", "by_start_sequence 42", "by_start_time 1753428483000".
+  // The second value to "by_start_time" is unix epoch time in milliseconds.
+  // +optional
+  optional string deliver_policy = 4;
+
+  // A set of subjects that overlap with the subjects bound to the stream to filter delivery to subscribers.
+  // https://docs.nats.io/nats-concepts/jetstream/consumers#filtesubjects
+  // +optional
+  repeated string filter_subjects = 5;
+
   // TLS configuration for the nats client.
   // +optional
-  optional TLS tls = 3;
+  optional TLS tls = 6;
 
   // Auth information
   // +optional
-  optional NatsAuth auth = 4;
+  optional NatsAuth auth = 7;
 }
 
 message JobTemplate {
@@ -997,10 +1010,16 @@ message MonoVertexLimits {
   // +optional
   optional uint64 readBatchSize = 1;
 
-  // Read timeout duration from the source.
+  // ReadTimeout is the read timeout duration from the source.
   // +kubebuilder:default= "1s"
   // +optional
   optional .k8s.io.apimachinery.pkg.apis.meta.v1.Duration readTimeout = 2;
+
+  // RateLimit for MonoVertex defines how many messages can be read from Source. This is computed by number of
+  // `read` calls per second multiplied by the `readBatchSize`. This is how RateLimit is calculated for MonoVertex and
+  // for Source vertices.
+  // +optional
+  optional RateLimit rateLimit = 3;
 }
 
 // +kubebuilder:object:root=true
@@ -1021,47 +1040,50 @@ message MonoVertexSpec {
   optional Sink sink = 3;
 
   // +optional
-  optional AbstractPodTemplate abstractPodTemplate = 4;
+  optional UDF udf = 4;
+
+  // +optional
+  optional AbstractPodTemplate abstractPodTemplate = 5;
 
   // Container template for the main numa container.
   // +optional
-  optional ContainerTemplate containerTemplate = 5;
+  optional ContainerTemplate containerTemplate = 6;
 
   // +optional
   // +patchStrategy=merge
   // +patchMergeKey=name
-  repeated .k8s.io.api.core.v1.Volume volumes = 6;
+  repeated .k8s.io.api.core.v1.Volume volumes = 7;
 
   // Limits define the limitations such as read batch size for the mono vertex.
   // +optional
-  optional MonoVertexLimits limits = 7;
+  optional MonoVertexLimits limits = 8;
 
   // Settings for autoscaling
   // +optional
-  optional Scale scale = 8;
+  optional Scale scale = 9;
 
   // List of customized init containers belonging to the pod.
   // More info: https://kubernetes.io/docs/concepts/workloads/pods/init-containers/
   // +optional
-  repeated .k8s.io.api.core.v1.Container initContainers = 9;
+  repeated .k8s.io.api.core.v1.Container initContainers = 10;
 
   // List of customized sidecar containers belonging to the pod.
   // +optional
-  repeated .k8s.io.api.core.v1.Container sidecars = 10;
+  repeated .k8s.io.api.core.v1.Container sidecars = 11;
 
   // Template for the daemon service deployment.
   // +optional
-  optional DaemonTemplate daemonTemplate = 11;
+  optional DaemonTemplate daemonTemplate = 12;
 
   // The strategy to use to replace existing pods with new ones.
   // +kubebuilder:default={"type": "RollingUpdate", "rollingUpdate": {"maxUnavailable": "25%"}}
   // +optional
-  optional UpdateStrategy updateStrategy = 12;
+  optional UpdateStrategy updateStrategy = 13;
 
   // Lifecycle defines the Lifecycle properties of a MonoVertex
   // +kubebuilder:default={"desiredPhase": Running}
   // +optional
-  optional MonoVertexLifecycle lifecycle = 13;
+  optional MonoVertexLifecycle lifecycle = 14;
 }
 
 message MonoVertexStatus {
@@ -1113,40 +1135,6 @@ message MonoVertexStatus {
 
   // If not empty, indicates the updated version of the MonoVertex used to generate Pods.
   optional string updateHash = 15;
-}
-
-message NativeRedis {
-  // Redis version, such as "6.0.16"
-  optional string version = 1;
-
-  // Redis StatefulSet size
-  // +kubebuilder:default=3
-  optional int32 replicas = 2;
-
-  // RedisContainerTemplate contains customized spec for Redis container
-  // +optional
-  optional ContainerTemplate redisContainerTemplate = 3;
-
-  // SentinelContainerTemplate contains customized spec for Redis container
-  // +optional
-  optional ContainerTemplate sentinelContainerTemplate = 4;
-
-  // MetricsContainerTemplate contains customized spec for metrics container
-  // +optional
-  optional ContainerTemplate metricsContainerTemplate = 5;
-
-  // +optional
-  optional ContainerTemplate initContainerTemplate = 6;
-
-  // +optional
-  optional PersistenceStrategy persistence = 7;
-
-  // +optional
-  optional AbstractPodTemplate abstractPodTemplate = 8;
-
-  // Redis configuration, if not specified, global settings in numaflow-controller-config will be used.
-  // +optional
-  optional RedisSettings settings = 9;
 }
 
 // NatsAuth defines how to authenticate the nats access
@@ -1207,7 +1195,7 @@ message PersistenceStrategy {
   // +optional
   optional string storageClassName = 1;
 
-  // Available access modes such as ReadWriteOnce, ReadWriteMany
+  // Available access modes such as ReadWriteOncePod, ReadWriteOnce, ReadWriteMany
   // https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes
   // +optional
   optional string accessMode = 2;
@@ -1264,6 +1252,13 @@ message PipelineLimits {
   // +kubebuilder:default= "1s"
   // +optional
   optional .k8s.io.apimachinery.pkg.apis.meta.v1.Duration readTimeout = 4;
+
+  // RateLimit is used to define the rate limit for all the vertices in the pipeline, it could be overridden by the
+  // vertex's limit settings. For source vertices, it will be set to rate divided by readBatchSize because for source
+  // vertices, the rate limit is defined by how many times the `Read` is called per second
+  // Reduce does not support RateLimit.
+  // +optional
+  optional RateLimit rateLimit = 5;
 }
 
 // +kubebuilder:object:root=true
@@ -1394,6 +1389,30 @@ message PulsarAuth {
   // JWT Token auth
   // +optional
   optional .k8s.io.api.core.v1.SecretKeySelector token = 1;
+
+  // Authentication using HTTP basic https://pulsar.apache.org/docs/4.0.x/security-basic-auth/
+  // +optional
+  optional PulsarBasicAuth basicAuth = 2;
+}
+
+message PulsarBasicAuth {
+  // +optional
+  optional .k8s.io.api.core.v1.SecretKeySelector username = 1;
+
+  // +optional
+  optional .k8s.io.api.core.v1.SecretKeySelector password = 2;
+}
+
+message PulsarSink {
+  optional string serverAddr = 1;
+
+  optional string topic = 2;
+
+  optional string producerName = 3;
+
+  // Auth information
+  // +optional
+  optional PulsarAuth auth = 6;
 }
 
 message PulsarSource {
@@ -1413,56 +1432,202 @@ message PulsarSource {
   optional PulsarAuth auth = 6;
 }
 
-message RedisBufferService {
-  // Native brings up a native Redis service
-  optional NativeRedis native = 1;
+message RateLimit {
+  // Max is the maximum TPS that this vertex can process give a distributed `Store` is configured. Otherwise, it will
+  // be the maximum TPS for a single replica.
+  optional uint64 max = 1;
 
-  // External holds an External Redis config
-  optional RedisConfig external = 2;
+  // Minimum TPS allowed during initial bootup. This value will be distributed across all the replicas if a distributed
+  // `Store` is configured. Otherwise, it will be the minimum TPS for a single replica.
+  // +kubebuilder:default=1
+  optional uint64 min = 2;
+
+  // RampUpDuration is the duration to reach the maximum TPS from the minimum TPS. The min unit of ramp up is 1 in
+  // 1 second.
+  // +kubebuilder:default= "1s"
+  optional .k8s.io.apimachinery.pkg.apis.meta.v1.Duration rampUpDuration = 3;
+
+  // Store is used to define the Distributed Store for the rate limiting. We also support in-memory store if no store
+  // is configured. This means that every replica will have its own rate limit and the actual TPS will be the sum of all
+  // the replicas.
+  // +optional
+  optional RateLimiterStore store = 4;
+
+  // RateLimiterModes is used to define the modes for rate limiting.
+  // +optional
+  optional RateLimiterModes modes = 5;
+
+  // ResumedRampUp is used to enable the resume mode for rate limiting.
+  //
+  // This, if true, will allow the processor to
+  // resume the ramp-up process from the last known state of the rate limiter, i.e., if the processor was allowed X tokens
+  // before shutting down, it will be allowed X tokens again after the processor restarts.
+  //
+  // The resumed ramp-up process will be allowed until TTL time after the processor first deregisters with the rate limiter.
+  // +optional
+  // +kubebuilder:default=false
+  optional bool resumedRampUp = 6;
+
+  // TTL is used to define the duration after which a pod is considered stale and removed from the pool of pods if it
+  // doesn't sync with the rate limiter.
+  //
+  // Furthermore, if the ResumedRampUp is true, then TTL also defines the amount of time within which, if a pod
+  // re-registers / registers with the same name, with the rate limiter, it will be assigned the same rate limit as
+  // the previous pod with that name.
+  // +optional
+  // +kubebuilder:default="180s"
+  optional .k8s.io.apimachinery.pkg.apis.meta.v1.Duration ttl = 7;
 }
 
-message RedisConfig {
-  // Redis URL
+// RateLimiterGoBackN is for the GoBackN mode.
+// Releases additional tokens only when previously released tokens have been utilized above the configured threshold
+// otherwise triggers a ramp-down. Ramp-down is also triggered when the request is made after quite a while.
+message RateLimiterGoBackN {
+  // CoolDownPeriod is the duration after which the rate limiter will start ramping down if the request is made after
+  // the cool-down period.
   // +optional
-  optional string url = 1;
+  // +kubebuilder:default="5s"
+  optional .k8s.io.apimachinery.pkg.apis.meta.v1.Duration coolDownPeriod = 1;
 
-  // Sentinel URL, will be ignored if Redis URL is provided
+  // RampDownStrength is the strength of the ramp-down. It is a value between 0 and 1. 0 means no ramp-down and 1 means
+  // token pool is ramped down at the rate of slope=(max - min)/duration.
   // +optional
-  optional string sentinelUrl = 2;
+  // +kubebuilder:default=50
+  optional uint32 rampDownPercentage = 2;
 
-  // Only required when Sentinel is used
+  // ThresholdPercentage specifies the minimum percentage of capacity, availed by the rate limiter,
+  // that should be consumed at any instance to allow the rate limiter to unlock additional capacity.
+  // For example, given the following configuration:
+  // - max = 100
+  // - min = 10
+  // - rampUpDuration = 10s i.e.--> slope = 10 messages/second
+  // - thresholdPercentage = 50
+  // at t = 0, the rate limiter will release 10 messages and at least 5 of those should be consumed to unlock
+  // additional capacity of 10 messages at t = 1 to make the total capacity of 20.
   // +optional
-  optional string masterName = 3;
-
-  // Redis user
-  // +optional
-  optional string user = 4;
-
-  // Redis password secret selector
-  // +optional
-  optional .k8s.io.api.core.v1.SecretKeySelector password = 5;
-
-  // Sentinel password secret selector
-  // +optional
-  optional .k8s.io.api.core.v1.SecretKeySelector sentinelPassword = 6;
+  // +kubebuilder:default=50
+  optional uint32 thresholdPercentage = 3;
 }
 
-message RedisSettings {
-  // Redis settings shared by both master and slaves, will override the global settings from controller config
-  // +optional
-  optional string redis = 1;
+message RateLimiterInMemoryStore {
+}
 
-  // Special settings for Redis master node, will override the global settings from controller config
+// RateLimiterModes defines the modes for rate limiting.
+message RateLimiterModes {
+  // Irrespective of the traffic, the rate limiter releases max possible tokens based on ramp-up duration.
   // +optional
-  optional string master = 2;
+  optional RateLimiterScheduled scheduled = 2;
 
-  // Special settings for Redis replica nodes, will override the global settings from controller config
+  // If there is some traffic, then release the max possible tokens.
   // +optional
-  optional string replica = 3;
+  optional RateLimiterRelaxed relaxed = 1;
 
-  // Sentinel settings, will override the global settings from controller config
+  // Releases additional tokens only when previously released tokens have been utilized above the configured threshold
   // +optional
-  optional string sentinel = 4;
+  optional RateLimiterOnlyIfUsed onlyIfUsed = 3;
+
+  // Releases additional tokens only when previously released tokens have been utilized above the configured threshold
+  // otherwise triggers a ramp-down. Ramp-down is also triggered when the request is made after quite a while.
+  // +optional
+  optional RateLimiterGoBackN goBackN = 4;
+}
+
+// RateLimiterOnlyIfUsed is for the OnlyIfUsed mode.
+// Releases additional tokens only when previously released tokens have been utilized above the configured threshold
+message RateLimiterOnlyIfUsed {
+  // ThresholdPercentage specifies the minimum percentage of capacity, availed by the rate limiter,
+  // that should be consumed at any instance to allow the rate limiter to unlock additional capacity.
+  //
+  // Defaults to 50%
+  //
+  // For example, given the following configuration:
+  // - max = 100
+  // - min = 10
+  // - rampUpDuration = 10s i.e.--> slope = 10 messages/second
+  // - thresholdPercentage = 50
+  // at t = 0, the rate limiter will release 10 messages and at least 5 of those should be consumed to unlock
+  // additional capacity of 10 messages at t = 1 to make the total capacity of 20.
+  // +optional
+  // +kubebuilder:default=50
+  optional uint32 thresholdPercentage = 1;
+}
+
+message RateLimiterRedisStore {
+  // Choose how to connect to Redis.
+  // - Single: use a single URL (redis://... or rediss://...)
+  // - Sentinel: discover the node via Redis Sentinel
+  // +kubebuilder:validation:Enum=single;sentinel
+  optional string mode = 1;
+
+  // SINGLE MODE: Full connection URL, e.g. redis://host:6379/0 or rediss://host:port/0
+  // Mutually exclusive with .sentinel
+  // +optional
+  optional string url = 2;
+
+  // SENTINEL MODE: Settings to reach Sentinel and the selected Redis node
+  // Mutually exclusive with .url
+  // +optional
+  optional RedisSentinelConfig sentinel = 3;
+
+  // COMMON: Optional DB index (default 0)
+  // +optional
+  // +kubebuilder:default=0
+  optional int32 db = 4;
+}
+
+// RateLimiterRelaxed is for the relaxed mode. It will release the max possible tokens if there is some traffic.
+message RateLimiterRelaxed {
+}
+
+// RateLimiterScheduled is for the scheduled mode.
+// It will release the max possible tokens based on ramp-up duration irrespective of traffic encountered.
+message RateLimiterScheduled {
+}
+
+message RateLimiterStore {
+  // RedisStore is used to define the redis store for the rate limit.
+  // +optional
+  optional RateLimiterRedisStore redisStore = 1;
+
+  // InMemoryStore is used to define the in-memory store for the rate limit.
+  // +optional
+  optional RateLimiterInMemoryStore inMemoryStore = 2;
+}
+
+message RedisAuth {
+  // For Redis 6+ ACLs. If Username omitted, password-only is also supported.
+  // +optional
+  optional .k8s.io.api.core.v1.SecretKeySelector username = 1;
+
+  // +optional
+  optional .k8s.io.api.core.v1.SecretKeySelector password = 2;
+}
+
+message RedisSentinelConfig {
+  // Required Sentinel "service name" (aka master name) from sentinel.conf
+  // +kubebuilder:validation:MinLength=1
+  optional string masterName = 1;
+
+  // At least one Sentinel endpoint; 2–3 recommended. Use host:port pairs.
+  // Example: ["sentinel-0.redis.svc:26379", "sentinel-1.redis.svc:26379"]
+  // +kubebuilder:validation:MinItems=1
+  repeated string endpoints = 2;
+
+  // Auth to talk to the Sentinel daemons (control-plane). Optional.
+  // +optional
+  optional RedisAuth sentinelAuth = 4;
+
+  // Auth to talk to the Redis data nodes (data-plane). Optional.
+  // +optional
+  optional RedisAuth redisAuth = 5;
+
+  // TLS for Sentinel connections (if your Sentinels expose TLS).
+  // +optional
+  optional TLS sentinelTLS = 6;
+
+  // TLS for Redis data nodes (redis). Often enabled even if Sentinel is plaintext.
+  // +optional
+  optional TLS redisTLS = 7;
 }
 
 // The RetryStrategy struct defines the configuration for handling operation retries in case of failures.
@@ -1754,9 +1919,15 @@ message Sink {
   // +optional
   optional AbstractSink fallback = 2;
 
+  // OnSuccess sink allows triggering a secondary sink operation only after the primary sink completes successfully
+  // The writes to OnSuccess sink will only be initiated if the ud-sink response field sets it.
+  // A new Message crafted in the Primary sink can be written on the OnSuccess sink.
+  // +optional
+  optional AbstractSink onSuccess = 3;
+
   // RetryStrategy struct encapsulates the settings for retrying operations in the event of failures.
   // +optional
-  optional RetryStrategy retryStrategy = 3;
+  optional RetryStrategy retryStrategy = 4;
 }
 
 // SlidingWindow describes a sliding window
@@ -1813,6 +1984,11 @@ message SqsSink {
 
   // QueueOwnerAWSAccountID is the queue owner aws account id
   optional string queueOwnerAWSAccountID = 3;
+
+  // AssumeRole contains the configuration for AWS STS assume role.
+  // When specified, the SQS client will assume the specified role for authentication.
+  // +optional
+  optional AWSAssumeRole assumeRole = 4;
 }
 
 // SqsSource represents the configuration of an AWS SQS source
@@ -1863,6 +2039,11 @@ message SqsSource {
   // MessageAttributeNames is a list of message attributes that need to be returned along with each message.
   // +optional
   repeated string messageAttributeNames = 9;
+
+  // AssumeRole contains the configuration for AWS STS assume role.
+  // When specified, the SQS client will assume the specified role for authentication.
+  // +optional
+  optional AWSAssumeRole assumeRole = 10;
 }
 
 // Status is a common structure which can be used for Status field.
@@ -1920,23 +2101,9 @@ message Templates {
   optional VertexTemplate vertex = 4;
 }
 
-message Transformer {
-  // +kubebuilder:validation:Enum=eventTimeExtractor;filter;timeExtractionFilter
-  optional string name = 1;
-
-  // +optional
-  repeated string args = 2;
-
-  // +optional
-  map<string, string> kwargs = 3;
-}
-
 message UDF {
   // +optional
   optional Container container = 1;
-
-  // +optional
-  optional Function builtin = 2;
 
   // +optional
   optional GroupBy groupBy = 3;
@@ -1953,9 +2120,6 @@ message UDSource {
 message UDTransformer {
   // +optional
   optional Container container = 1;
-
-  // +optional
-  optional Transformer builtin = 2;
 }
 
 // UpdateStrategy indicates the strategy that the
@@ -2030,6 +2194,12 @@ message VertexLimits {
   // It overrides the settings from pipeline limits.
   // +optional
   optional uint32 bufferUsageLimit = 4;
+
+  // RateLimit is used to define the rate limit for the vertex, it overrides the settings from pipeline limits.
+  // For Source vertices, the rate limit is defined by how many times the `Read` is called per second multiplied by
+  // the `readBatchSize`. Pipeline level rate limit is not applied to Source vertices.
+  // +optional
+  optional RateLimit rateLimit = 5;
 }
 
 // +kubebuilder:object:root=true

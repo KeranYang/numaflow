@@ -2,8 +2,8 @@ use chrono::{DateTime, Utc};
 use numaflow_pb::clients::map::{self, MapRequest, MapResponse, map_client::MapClient};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Instant;
-use tokio::sync::Mutex;
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::transport::Channel;
@@ -13,7 +13,8 @@ use tracing::error;
 use crate::config::get_vertex_name;
 use crate::config::pipeline::VERTEX_TYPE_MAP_UDF;
 use crate::error::{Error, Result};
-use crate::message::{Message, MessageID, Offset};
+use crate::message::{AckHandle, Message, MessageID, Offset};
+use crate::metadata::Metadata;
 use crate::metrics::{pipeline_metric_labels, pipeline_metrics};
 use crate::shared::grpc::prost_timestamp_from_utc;
 
@@ -27,8 +28,13 @@ struct ParentMessageInfo {
     offset: Offset,
     event_time: DateTime<Utc>,
     is_late: bool,
-    headers: HashMap<String, String>,
+    headers: Arc<HashMap<String, String>>,
     start_time: Instant,
+    /// this remains 0 for all except map-streaming because in map-streaming there could be more than
+    /// one response for a single request.
+    current_index: i32,
+    metadata: Option<Arc<Metadata>>,
+    ack_handle: Option<Arc<AckHandle>>,
 }
 
 impl From<Message> for MapRequest {
@@ -39,7 +45,8 @@ impl From<Message> for MapRequest {
                 value: message.value.to_vec(),
                 event_time: Some(prost_timestamp_from_utc(message.event_time)),
                 watermark: message.watermark.map(prost_timestamp_from_utc),
-                headers: message.headers,
+                headers: Arc::unwrap_or_clone(message.headers),
+                metadata: message.metadata.map(|m| Arc::unwrap_or_clone(m).into()),
             }),
             id: message.offset.to_string(),
             handshake: None,
@@ -100,9 +107,13 @@ impl UserDefinedUnaryMap {
         while let Some(resp) = match resp_stream.message().await {
             Ok(message) => message,
             Err(e) => {
-                let mut senders = sender_map.lock().await;
-                for (_, (_, sender)) in senders.drain() {
-                    let _ = sender.send(Err(Error::Grpc(e.clone())));
+                let senders = {
+                    let mut senders = sender_map.lock().expect("failed to acquire poisoned lock");
+                    senders.drain().collect::<Vec<_>>()
+                };
+
+                for (_, (_, sender)) in senders {
+                    let _ = sender.send(Err(Error::Grpc(Box::new(e.clone()))));
                     pipeline_metrics()
                         .forwarder
                         .udf_error_total
@@ -126,9 +137,12 @@ impl UserDefinedUnaryMap {
         let msg_info = ParentMessageInfo {
             offset: message.offset.clone(),
             event_time: message.event_time,
-            headers: message.headers.clone(),
+            headers: Arc::clone(&message.headers),
             is_late: message.is_late,
             start_time: Instant::now(),
+            current_index: 0,
+            metadata: message.metadata.clone(),
+            ack_handle: message.ack_handle.clone(),
         };
 
         pipeline_metrics()
@@ -137,12 +151,20 @@ impl UserDefinedUnaryMap {
             .get_or_create(pipeline_metric_labels(VERTEX_TYPE_MAP_UDF))
             .inc();
 
+        // only insert if we are able to send the message to the server
+        if let Err(e) = self.read_tx.send(message.into()).await {
+            error!(?e, "Failed to send message to server");
+            let _ = respond_to.send(Err(Error::Mapper(format!(
+                "failed to send message to unary map server: {e}"
+            ))));
+            return;
+        }
+
+        // insert the sender into the map
         self.senders
             .lock()
-            .await
+            .expect("failed to acquire poisoned lock")
             .insert(key.clone(), (msg_info, respond_to));
-
-        let _ = self.read_tx.send(message.into()).await;
     }
 }
 
@@ -197,10 +219,14 @@ impl UserDefinedBatchMap {
         while let Some(resp) = match resp_stream.message().await {
             Ok(message) => message,
             Err(e) => {
-                let mut senders = sender_map.lock().await;
-                for (_, (_, sender)) in senders.drain() {
+                let senders = {
+                    let mut senders = sender_map.lock().expect("failed to acquire poisoned lock");
+                    senders.drain().collect::<Vec<_>>()
+                };
+
+                for (_, (_, sender)) in senders {
                     sender
-                        .send(Err(Error::Grpc(e.clone())))
+                        .send(Err(Error::Grpc(Box::new(e.clone()))))
                         .expect("failed to send error response");
                     pipeline_metrics()
                         .forwarder
@@ -212,7 +238,11 @@ impl UserDefinedBatchMap {
             }
         } {
             if let Some(map::TransmissionStatus { eot: true }) = resp.status {
-                if !sender_map.lock().await.is_empty() {
+                if !sender_map
+                    .lock()
+                    .expect("failed to acquire poisoned lock")
+                    .is_empty()
+                {
                     error!("received EOT but not all responses have been received");
                 }
                 pipeline_metrics()
@@ -222,6 +252,7 @@ impl UserDefinedBatchMap {
                     .observe(Instant::now().elapsed().as_micros() as f64);
                 continue;
             }
+
             process_response(&sender_map, resp).await
         }
     }
@@ -237,9 +268,12 @@ impl UserDefinedBatchMap {
             let msg_info = ParentMessageInfo {
                 offset: message.offset.clone(),
                 event_time: message.event_time,
-                headers: message.headers.clone(),
+                headers: Arc::clone(&message.headers),
                 is_late: message.is_late,
                 start_time: Instant::now(),
+                current_index: 0,
+                metadata: message.metadata.clone(),
+                ack_handle: message.ack_handle.clone(),
             };
 
             pipeline_metrics()
@@ -248,14 +282,19 @@ impl UserDefinedBatchMap {
                 .get_or_create(pipeline_metric_labels(VERTEX_TYPE_MAP_UDF))
                 .inc();
 
+            // only insert if we are able to send the message to the server
+            if let Err(e) = self.read_tx.send(message.into()).await {
+                error!(?e, "Failed to send message to server");
+                let _ = respond_to.send(Err(Error::Mapper(format!(
+                    "failed to send message to batch map server: {e}"
+                ))));
+                return;
+            }
+
             self.senders
                 .lock()
-                .await
-                .insert(key, (msg_info, respond_to));
-            self.read_tx
-                .send(message.into())
-                .await
-                .expect("failed to send message");
+                .expect("failed to acquire poisoned lock")
+                .insert(key.clone(), (msg_info, respond_to));
         }
 
         // send eot request
@@ -275,7 +314,13 @@ impl UserDefinedBatchMap {
 /// based on the message id entry in the map.
 async fn process_response(sender_map: &ResponseSenderMap, resp: MapResponse) {
     let msg_id = resp.id;
-    if let Some((msg_info, sender)) = sender_map.lock().await.remove(&msg_id) {
+
+    let sender_entry = sender_map
+        .lock()
+        .expect("failed to acquire poisoned lock")
+        .remove(&msg_id);
+
+    if let Some((msg_info, sender)) = sender_entry {
         let mut response_messages = vec![];
         for (i, result) in resp.results.into_iter().enumerate() {
             response_messages.push(UserDefinedMessage(result, &msg_info, i as i32).into());
@@ -315,22 +360,21 @@ async fn create_response_stream(
     read_tx
         .send(handshake_request)
         .await
-        .map_err(|e| Error::Mapper(format!("failed to send handshake request: {}", e)))?;
+        .map_err(|e| Error::Mapper(format!("failed to send handshake request: {e}")))?;
 
     let mut resp_stream = client
         .map_fn(Request::new(ReceiverStream::new(read_rx)))
         .await
-        .map_err(Error::Grpc)?
+        .map_err(|e| Error::Grpc(Box::new(e)))?
         .into_inner();
 
-    let handshake_response =
-        resp_stream
-            .message()
-            .await
-            .map_err(Error::Grpc)?
-            .ok_or(Error::Mapper(
-                "failed to receive handshake response".to_string(),
-            ))?;
+    let handshake_response = resp_stream
+        .message()
+        .await
+        .map_err(|e| Error::Grpc(Box::new(e)))?
+        .ok_or(Error::Mapper(
+            "failed to receive handshake response".to_string(),
+        ))?;
 
     if handshake_response.handshake.is_none_or(|h| !h.sot) {
         return Err(Error::Mapper("invalid handshake response".to_string()));
@@ -389,9 +433,13 @@ impl UserDefinedStreamMap {
         while let Some(resp) = match resp_stream.message().await {
             Ok(message) => message,
             Err(e) => {
-                let mut senders = sender_map.lock().await;
-                for (_, (_, sender)) in senders.drain() {
-                    let _ = sender.send(Err(Error::Grpc(e.clone()))).await;
+                let senders = {
+                    let mut senders = sender_map.lock().expect("failed to acquire poisoned lock");
+                    senders.drain().collect::<Vec<_>>()
+                };
+
+                for (_, (_, sender)) in senders {
+                    let _ = sender.send(Err(Error::Grpc(Box::new(e.clone())))).await;
                     pipeline_metrics()
                         .forwarder
                         .udf_error_total
@@ -401,17 +449,11 @@ impl UserDefinedStreamMap {
                 None
             }
         } {
-            let (message_info, response_sender) = sender_map
+            let (mut message_info, response_sender) = sender_map
                 .lock()
-                .await
+                .expect("failed to acquire poisoned lock")
                 .remove(&resp.id)
                 .expect("map entry should always be present");
-
-            pipeline_metrics()
-                .forwarder
-                .udf_write_total
-                .get_or_create(pipeline_metric_labels(VERTEX_TYPE_MAP_UDF))
-                .inc();
 
             // once we get eot, we can drop the sender to let the callee
             // know that we are done sending responses
@@ -424,20 +466,29 @@ impl UserDefinedStreamMap {
                 continue;
             }
 
-            for (i, result) in resp.results.into_iter().enumerate() {
+            for result in resp.results.into_iter() {
                 response_sender
-                    .send(Ok(
-                        UserDefinedMessage(result, &message_info, i as i32).into()
-                    ))
+                    .send(Ok(UserDefinedMessage(
+                        result,
+                        &message_info,
+                        message_info.current_index,
+                    )
+                    .into()))
                     .await
                     .expect("failed to send response");
+                message_info.current_index += 1;
+                pipeline_metrics()
+                    .forwarder
+                    .udf_write_total
+                    .get_or_create(pipeline_metric_labels(VERTEX_TYPE_MAP_UDF))
+                    .inc();
             }
 
             // Write the sender back to the map, because we need to send
             // more responses for the same request
             sender_map
                 .lock()
-                .await
+                .expect("failed to acquire poisoned lock")
                 .insert(resp.id, (message_info, response_sender));
         }
     }
@@ -452,9 +503,12 @@ impl UserDefinedStreamMap {
         let msg_info = ParentMessageInfo {
             offset: message.offset.clone(),
             event_time: message.event_time,
-            headers: message.headers.clone(),
+            headers: Arc::clone(&message.headers),
             start_time: Instant::now(),
             is_late: message.is_late,
+            current_index: 0,
+            metadata: message.metadata.clone(),
+            ack_handle: message.ack_handle.clone(),
         };
 
         pipeline_metrics()
@@ -463,18 +517,24 @@ impl UserDefinedStreamMap {
             .get_or_create(pipeline_metric_labels(VERTEX_TYPE_MAP_UDF))
             .inc();
 
+        // only insert if we are able to send the message to the server
+        if let Err(e) = self.read_tx.send(message.into()).await {
+            error!(?e, "Failed to send message to server");
+            let _ = respond_to.send(Err(Error::Mapper(format!(
+                "failed to send message to stream map server: {e}"
+            ))));
+            return;
+        }
+
         self.senders
             .lock()
-            .await
-            .insert(key, (msg_info, respond_to));
-
-        self.read_tx
-            .send(message.into())
-            .await
-            .expect("failed to send message");
+            .expect("failed to acquire poisoned lock")
+            .insert(key.clone(), (msg_info, respond_to));
     }
 }
 
+// we are passing the reference for msg info because we can have more than 1 response for a single request and
+// each response will use the same parent message info.
 struct UserDefinedMessage<'a>(map::map_response::Result, &'a ParentMessageInfo, i32);
 
 impl From<UserDefinedMessage<'_>> for Message {
@@ -491,10 +551,23 @@ impl From<UserDefinedMessage<'_>> for Message {
             value: value.0.value.into(),
             offset: value.1.offset.clone(),
             event_time: value.1.event_time,
-            headers: value.1.headers.clone(),
+            headers: Arc::clone(&value.1.headers),
             watermark: None,
-            metadata: None,
             is_late: value.1.is_late,
+            metadata: {
+                let mut metadata = Metadata::default();
+                // Get SystemMetadata from parent message info
+                if let Some(parent_metadata) = &value.1.metadata {
+                    metadata.sys_metadata = parent_metadata.sys_metadata.clone();
+                }
+                // Get UserMetadata from the response if present
+                if let Some(response_metadata) = &value.0.metadata {
+                    let response_meta: Metadata = response_metadata.clone().into();
+                    metadata.user_metadata = response_meta.user_metadata;
+                }
+                Some(Arc::new(metadata))
+            },
+            ack_handle: value.1.ack_handle.clone(),
         }
     }
 }
@@ -507,6 +580,7 @@ mod tests {
 
     use numaflow::batchmap::Server;
     use numaflow::mapstream;
+    use numaflow::shared::ServerExtras;
     use numaflow::{batchmap, map};
     use numaflow_pb::clients::map::map_client::MapClient;
     use tempfile::TempDir;
@@ -791,6 +865,10 @@ mod tests {
             .collect();
         assert_eq!(values, vec!["test", "map", "stream"]);
 
+        // Verify that message indices are properly incremented
+        let indices: Vec<i32> = responses.iter().map(|r| r.id.index).collect();
+        assert_eq!(indices, vec![0, 1, 2]);
+
         // we need to drop the client, because if there are any in-flight requests
         // server fails to shut down. https://github.com/numaproj/numaflow-rs/issues/85
         drop(client);
@@ -805,4 +883,6 @@ mod tests {
         );
         Ok(())
     }
+
+    // TODO(ajain60): add unit test for metadata once rust sdk supports it
 }

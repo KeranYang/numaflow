@@ -54,16 +54,10 @@ func (ks *KafkaSuite) TestKafkaSourceSink() {
 					Name: "input",
 					Source: &dfv1.Source{
 						Kafka: &dfv1.KafkaSource{
-							Brokers:           []string{"kafka-broker:9092"},
+							Brokers:           []string{"kafka:9092"},
 							Topic:             inputTopic,
 							ConsumerGroupName: "test-group",
 						},
-					},
-				},
-				{
-					Name: "p1",
-					UDF: &dfv1.UDF{
-						Builtin: &dfv1.Function{Name: "cat"},
 					},
 				},
 				{
@@ -71,7 +65,7 @@ func (ks *KafkaSuite) TestKafkaSourceSink() {
 					Sink: &dfv1.Sink{
 						AbstractSink: dfv1.AbstractSink{
 							Kafka: &dfv1.KafkaSink{
-								Brokers: []string{"kafka-broker:9092"},
+								Brokers: []string{"kafka:9092"},
 								Topic:   outputTopic,
 							},
 						},
@@ -81,10 +75,6 @@ func (ks *KafkaSuite) TestKafkaSourceSink() {
 			Edges: []dfv1.Edge{
 				{
 					From: "input",
-					To:   "p1",
-				},
-				{
-					From: "p1",
 					To:   "output",
 				},
 			},

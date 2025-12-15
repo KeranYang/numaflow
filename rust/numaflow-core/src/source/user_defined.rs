@@ -6,18 +6,21 @@ use base64::prelude::BASE64_STANDARD;
 use numaflow_pb::clients::source;
 use numaflow_pb::clients::source::source_client::SourceClient;
 use numaflow_pb::clients::source::{
-    AckRequest, AckResponse, ReadRequest, ReadResponse, read_request, read_response,
+    AckRequest, AckResponse, NackRequest, ReadRequest, ReadResponse, read_request, read_response,
 };
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
+use tokio_util::sync::CancellationToken;
 use tonic::transport::Channel;
 use tonic::{Request, Streaming};
 
 use crate::message::{Message, MessageID, Offset, StringOffset};
+use crate::metadata::Metadata;
 use crate::reader::LagReader;
 use crate::shared::grpc::utc_from_timestamp;
 use crate::source::{SourceAcker, SourceReader};
 use crate::{Error, Result, config};
+use tracing::warn;
 
 /// User-Defined Source to operative on custom sources.
 #[derive(Debug)]
@@ -27,6 +30,7 @@ pub(crate) struct UserDefinedSourceRead {
     num_records: usize,
     timeout: Duration,
     source_client: SourceClient<Channel>,
+    cln_token: CancellationToken,
 }
 
 /// User-Defined Source to operative on custom sources.
@@ -34,6 +38,8 @@ pub(crate) struct UserDefinedSourceRead {
 pub(crate) struct UserDefinedSourceAck {
     ack_tx: mpsc::Sender<AckRequest>,
     ack_resp_stream: Streaming<AckResponse>,
+    client: SourceClient<Channel>,
+    supports_nack: bool,
 }
 
 /// Creates a new User-Defined Source and its corresponding Lag Reader.
@@ -41,13 +47,17 @@ pub(crate) async fn new_source(
     client: SourceClient<Channel>,
     num_records: usize,
     read_timeout: Duration,
+    cln_token: CancellationToken,
+    supports_nack: bool,
 ) -> Result<(
     UserDefinedSourceRead,
     UserDefinedSourceAck,
     UserDefinedSourceLagReader,
 )> {
-    let src_read = UserDefinedSourceRead::new(client.clone(), num_records, read_timeout).await?;
-    let src_ack = UserDefinedSourceAck::new(client.clone(), num_records).await?;
+    let src_read =
+        UserDefinedSourceRead::new(client.clone(), num_records, read_timeout, cln_token).await?;
+
+    let src_ack = UserDefinedSourceAck::new(client.clone(), num_records, supports_nack).await?;
     let lag_reader = UserDefinedSourceLagReader::new(client);
 
     Ok((src_read, src_ack, lag_reader))
@@ -58,6 +68,7 @@ impl UserDefinedSourceRead {
         client: SourceClient<Channel>,
         batch_size: usize,
         timeout: Duration,
+        cln_token: CancellationToken,
     ) -> Result<Self> {
         let (read_tx, resp_stream) = Self::create_reader(batch_size, &mut client.clone()).await?;
 
@@ -67,6 +78,7 @@ impl UserDefinedSourceRead {
             num_records: batch_size,
             timeout,
             source_client: client,
+            cln_token,
         })
     }
 
@@ -85,24 +97,23 @@ impl UserDefinedSourceRead {
         read_tx
             .send(handshake_request)
             .await
-            .map_err(|e| Error::Source(format!("failed to send handshake request: {}", e)))?;
+            .map_err(|e| Error::Source(format!("failed to send handshake request: {e}")))?;
 
         let mut resp_stream = client
             .read_fn(Request::new(read_stream))
             .await
-            .map_err(Error::Grpc)?
+            .map_err(|e| Error::Grpc(Box::new(e)))?
             .into_inner();
 
         // first response from the server will be the handshake response. We need to check if the
         // server has accepted the handshake.
-        let handshake_response =
-            resp_stream
-                .message()
-                .await
-                .map_err(Error::Grpc)?
-                .ok_or(Error::Source(
-                    "failed to receive handshake response".to_string(),
-                ))?;
+        let handshake_response = resp_stream
+            .message()
+            .await
+            .map_err(|e| Error::Grpc(Box::new(e)))?
+            .ok_or(Error::Source(
+                "failed to receive handshake response".to_string(),
+            ))?;
         // handshake cannot to None during the initial phase, and it has to set `sot` to true.
         if handshake_response.handshake.is_none_or(|h| !h.sot) {
             return Err(Error::Source("invalid handshake response".to_string()));
@@ -159,10 +170,16 @@ impl TryFrom<read_response::Result> for Message {
                 offset: source_offset.to_string().into(),
                 index: 0,
             },
-            headers: result.headers,
+            headers: Arc::new(result.headers),
             watermark: None,
-            metadata: None,
+            // If we receive metadata in the response, we use it, otherwise we use the default metadata so that metadata is always present.
+            // We do not set previous_vertex to current vertex name here because we set it while writing to isb.
+            metadata: Some(Arc::new(match result.metadata {
+                Some(source_metadata) => source_metadata.into(),
+                None => Metadata::default(),
+            })),
             is_late: false,
+            ack_handle: None,
         })
     }
 }
@@ -191,7 +208,11 @@ impl SourceReader for UserDefinedSourceRead {
         "user-defined-source"
     }
 
-    async fn read(&mut self) -> Result<Vec<Message>> {
+    async fn read(&mut self) -> Option<Result<Vec<Message>>> {
+        if self.cln_token.is_cancelled() {
+            return None;
+        }
+
         let request = ReadRequest {
             request: Some(read_request::Request {
                 num_records: self.num_records as u64,
@@ -200,25 +221,31 @@ impl SourceReader for UserDefinedSourceRead {
             handshake: None,
         };
 
-        self.read_tx
-            .send(request)
-            .await
-            .map_err(|e| Error::Source(e.to_string()))?;
+        if let Err(e) = self.read_tx.send(request).await {
+            return Some(Err(Error::Source(e.to_string())));
+        }
 
         let mut messages = Vec::with_capacity(self.num_records);
 
-        while let Some(response) = self.resp_stream.message().await.map_err(Error::Grpc)? {
+        while let Some(response) = match self.resp_stream.message().await {
+            Ok(response) => response,
+            Err(e) => return Some(Err(Error::Grpc(Box::new(e)))),
+        } {
             if response.status.is_some_and(|status| status.eot) {
                 break;
             }
 
-            let result = response
-                .result
-                .ok_or_else(|| Error::Source("Empty message in response".to_string()))?;
+            let result = match response.result {
+                Some(result) => result,
+                None => return Some(Err(Error::Source("Empty message in response".to_string()))),
+            };
 
-            messages.push(result.try_into()?);
+            match result.try_into() {
+                Ok(message) => messages.push(message),
+                Err(e) => return Some(Err(e)),
+            }
         }
-        Ok(messages)
+        Some(Ok(messages))
     }
 
     async fn partitions(&mut self) -> Result<Vec<u16>> {
@@ -237,12 +264,18 @@ impl SourceReader for UserDefinedSourceRead {
 }
 
 impl UserDefinedSourceAck {
-    async fn new(mut client: SourceClient<Channel>, batch_size: usize) -> Result<Self> {
+    async fn new(
+        mut client: SourceClient<Channel>,
+        batch_size: usize,
+        supports_nack: bool,
+    ) -> Result<Self> {
         let (ack_tx, ack_resp_stream) = Self::create_acker(batch_size, &mut client).await?;
 
         Ok(Self {
             ack_tx,
             ack_resp_stream,
+            client,
+            supports_nack,
         })
     }
 
@@ -261,12 +294,12 @@ impl UserDefinedSourceAck {
         ack_tx
             .send(ack_handshake_request)
             .await
-            .map_err(|e| Error::Source(format!("failed to send ack handshake request: {}", e)))?;
+            .map_err(|e| Error::Source(format!("failed to send ack handshake request: {e}")))?;
 
         let mut ack_resp_stream = client
             .ack_fn(Request::new(ack_stream))
             .await
-            .map_err(Error::Grpc)?
+            .map_err(|e| Error::Grpc(Box::new(e)))?
             .into_inner();
 
         // first response from the server will be the handshake response. We need to check if the
@@ -274,7 +307,7 @@ impl UserDefinedSourceAck {
         let ack_handshake_response = ack_resp_stream
             .message()
             .await
-            .map_err(Error::Grpc)?
+            .map_err(|e| Error::Grpc(Box::new(e)))?
             .ok_or(Error::Source(
                 "failed to receive ack handshake response".to_string(),
             ))?;
@@ -302,12 +335,46 @@ impl SourceAcker for UserDefinedSourceAck {
             .await
             .map_err(|e| Error::Source(e.to_string()))?;
 
-        let _ = self
-            .ack_resp_stream
+        self.ack_resp_stream
             .message()
             .await
-            .map_err(Error::Grpc)?
+            .map_err(|e| Error::Grpc(Box::new(e)))?
             .ok_or(Error::Source("failed to receive ack response".to_string()))?;
+
+        Ok(())
+    }
+
+    /// Negatively acknowledge the offsets.
+    /// This method checks if the SDK supports nack functionality using a pre-computed flag.
+    /// For older SDK versions (< 0.11), it logs a warning and returns Ok() for backward compatibility.
+    /// For newer SDK versions (>= 0.11), it calls the actual nack gRPC method.
+    async fn nack(&mut self, offsets: Vec<Offset>) -> Result<()> {
+        if !self.supports_nack {
+            warn!(
+                offset_count = offsets.len(),
+                "SDK version does not support nack functionality, ignoring nack request for backward compatibility"
+            );
+            return Ok(());
+        }
+
+        // SDK supports nack, call the actual gRPC method
+        let nack_offsets: Result<Vec<source::Offset>> =
+            offsets.into_iter().map(TryInto::try_into).collect();
+
+        let response = self
+            .client
+            .nack_fn(NackRequest {
+                request: Some(source::nack_request::Request {
+                    offsets: nack_offsets?,
+                }),
+            })
+            .await
+            .map_err(|e| Error::Grpc(Box::new(e)))?;
+
+        response
+            .into_inner()
+            .result
+            .ok_or(Error::Source("failed to receive nack response".to_string()))?;
 
         Ok(())
     }
@@ -330,7 +397,7 @@ impl LagReader for UserDefinedSourceLagReader {
             .source_client
             .pending_fn(Request::new(()))
             .await
-            .map_err(Error::Grpc)?
+            .map_err(|e| Error::Grpc(Box::new(e)))?
             .into_inner()
             .result
             .map(|r| r.count as usize))
@@ -340,6 +407,7 @@ impl LagReader for UserDefinedSourceLagReader {
 #[cfg(test)]
 mod tests {
     use chrono::{TimeZone, Utc};
+    use numaflow::shared::ServerExtras;
     use numaflow::source;
     use numaflow::source::{Message, Offset, SourceReadRequest};
     use numaflow_pb::clients::source::source_client::SourceClient;
@@ -353,6 +421,7 @@ mod tests {
     struct SimpleSource {
         num: usize,
         yet_to_ack: std::sync::RwLock<HashSet<String>>,
+        nacked: std::sync::RwLock<HashSet<String>>,
     }
 
     impl SimpleSource {
@@ -360,6 +429,22 @@ mod tests {
             Self {
                 num,
                 yet_to_ack: std::sync::RwLock::new(HashSet::new()),
+                nacked: std::sync::RwLock::new(HashSet::new()),
+            }
+        }
+
+        async fn create_message(&self, offset: String) -> Message {
+            let payload = self.num.to_string();
+            Message {
+                value: payload.into_bytes(),
+                event_time: Utc::now(),
+                offset: Offset {
+                    offset: offset.clone().into_bytes(),
+                    partition_id: 0,
+                },
+                keys: vec![],
+                headers: Default::default(),
+                user_metadata: None,
             }
         }
     }
@@ -369,19 +454,26 @@ mod tests {
         async fn read(&self, request: SourceReadRequest, transmitter: Sender<Message>) {
             let event_time = Utc::now();
             let mut message_offsets = Vec::with_capacity(request.count);
+
+            // if there are nacked message send them first and remove them from the nacked set
+            // and return early
+            let nacked = self.nacked.read().unwrap().clone();
+            if !nacked.is_empty() {
+                for offset in nacked {
+                    transmitter
+                        .send(self.create_message(offset).await)
+                        .await
+                        .unwrap();
+                }
+                // clear the nacked set
+                self.nacked.write().unwrap().clear();
+                return;
+            }
+
             for i in 0..request.count {
                 let offset = format!("{}-{}", event_time.timestamp_nanos_opt().unwrap(), i);
                 transmitter
-                    .send(Message {
-                        value: self.num.to_le_bytes().to_vec(),
-                        event_time,
-                        offset: Offset {
-                            offset: offset.clone().into_bytes(),
-                            partition_id: 0,
-                        },
-                        keys: vec![],
-                        headers: Default::default(),
-                    })
+                    .send(self.create_message(offset.clone()).await)
                     .await
                     .unwrap();
                 message_offsets.push(offset)
@@ -398,6 +490,20 @@ mod tests {
             }
         }
 
+        async fn nack(&self, offsets: Vec<Offset>) {
+            //
+            for offset in offsets {
+                self.yet_to_ack
+                    .write()
+                    .unwrap()
+                    .remove(&String::from_utf8(offset.offset.clone()).unwrap());
+                self.nacked
+                    .write()
+                    .unwrap()
+                    .insert(String::from_utf8(offset.offset).unwrap());
+            }
+        }
+
         async fn pending(&self) -> Option<usize> {
             Some(self.yet_to_ack.read().unwrap().len())
         }
@@ -410,6 +516,7 @@ mod tests {
     #[tokio::test]
     async fn source_operations() {
         // start the server
+        let cln_token = CancellationToken::new();
         let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
         let tmp_dir = tempfile::TempDir::new().unwrap();
         let sock_file = tmp_dir.path().join("source.sock");
@@ -433,12 +540,12 @@ mod tests {
         let client = SourceClient::new(create_rpc_channel(sock_file).await.unwrap());
 
         let (mut src_read, mut src_ack, mut lag_reader) =
-            new_source(client, 5, Duration::from_millis(1000))
+            new_source(client, 5, Duration::from_millis(1000), cln_token, true)
                 .await
                 .map_err(|e| panic!("failed to create source reader: {:?}", e))
                 .unwrap();
 
-        let messages = src_read.read().await.unwrap();
+        let messages = src_read.read().await.unwrap().unwrap();
         assert_eq!(messages.len(), 5);
 
         let response = src_ack
@@ -451,6 +558,23 @@ mod tests {
 
         let partitions = src_read.partitions().await.unwrap();
         assert_eq!(partitions, vec![2]);
+
+        let messages = src_read.read().await.unwrap().unwrap();
+        assert_eq!(messages.len(), 5);
+
+        // nack the messages
+        let response = src_ack
+            .nack(messages.iter().map(|m| m.offset.clone()).collect())
+            .await;
+        assert!(response.is_ok());
+
+        // read again and verify we get the nacked messages by comparing their offset
+        let nacked_messages = src_read.read().await.unwrap().unwrap();
+        assert_eq!(nacked_messages.len(), 5);
+
+        for msg in nacked_messages {
+            assert!(messages.iter().any(|m| m.offset == msg.offset));
+        }
 
         // we need to drop the client, because if there are any in-flight requests
         // server fails to shut down. https://github.com/numaproj/numaflow-rs/issues/85
@@ -476,6 +600,7 @@ mod tests {
             )),
             keys: vec!["key1".to_string()],
             headers: HashMap::new(),
+            metadata: None,
         };
 
         let message: Result<crate::message::Message> = result.try_into();

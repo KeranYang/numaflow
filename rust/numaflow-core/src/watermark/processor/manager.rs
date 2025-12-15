@@ -9,6 +9,7 @@ use std::sync::RwLock;
 use std::time::SystemTime;
 use std::time::{Duration, UNIX_EPOCH};
 
+use crate::config::pipeline::VertexType;
 use crate::config::pipeline::watermark::BucketConfig;
 use crate::error::{Error, Result};
 use crate::watermark::processor::timeline::OffsetTimeline;
@@ -34,14 +35,13 @@ pub(crate) enum Status {
 
 /// Processor is the smallest unit of entity (from which we fetch data) that does inorder processing
 /// or contains inorder data. It tracks OT for all the partitions of the from-buffer.
-#[derive(Clone)]
 pub(crate) struct Processor {
     /// Name of the processor.
     pub(crate) name: Bytes,
     /// [Status] of the processor.
     pub(crate) status: Status,
     /// OffsetTimeline for each partition.
-    pub(crate) timelines: Vec<OffsetTimeline>,
+    pub(crate) timelines: HashMap<u16, OffsetTimeline>,
 }
 
 impl Debug for Processor {
@@ -51,18 +51,18 @@ impl Debug for Processor {
             "Processor: {:?}, Status: {:?}, Timelines: ",
             self.name, self.status
         )?;
-        for timeline in &self.timelines {
-            writeln!(f, "{:?}", timeline)?;
+        for (partition, timeline) in &self.timelines {
+            writeln!(f, "Partition {partition}: {timeline:?}")?;
         }
         Ok(())
     }
 }
 
 impl Processor {
-    pub(crate) fn new(name: Bytes, status: Status, partition_count: usize) -> Self {
-        let mut timelines = Vec::with_capacity(partition_count);
-        for _ in 0..partition_count {
-            timelines.push(OffsetTimeline::new(10));
+    pub(crate) fn new(name: Bytes, status: Status, partitions: &[u16]) -> Self {
+        let mut timelines = HashMap::new();
+        for &partition in partitions {
+            timelines.insert(partition, OffsetTimeline::new(10));
         }
         Processor {
             name,
@@ -115,8 +115,10 @@ impl ProcessorManager {
     /// Creates a new ProcessorManager. It prepopulates the processor-map with previous data
     /// fetched from the OT and HB buckets.
     pub(crate) async fn new(
-        js_context: async_nats::jetstream::Context,
+        js_context: async_nats::jetstream::context::Context,
         bucket_config: &BucketConfig,
+        vertex_type: VertexType,
+        vertex_replica: u16,
     ) -> Result<Self> {
         let ot_bucket = js_context
             .get_key_value(bucket_config.ot_bucket)
@@ -139,19 +141,30 @@ impl ProcessorManager {
             })?;
 
         // fetch old data
-        let (processors_map, heartbeats_map) =
-            Self::prepopulate_processors(&hb_bucket, &ot_bucket, bucket_config).await;
+        let (processors_map, heartbeats_map) = Self::prepopulate_processors(
+            &hb_bucket,
+            &ot_bucket,
+            bucket_config,
+            vertex_type,
+            vertex_replica,
+        )
+        .await;
         // point to populated data
         let processors = Arc::new(RwLock::new(processors_map));
         let heartbeats = Arc::new(RwLock::new(heartbeats_map));
 
         // start the ot watcher, to listen to the OT bucket and update the timelines
-        let ot_handle = tokio::spawn(Self::start_ot_watcher(ot_bucket, Arc::clone(&processors)));
+        let ot_handle = tokio::spawn(Self::start_ot_watcher(
+            ot_bucket,
+            Arc::clone(&processors),
+            vertex_type,
+            vertex_replica,
+        ));
 
         // start the hb watcher, to listen to the HB bucket and update the list of
         // active processors
         let hb_handle = tokio::spawn(Self::start_hb_watcher(
-            bucket_config.partitions,
+            bucket_config.partitions.clone(),
             hb_bucket,
             Arc::clone(&heartbeats),
             Arc::clone(&processors),
@@ -176,6 +189,8 @@ impl ProcessorManager {
         hb_bucket: &async_nats::jetstream::kv::Store,
         ot_bucket: &async_nats::jetstream::kv::Store,
         bucket_config: &BucketConfig,
+        vertex_type: VertexType,
+        vertex_replica: u16,
     ) -> (HashMap<Bytes, Processor>, HashMap<Bytes, i64>) {
         let mut processors = HashMap::new();
         let mut heartbeats = HashMap::new();
@@ -197,7 +212,7 @@ impl ProcessorManager {
             let processor = Processor::new(
                 processor_name.clone(),
                 Status::Active,
-                bucket_config.partitions as usize,
+                &bucket_config.partitions,
             );
             processors.insert(processor_name.clone(), processor);
 
@@ -246,8 +261,23 @@ impl ProcessorManager {
             };
             let wmb: WMB = ot_value.try_into().expect("Failed to decode WMB");
 
-            let timeline = &mut processor.timelines[wmb.partition as usize];
-            timeline.put(wmb);
+            match vertex_type {
+                VertexType::Source | VertexType::Sink | VertexType::MapUDF => {
+                    if let Some(timeline) = processor.timelines.get_mut(&wmb.partition) {
+                        timeline.put(wmb);
+                    }
+                }
+                VertexType::ReduceUDF => {
+                    // reduce vertex only reads from one partition so we should only consider wmbs
+                    // which belong to this vertex replica
+                    if wmb.partition != vertex_replica {
+                        continue;
+                    }
+                    if let Some(timeline) = processor.timelines.get_mut(&vertex_replica) {
+                        timeline.put(wmb);
+                    }
+                }
+            }
         }
 
         (processors, heartbeats)
@@ -290,6 +320,8 @@ impl ProcessorManager {
     async fn start_ot_watcher(
         ot_bucket: async_nats::jetstream::kv::Store,
         processors: Arc<RwLock<HashMap<Bytes, Processor>>>,
+        vertex_type: VertexType,
+        vertex_replica: u16,
     ) {
         let mut ot_watcher = Self::create_watcher(ot_bucket.clone()).await;
 
@@ -314,16 +346,27 @@ impl ProcessorManager {
                     let processor_name = Bytes::from(kv.key);
                     let wmb: WMB = kv.value.try_into().expect("Failed to decode WMB");
 
-                    debug!(wmb = ?wmb, processor = ?processor_name, "Received wmb from watcher");
-                    if let Some(processor) = processors
-                        .write()
-                        .expect("failed to acquire lock")
-                        .get_mut(&processor_name)
-                    {
-                        let timeline = &mut processor.timelines[wmb.partition as usize];
-                        timeline.put(wmb);
-                    } else {
-                        debug!(?processor_name, "Processor not found");
+                    let mut processors = processors.write().expect("failed to acquire lock");
+                    let Some(processor) = processors.get_mut(&processor_name) else {
+                        continue;
+                    };
+
+                    match vertex_type {
+                        VertexType::Source | VertexType::Sink | VertexType::MapUDF => {
+                            if let Some(timeline) = processor.timelines.get_mut(&wmb.partition) {
+                                timeline.put(wmb);
+                            }
+                        }
+                        // reduce vertex only reads from one partition so we should only consider wmbs
+                        // which belong to this vertex replica
+                        VertexType::ReduceUDF => {
+                            if wmb.partition != vertex_replica {
+                                continue;
+                            }
+                            if let Some(timeline) = processor.timelines.get_mut(&vertex_replica) {
+                                timeline.put(wmb);
+                            }
+                        }
                     }
                 }
                 async_nats::jetstream::kv::Operation::Delete
@@ -337,7 +380,7 @@ impl ProcessorManager {
     /// Starts the hb watcher, to listen to the HB bucket, will also create the processor if it
     /// doesn't exist.
     async fn start_hb_watcher(
-        partition_count: u16,
+        partitions: Vec<u16>,
         hb_bucket: async_nats::jetstream::kv::Store,
         heartbeats: Arc<RwLock<HashMap<Bytes, i64>>>,
         processors: Arc<RwLock<HashMap<Bytes, Processor>>>,
@@ -380,11 +423,7 @@ impl ProcessorManager {
                         }
                     } else {
                         info!(processor = ?processor_name, "Processor not found, adding it");
-                        let processor = Processor::new(
-                            processor_name,
-                            Status::Active,
-                            partition_count as usize,
-                        );
+                        let processor = Processor::new(processor_name, Status::Active, &partitions);
                         processors.insert(processor.name.clone(), processor);
                     }
                 }
@@ -421,18 +460,19 @@ impl ProcessorManager {
     }
 
     /// creates a watcher for the given bucket, will retry infinitely until it succeeds
+    // FIXME: create_watcher is not cancel safe
     async fn create_watcher(bucket: async_nats::jetstream::kv::Store) -> Watch {
         const RECONNECT_INTERVAL: u64 = 1000;
         // infinite retry
         let interval = fixed::Interval::from_millis(RECONNECT_INTERVAL).take(usize::MAX);
 
-        Retry::retry(
+        Retry::new(
             interval,
             async || match bucket.watch_all().await {
                 Ok(w) => Ok(w),
                 Err(e) => {
                     error!(?e, "Failed to create watcher");
-                    Err(Error::Watermark(format!("Failed to create watcher: {}", e)))
+                    Err(Error::Watermark(format!("Failed to create watcher: {e}")))
                 }
             },
             |_: &Error| true,
@@ -451,7 +491,7 @@ impl ProcessorManager {
 #[cfg(test)]
 mod tests {
     use async_nats::jetstream;
-    use async_nats::jetstream::Context;
+    use async_nats::jetstream::context::Context;
     use async_nats::jetstream::kv::Config;
     use async_nats::jetstream::kv::Store;
     use bytes::{Bytes, BytesMut};
@@ -478,19 +518,27 @@ mod tests {
     #[tokio::test]
     async fn test_processor_manager_tracks_heartbeats_and_wmbs() {
         let js_context = setup_nats().await;
-        let ot_bucket = create_kv_bucket(&js_context, "ot_bucket").await;
-        let hb_bucket = create_kv_bucket(&js_context, "hb_bucket").await;
+        let ot_bucket_name = "test_processor_manager_tracks_heartbeats_and_wmbs_OT";
+        let hb_bucket_name = "test_processor_manager_tracks_heartbeats_and_wmbs_PROCESSORS";
+
+        let _ = js_context.delete_key_value(ot_bucket_name).await;
+        let _ = js_context.delete_key_value(hb_bucket_name).await;
+
+        let ot_bucket = create_kv_bucket(&js_context, ot_bucket_name).await;
+        let hb_bucket = create_kv_bucket(&js_context, hb_bucket_name).await;
 
         let bucket_config = BucketConfig {
             vertex: "test",
-            ot_bucket: "ot_bucket",
-            hb_bucket: "hb_bucket",
-            partitions: 1,
+            ot_bucket: ot_bucket_name,
+            hb_bucket: hb_bucket_name,
+            partitions: vec![0],
+            delay: None,
         };
 
-        let processor_manager = ProcessorManager::new(js_context.clone(), &bucket_config)
-            .await
-            .unwrap();
+        let processor_manager =
+            ProcessorManager::new(js_context.clone(), &bucket_config, VertexType::MapUDF, 0)
+                .await
+                .unwrap();
 
         let processor_name = Bytes::from("processor1");
 
@@ -534,14 +582,15 @@ mod tests {
                 .processors
                 .read()
                 .expect("failed to acquire lock");
-            if let Some(processor) = processors.get(&processor_name) {
-                if processor.status == Status::Active {
-                    let timeline = &processor.timelines[0];
-                    if let Some(head_wmb) = timeline.get_head_wmb() {
-                        if head_wmb.watermark == 200 && head_wmb.offset == 1 {
-                            break;
-                        }
-                    }
+            if let Some(processor) = processors.get(&processor_name)
+                && processor.status == Status::Active
+            {
+                let timeline = &processor.timelines[&0];
+                if let Some(head_wmb) = timeline.get_head_wmb()
+                    && head_wmb.watermark == 200
+                    && head_wmb.offset == 1
+                {
+                    break;
                 }
             }
             if start_time.elapsed() > Duration::from_secs(1) {
@@ -554,31 +603,33 @@ mod tests {
         // Abort the tasks
         hb_task.abort();
         ot_task.abort();
-
-        // delete the kv store
-        js_context.delete_key_value("ot_bucket").await.unwrap();
-        js_context.delete_key_value("hb_bucket").await.unwrap();
     }
 
     #[cfg(feature = "nats-tests")]
     #[tokio::test]
     async fn test_processor_manager_tracks_multiple_processors() {
         let js_context = setup_nats().await;
-        let ot_bucket =
-            create_kv_bucket(&js_context, "test_processor_manager_multi_ot_bucket").await;
-        let hb_bucket =
-            create_kv_bucket(&js_context, "test_processor_manager_multi_hb_bucket").await;
+        let ot_bucket_name = "test_processor_manager_multi_ot_bucket";
+        let hb_bucket_name = "test_processor_manager_multi_hb_bucket";
+
+        let _ = js_context.delete_key_value(ot_bucket_name).await;
+        let _ = js_context.delete_key_value(hb_bucket_name).await;
+
+        let ot_bucket = create_kv_bucket(&js_context, ot_bucket_name).await;
+        let hb_bucket = create_kv_bucket(&js_context, hb_bucket_name).await;
 
         let bucket_config = BucketConfig {
             vertex: "test",
-            ot_bucket: "test_processor_manager_multi_ot_bucket",
-            hb_bucket: "test_processor_manager_multi_hb_bucket",
-            partitions: 1,
+            ot_bucket: ot_bucket_name,
+            hb_bucket: hb_bucket_name,
+            partitions: vec![0],
+            delay: None,
         };
 
-        let processor_manager = ProcessorManager::new(js_context.clone(), &bucket_config)
-            .await
-            .unwrap();
+        let processor_manager =
+            ProcessorManager::new(js_context.clone(), &bucket_config, VertexType::MapUDF, 0)
+                .await
+                .unwrap();
 
         let processor_names = [
             Bytes::from("processor1"),
@@ -594,8 +645,7 @@ mod tests {
                 let processor_name = processor_name.clone();
                 tokio::spawn(async move {
                     loop {
-                        let heartbeat =
-                            numaflow_pb::objects::watermark::Heartbeat { heartbeat: 100 };
+                        let heartbeat = Heartbeat { heartbeat: 100 };
                         let mut bytes = BytesMut::new();
                         heartbeat
                             .encode(&mut bytes)
@@ -653,14 +703,17 @@ mod tests {
             let futures: Vec<_> = processor_names
                 .iter()
                 .map(|processor_name| {
-                    let processor = processors.get(processor_name).cloned();
+                    let processor = processors.get(processor_name);
                     async move {
-                        if let Some(processor) = processor {
-                            if processor.status == Status::Active {
-                                if let Some(head_wmb) = processor.timelines[0].get_head_wmb() {
-                                    return head_wmb.watermark == 200 && head_wmb.offset == 1;
-                                }
-                            }
+                        if let Some(processor) = processor
+                            && processor.status == Status::Active
+                            && let Some(head_wmb) = processor
+                                .timelines
+                                .get(&0)
+                                .expect("failed to get timeline")
+                                .get_head_wmb()
+                        {
+                            return head_wmb.watermark == 200 && head_wmb.offset == 1;
                         }
                         false
                     }
@@ -687,15 +740,169 @@ mod tests {
         for ot_task in ot_tasks {
             ot_task.abort();
         }
+    }
 
-        // delete the kv store
-        js_context
-            .delete_key_value("test_processor_manager_multi_ot_bucket")
-            .await
-            .unwrap();
-        js_context
-            .delete_key_value("test_processor_manager_multi_hb_bucket")
-            .await
-            .unwrap();
+    #[cfg(feature = "nats-tests")]
+    #[tokio::test]
+    async fn test_reduce_udf_partition_filtering() {
+        let js_context = setup_nats().await;
+        let ot_bucket_name = "test_reduce_udf_filtering_ot_bucket";
+        let hb_bucket_name = "test_reduce_udf_filtering_hb_bucket";
+
+        let _ = js_context.delete_key_value(ot_bucket_name).await;
+        let _ = js_context.delete_key_value(hb_bucket_name).await;
+
+        let ot_bucket = create_kv_bucket(&js_context, ot_bucket_name).await;
+        let hb_bucket = create_kv_bucket(&js_context, hb_bucket_name).await;
+
+        let bucket_config = BucketConfig {
+            vertex: "test",
+            ot_bucket: ot_bucket_name,
+            hb_bucket: hb_bucket_name,
+            partitions: vec![1], // For reduce UDF, WMBs are stored in timeline 0
+            delay: None,
+        };
+
+        // Create processor manager for reduce UDF with replica 1
+        let processor_manager = ProcessorManager::new(
+            js_context.clone(),
+            &bucket_config,
+            VertexType::ReduceUDF,
+            1, // vertex replica 1
+        )
+        .await
+        .unwrap();
+
+        let processor_name = Bytes::from("test_processor");
+
+        // Spawn a task to keep publishing heartbeats
+        let hb_task = tokio::spawn(async move {
+            loop {
+                let heartbeat = Heartbeat { heartbeat: 100 };
+                let mut bytes = BytesMut::new();
+                heartbeat
+                    .encode(&mut bytes)
+                    .expect("Failed to encode heartbeat");
+                hb_bucket
+                    .put("test_processor", bytes.freeze())
+                    .await
+                    .unwrap();
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        });
+
+        // Wait for processor to be added and then publish WMBs
+        let start_time = tokio::time::Instant::now();
+        loop {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            let processors = processor_manager
+                .processors
+                .read()
+                .expect("failed to acquire lock");
+
+            if processors.contains_key(&processor_name) {
+                break;
+            }
+
+            if start_time.elapsed() > Duration::from_secs(1) {
+                panic!("Test failed: Processor was not added within 1 second");
+            }
+        }
+
+        // Publish WMBs for different partitions
+        let wmbs = vec![
+            WMB {
+                watermark: 100,
+                offset: 1,
+                idle: false,
+                partition: 0, // Should be filtered out (replica is 1)
+            },
+            WMB {
+                watermark: 200,
+                offset: 2,
+                idle: false,
+                partition: 1, // Should be accepted (matches replica 1)
+            },
+            WMB {
+                watermark: 300,
+                offset: 3,
+                idle: false,
+                partition: 2, // Should be filtered out (replica is 1)
+            },
+        ];
+
+        for wmb in wmbs {
+            let wmb_bytes: BytesMut = wmb.try_into().unwrap();
+            ot_bucket
+                .put(
+                    String::from_utf8(processor_name.to_vec()).unwrap(),
+                    wmb_bytes.freeze(),
+                )
+                .await
+                .unwrap();
+        }
+
+        // Wait for WMBs to be processed and verify the correct one is stored
+        let start_time = tokio::time::Instant::now();
+        loop {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            let processors = processor_manager
+                .processors
+                .read()
+                .expect("failed to acquire lock");
+
+            if let Some(processor) = processors.get(&processor_name)
+                && let Some(head_wmb) = processor.timelines[&1].get_head_wmb()
+                && head_wmb.watermark == 200
+                && head_wmb.partition == 1
+            {
+                // Also check that other timelines don't have the filtered WMBs
+                let timeline_1_wmb = processor.timelines.get(&0);
+                assert!(timeline_1_wmb.is_none());
+
+                let timeline_2_wmb = processor.timelines.get(&2);
+                assert!(timeline_2_wmb.is_none());
+                break;
+            }
+
+            if start_time.elapsed() > Duration::from_secs(1) {
+                panic!("Test failed: Expected WMB was not processed within 1 second");
+            }
+        }
+
+        // Final verification
+        let processors = processor_manager
+            .processors
+            .read()
+            .expect("failed to acquire lock");
+
+        let processor = processors
+            .get(&processor_name)
+            .expect("Processor should exist");
+
+        // For reduce UDF, WMBs should be stored in timeline 1 because that is replica
+        let timeline_0 = &processor.timelines[&1];
+        let head_wmb = timeline_0
+            .get_head_wmb()
+            .expect("Should have a WMB in timeline 0");
+
+        // Should only have the WMB with partition 1 (watermark 200)
+        assert_eq!(head_wmb.watermark, 200);
+        assert_eq!(head_wmb.partition, 1);
+        assert_eq!(head_wmb.offset, 2);
+
+        // For reduce UDF, we should only have timeline 0, and WMBs are stored in timeline 0
+        // Since this test uses partitions: vec![0], there should only be one timeline with key 0
+        assert_eq!(
+            processor.timelines.len(),
+            1,
+            "Reduce UDF should only have one timeline"
+        );
+        assert!(
+            processor.timelines.contains_key(&1),
+            "Timeline should exist for partition 1"
+        );
+
+        hb_task.abort();
     }
 }

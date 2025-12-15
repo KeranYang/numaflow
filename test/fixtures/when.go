@@ -131,11 +131,13 @@ func (w *When) CreateMonoVertexAndWait() *When {
 		w.t.Fatal("No MonoVertex to create")
 	}
 	w.t.Log("Creating MonoVertex", w.monoVertex.Name)
+	w.t.Log("MonoVertex: ", w.monoVertex)
 	ctx := context.Background()
 	i, err := w.monoVertexClient.Create(ctx, w.monoVertex, metav1.CreateOptions{})
 	if err != nil {
 		w.t.Fatal(err)
 	} else {
+		w.t.Log("MonoVertex created: ", i)
 		w.monoVertex = i
 	}
 	// wait
@@ -393,6 +395,25 @@ func (w *When) StreamVertexPodLogs(vertexName, containerName string) *When {
 	return w
 }
 
+func (w *When) StreamMonoVertexPodLogs(containerName string) *When {
+	w.t.Helper()
+	ctx := context.Background()
+	labelSelector := fmt.Sprintf("%s=%s", dfv1.KeyMonoVertexName, w.monoVertex.Name)
+	podList, err := w.kubeClient.CoreV1().Pods(Namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector, FieldSelector: "status.phase=Running"})
+	if err != nil {
+		w.t.Fatalf("Error getting mono vertex pods: %v", err)
+	}
+	for _, pod := range podList.Items {
+		stopCh := make(chan struct{}, 1)
+		streamPodLogs(ctx, w.kubeClient, Namespace, pod.Name, containerName, stopCh)
+		if w.streamLogsStopChannels == nil {
+			w.streamLogsStopChannels = make(map[string]chan struct{})
+		}
+		w.streamLogsStopChannels[pod.Name+":"+containerName] = stopCh
+	}
+	return w
+}
+
 func (w *When) StreamISBLogs() *When {
 	w.t.Helper()
 	ctx := context.Background()
@@ -427,6 +448,46 @@ func (w *When) StreamControllerLogs() *When {
 			w.streamLogsStopChannels = make(map[string]chan struct{})
 		}
 		w.streamLogsStopChannels[pod.Name+":controller-manager"] = stopCh
+	}
+	return w
+}
+
+func (w *When) StreamServingPodLogs(containerName string) *When {
+	w.t.Helper()
+	ctx := context.Background()
+	labelSelector := fmt.Sprintf("%s=%s,%s=%s", dfv1.KeyServingPipelineName, w.servingPipeline.Name, dfv1.KeyComponent, dfv1.ComponentServingServer)
+	podList, err := w.kubeClient.CoreV1().Pods(Namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector, FieldSelector: "status.phase=Running"})
+	if err != nil {
+		w.t.Fatalf("Error getting serving deployment pods: %v", err)
+	}
+	for _, pod := range podList.Items {
+		stopCh := make(chan struct{}, 1)
+		streamPodLogs(ctx, w.kubeClient, Namespace, pod.Name, containerName, stopCh)
+		if w.streamLogsStopChannels == nil {
+			w.streamLogsStopChannels = make(map[string]chan struct{})
+		}
+		w.streamLogsStopChannels[pod.Name+":"+containerName] = stopCh
+	}
+	return w
+}
+
+func (w *When) StreamServingVertexPodLogs(vertexName, containerName string) *When {
+	w.t.Helper()
+	ctx := context.Background()
+	// Serving pipeline creates an underlying pipeline with name "s-{serving-pipeline-name}"
+	underlyingPipelineName := fmt.Sprintf("s-%s", w.servingPipeline.Name)
+	labelSelector := fmt.Sprintf("%s=%s,%s=%s", dfv1.KeyPipelineName, underlyingPipelineName, dfv1.KeyVertexName, vertexName)
+	podList, err := w.kubeClient.CoreV1().Pods(Namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector, FieldSelector: "status.phase=Running"})
+	if err != nil {
+		w.t.Fatalf("Error getting serving vertex pods: %v", err)
+	}
+	for _, pod := range podList.Items {
+		stopCh := make(chan struct{}, 1)
+		streamPodLogs(ctx, w.kubeClient, Namespace, pod.Name, containerName, stopCh)
+		if w.streamLogsStopChannels == nil {
+			w.streamLogsStopChannels = make(map[string]chan struct{})
+		}
+		w.streamLogsStopChannels[pod.Name+":"+containerName] = stopCh
 	}
 	return w
 }
@@ -493,6 +554,7 @@ func (w *When) Expect() *Expect {
 		monoVertexClient: w.monoVertexClient,
 		isbSvc:           w.isbSvc,
 		pipeline:         w.pipeline,
+		servingPipeline:  w.servingPipeline,
 		monoVertex:       w.monoVertex,
 		restConfig:       w.restConfig,
 		kubeClient:       w.kubeClient,

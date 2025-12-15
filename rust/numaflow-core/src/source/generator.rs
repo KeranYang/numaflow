@@ -1,10 +1,11 @@
-use tokio_stream::StreamExt;
-
 use crate::config::components::source::GeneratorConfig;
 use crate::config::get_vertex_replica;
+
 use crate::message::{Message, Offset};
 use crate::reader;
 use crate::source;
+use tokio_stream::StreamExt;
+use tokio_util::sync::CancellationToken;
 
 /// Stream Generator returns a set of messages for every `.next` call. It will throttle itself if
 /// the call exceeds the RPU. It will return a max (batch size, RPU) till the quota for that unit of
@@ -84,7 +85,7 @@ mod stream_generator {
                     "Specified KeyCount is higher than RPU. KeyCount has changed."
                 );
             }
-            if key_count > 0 && rpu % key_count as usize != 0 {
+            if key_count > 0 && !rpu.is_multiple_of(key_count as usize) {
                 let new_rpu = rpu - (rpu % key_count as usize);
                 warn!(
                     rpu,
@@ -96,7 +97,7 @@ mod stream_generator {
             }
 
             // Generate all possible keys
-            let keys = (0..key_count).map(|i| format!("key-{}", i)).collect();
+            let keys = (0..key_count).map(|i| format!("key-{i}")).collect();
 
             Self {
                 content: cfg.content,
@@ -117,22 +118,29 @@ mod stream_generator {
         fn generate_payload(&self, value: i64) -> Vec<u8> {
             #[derive(serde::Serialize)]
             struct Data {
+                /// Unique ID for the message
+                id: String,
                 value: i64,
                 // only to ensure a desired message size
                 #[serde(skip_serializing_if = "Vec::is_empty")]
                 padding: Vec<u8>,
             }
 
-            let padding: Vec<u8> = (self.msg_size_bytes > 8)
-                .then(|| {
-                    let size = self.msg_size_bytes - 8;
-                    let mut bytes = vec![0; size as usize];
-                    rand::thread_rng().fill(&mut bytes[..]);
-                    bytes
-                })
-                .unwrap_or_default();
+            let padding: Vec<u8> = if self.msg_size_bytes > 8 {
+                let size = self.msg_size_bytes - 8;
+                let mut bytes = vec![0; size as usize];
+                rand::rng().fill(&mut bytes[..]);
+                bytes
+            } else {
+                Default::default()
+            };
 
-            let data = Data { value, padding };
+            let id = chrono::Utc::now()
+                .timestamp_nanos_opt()
+                .unwrap_or(chrono::Utc::now().timestamp_micros());
+            let id = format!("{}-{}", id, get_vertex_replica());
+            let data = Data { id, value, padding };
+
             serde_json::to_vec(&data).unwrap()
         }
 
@@ -153,7 +161,9 @@ mod stream_generator {
 
         /// creates a single message that can be returned by the generator.
         fn create_message(&mut self) -> Message {
-            let id = chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default();
+            let id = chrono::Utc::now()
+                .timestamp_nanos_opt()
+                .unwrap_or(chrono::Utc::now().timestamp_micros());
 
             let offset = Offset::Int(IntOffset::new(id, *get_vertex_replica()));
 
@@ -161,7 +171,7 @@ mod stream_generator {
             // rng.gen_range(0..1) will always produce 0
             let jitter = self.jitter.as_secs().max(1);
             let event_time =
-                chrono::Utc::now() - Duration::from_secs(rand::thread_rng().gen_range(0..jitter));
+                chrono::Utc::now() - Duration::from_secs(rand::rng().random_range(0..jitter));
             let mut data = self.content.to_vec();
             if data.is_empty() {
                 let value = match self.value {
@@ -185,8 +195,10 @@ mod stream_generator {
                     index: Default::default(),
                 },
                 headers: Default::default(),
-                metadata: None,
+                // Set default metadata so that metadata is always present.
+                metadata: Some(Arc::new(crate::metadata::Metadata::default())),
                 is_late: false,
+                ack_handle: None,
             }
         }
 
@@ -327,8 +339,9 @@ mod stream_generator {
 pub(crate) fn new_generator(
     cfg: GeneratorConfig,
     batch_size: usize,
+    cancel_token: CancellationToken,
 ) -> crate::Result<(GeneratorRead, GeneratorAck, GeneratorLagReader)> {
-    let gen_read = GeneratorRead::new(cfg, batch_size);
+    let gen_read = GeneratorRead::new(cfg, batch_size, cancel_token);
     let gen_ack = GeneratorAck::new();
     let gen_lag_reader = GeneratorLagReader::new();
 
@@ -337,14 +350,18 @@ pub(crate) fn new_generator(
 
 pub(crate) struct GeneratorRead {
     stream_generator: stream_generator::StreamGenerator,
+    cancel_token: CancellationToken,
 }
 
 impl GeneratorRead {
     /// A new [GeneratorRead] is returned. It takes a static content, requests per unit-time, batch size
     /// to return per [source::SourceReader::read], and the unit-time as duration.
-    fn new(cfg: GeneratorConfig, batch_size: usize) -> Self {
+    fn new(cfg: GeneratorConfig, batch_size: usize, cancel_token: CancellationToken) -> Self {
         let stream_generator = stream_generator::StreamGenerator::new(cfg.clone(), batch_size);
-        Self { stream_generator }
+        Self {
+            stream_generator,
+            cancel_token,
+        }
     }
 }
 
@@ -353,11 +370,12 @@ impl source::SourceReader for GeneratorRead {
         "generator"
     }
 
-    async fn read(&mut self) -> crate::error::Result<Vec<Message>> {
-        let Some(messages) = self.stream_generator.next().await else {
-            panic!("Stream generator has stopped");
-        };
-        Ok(messages)
+    async fn read(&mut self) -> Option<crate::error::Result<Vec<Message>>> {
+        if self.cancel_token.is_cancelled() {
+            return None;
+        }
+
+        Some(Ok(self.stream_generator.next().await?))
     }
 
     async fn partitions(&mut self) -> crate::error::Result<Vec<u16>> {
@@ -375,6 +393,11 @@ impl GeneratorAck {
 
 impl source::SourceAcker for GeneratorAck {
     async fn ack(&mut self, _: Vec<Offset>) -> crate::error::Result<()> {
+        Ok(())
+    }
+
+    async fn nack(&mut self, _: Vec<Offset>) -> crate::error::Result<()> {
+        // Generator source doesn't support nack - no-op
         Ok(())
     }
 }
@@ -421,10 +444,10 @@ mod tests {
         };
 
         // Create a new Generator
-        let mut generator = GeneratorRead::new(cfg, batch);
+        let mut generator = GeneratorRead::new(cfg, batch, CancellationToken::new());
 
         // Read the first batch of messages
-        let messages = generator.read().await.unwrap();
+        let messages = generator.read().await.unwrap().unwrap();
         assert_eq!(messages.len(), batch);
 
         assert!(messages.first().unwrap().value.eq(&content));
@@ -432,7 +455,7 @@ mod tests {
         // Verify that each message has the expected structure
 
         // Read the second batch of messages
-        let messages = generator.read().await.unwrap();
+        let messages = generator.read().await.unwrap().unwrap();
         assert_eq!(messages.len(), rpu - batch);
     }
 
@@ -453,10 +476,10 @@ mod tests {
         };
 
         // Create a new Generator
-        let mut generator = GeneratorRead::new(cfg, batch);
+        let mut generator = GeneratorRead::new(cfg, batch, CancellationToken::new());
 
         // Read the first batch of messages
-        let messages = generator.read().await.unwrap();
+        let messages = generator.read().await.unwrap().unwrap();
         let keys = messages
             .iter()
             .map(|m| m.keys[0].clone())

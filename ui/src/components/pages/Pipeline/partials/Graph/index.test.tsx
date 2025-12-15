@@ -9,7 +9,7 @@ import Graph from "./index";
 import { AppContext } from "../../../../../App";
 import { AppContextProps } from "../../../../../types/declarations/app";
 import { GraphData } from "../../../../../types/declarations/pipeline";
-import { Position } from "@reactflow/core";
+import { Position } from "@xyflow/react";
 
 window.ResizeObserver = class ResizeObserver {
   observe() {
@@ -292,7 +292,7 @@ const mockData: GraphData = {
             imagePullPolicy: "Always",
           },
           trigger: {
-            schedule: "*/2 * * * *",
+            schedule: "0 */2 * * * *",
             timezone: null,
           },
         },
@@ -411,7 +411,7 @@ const mockData: GraphData = {
             imagePullPolicy: "Always",
           },
           trigger: {
-            schedule: "*/2 * * * *",
+            schedule: "0 */2 * * * *",
             timezone: null,
           },
         },

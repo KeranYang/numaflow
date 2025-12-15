@@ -27,9 +27,11 @@ impl TryFrom<SqsMessage> for Message {
                 offset: offset.to_string().into(),
                 index: 0,
             },
-            headers: message.headers,
-            metadata: None,
+            headers: Arc::new(message.headers),
+            // Set default metadata so that metadata is always present.
+            metadata: Some(Arc::new(crate::metadata::Metadata::default())),
             is_late: false,
+            ack_handle: None,
         })
     }
 }
@@ -38,6 +40,9 @@ impl From<numaflow_sqs::SqsSourceError> for Error {
     fn from(value: numaflow_sqs::SqsSourceError) -> Self {
         match value {
             numaflow_sqs::SqsSourceError::Error(numaflow_sqs::Error::Sqs(e)) => {
+                Error::Source(e.to_string())
+            }
+            numaflow_sqs::SqsSourceError::Error(numaflow_sqs::Error::Sts(e)) => {
                 Error::Source(e.to_string())
             }
             numaflow_sqs::SqsSourceError::Error(numaflow_sqs::Error::ActorTaskTerminated(_)) => {
@@ -56,12 +61,13 @@ pub(crate) async fn new_sqs_source(
     batch_size: usize,
     timeout: Duration,
     vertex_replica: u16,
+    cancel_token: tokio_util::sync::CancellationToken,
 ) -> crate::Result<SqsSource> {
     Ok(SqsSourceBuilder::new(cfg)
         .batch_size(batch_size)
         .timeout(timeout)
         .vertex_replica(vertex_replica)
-        .build()
+        .build(cancel_token)
         .await?)
 }
 
@@ -70,12 +76,16 @@ impl source::SourceReader for SqsSource {
         "SQS"
     }
 
-    async fn read(&mut self) -> crate::Result<Vec<Message>> {
-        self.read_messages()
-            .await?
-            .into_iter()
-            .map(|msg| msg.try_into())
-            .collect()
+    async fn read(&mut self) -> Option<crate::Result<Vec<Message>>> {
+        match self.read_messages().await {
+            Some(Ok(messages)) => {
+                let result: crate::Result<Vec<Message>> =
+                    messages.into_iter().map(|msg| msg.try_into()).collect();
+                Some(result)
+            }
+            Some(Err(e)) => Some(Err(e.into())),
+            None => None,
+        }
     }
 
     // if source doesn't support partitions, we should return the vec![vertex_replica]
@@ -97,6 +107,11 @@ impl source::SourceAcker for SqsSource {
         }
         self.ack_offsets(sqs_offsets).await.map_err(Into::into)
     }
+
+    async fn nack(&mut self, _offsets: Vec<Offset>) -> crate::error::Result<()> {
+        // SQS doesn't support nack - no-op
+        Ok(())
+    }
 }
 
 impl source::LagReader for SqsSource {
@@ -113,7 +128,7 @@ pub mod tests {
     use aws_sdk_sqs::Config;
     use aws_sdk_sqs::config::BehaviorVersion;
     use aws_sdk_sqs::types::MessageSystemAttributeName;
-    use aws_smithy_mocks_experimental::{MockResponseInterceptor, Rule, RuleMode, mock};
+    use aws_smithy_mocks::{MockResponseInterceptor, Rule, RuleMode, mock};
     use bytes::Bytes;
     use chrono::Utc;
     use numaflow_sqs::source::{SQS_DEFAULT_REGION, SqsSourceBuilder};
@@ -148,7 +163,7 @@ pub mod tests {
             Offset::String(StringOffset::new("offset".to_string(), 0)),
         );
         assert_eq!(message.event_time, ts);
-        assert_eq!(message.headers, headers);
+        assert_eq!(*message.headers, headers);
     }
 
     #[tokio::test]
@@ -181,41 +196,42 @@ pub mod tests {
             endpoint_url: None,
             attribute_names: vec![],
             message_attribute_names: vec![],
+            assume_role_config: None,
         })
         .batch_size(1)
         .timeout(Duration::from_secs(1))
         .client(sqs_client)
-        .build()
+        .build(CancellationToken::new())
         .await
         .unwrap();
 
         // create SQS source with test client
-        use crate::tracker::TrackerHandle;
-        let tracker_handle = TrackerHandle::new(None, None);
-        let source = Source::new(
+        use crate::tracker::Tracker;
+        let tracker = Tracker::new(None, CancellationToken::new());
+        let cln_token = CancellationToken::new();
+
+        let source: Source<crate::typ::WithoutRateLimiter> = Source::new(
             1,
             SourceType::Sqs(sqs_source),
-            tracker_handle.clone(),
+            tracker.clone(),
             true,
             None,
             None,
-        );
-
-        let cln_token = CancellationToken::new();
-        // create sink writer
-        use crate::sink::{SinkClientType, SinkWriterBuilder};
-        let sink_writer = SinkWriterBuilder::new(
-            10,
-            Duration::from_millis(100),
-            SinkClientType::Log,
-            tracker_handle.clone(),
+            None,
         )
-        .build()
-        .await
-        .unwrap();
+        .await;
+
+        // create sink writer
+        use crate::sinker::sink::{SinkClientType, SinkWriterBuilder};
+        let sink_writer =
+            SinkWriterBuilder::new(10, Duration::from_millis(100), SinkClientType::Log)
+                .build()
+                .await
+                .unwrap();
 
         // create the forwarder with the source and sink writer
-        let forwarder = crate::monovertex::forwarder::Forwarder::new(source.clone(), sink_writer);
+        let forwarder =
+            crate::monovertex::forwarder::Forwarder::new(source.clone(), None, sink_writer);
 
         let cancel_token = cln_token.clone();
         let _forwarder_handle: JoinHandle<crate::error::Result<()>> = tokio::spawn(async move {
@@ -259,7 +275,7 @@ pub mod tests {
     }
 
     fn get_queue_attributes_output() -> Rule {
-        let queue_attributes_output = mock!(aws_sdk_sqs::Client::get_queue_attributes)
+        mock!(aws_sdk_sqs::Client::get_queue_attributes)
             .match_requests(|inp| {
                 inp.queue_url().unwrap()
                     == "https://sqs.us-west-2.amazonaws.com/926113353675/test-q/"
@@ -271,12 +287,11 @@ pub mod tests {
                         "0",
                     )
                     .build()
-            });
-        queue_attributes_output
+            })
     }
 
     fn get_delete_message_output() -> Rule {
-        let delete_message_output = mock!(aws_sdk_sqs::Client::delete_message_batch)
+        mock!(aws_sdk_sqs::Client::delete_message_batch)
             .match_requests(|inp| {
                 inp.queue_url().unwrap()
                     == "https://sqs.us-west-2.amazonaws.com/926113353675/test-q/"
@@ -298,8 +313,7 @@ pub mod tests {
                     )
                     .build()
                     .unwrap()
-            });
-        delete_message_output
+            })
     }
 
     fn get_receive_message_output() -> Rule {
@@ -323,14 +337,13 @@ pub mod tests {
     }
 
     fn get_queue_url_output() -> Rule {
-        let queue_url_output = mock!(aws_sdk_sqs::Client::get_queue_url)
+        mock!(aws_sdk_sqs::Client::get_queue_url)
             .match_requests(|inp| inp.queue_name().unwrap() == "test-q")
             .then_output(|| {
                 aws_sdk_sqs::operation::get_queue_url::GetQueueUrlOutput::builder()
                     .queue_url("https://sqs.us-west-2.amazonaws.com/926113353675/test-q/")
                     .build()
-            });
-        queue_url_output
+            })
     }
 
     fn get_test_config_with_interceptor(interceptor: MockResponseInterceptor) -> Config {

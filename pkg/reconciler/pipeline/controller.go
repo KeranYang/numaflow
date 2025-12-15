@@ -701,7 +701,7 @@ func buildVertices(pl *dfv1.Pipeline) map[string]dfv1.Vertex {
 			},
 			Spec: spec,
 		}
-		// If corresponding pipline has instance annotation, we should copy it to the vertex
+		// If corresponding pipeline has instance annotation, we should copy it to the vertex
 		if x := pl.GetAnnotations()[dfv1.KeyInstance]; x != "" {
 			obj.Annotations[dfv1.KeyInstance] = x
 		}
@@ -722,6 +722,7 @@ func mergeLimits(plLimits dfv1.PipelineLimits, vLimits *dfv1.VertexLimits) dfv1.
 		result.BufferUsageLimit = vLimits.BufferUsageLimit
 		result.ReadBatchSize = vLimits.ReadBatchSize
 		result.ReadTimeout = vLimits.ReadTimeout
+		result.RateLimit = vLimits.RateLimit
 	}
 	if result.ReadBatchSize == nil {
 		result.ReadBatchSize = plLimits.ReadBatchSize
@@ -734,6 +735,21 @@ func mergeLimits(plLimits dfv1.PipelineLimits, vLimits *dfv1.VertexLimits) dfv1.
 	}
 	if result.BufferUsageLimit == nil {
 		result.BufferUsageLimit = plLimits.BufferUsageLimit
+	}
+	if result.RateLimit == nil {
+		result.RateLimit = plLimits.RateLimit
+	}
+	if result.RateLimit != nil && result.RateLimit.Max == nil {
+		result.RateLimit.Max = plLimits.RateLimit.Max
+	}
+	if result.RateLimit != nil && result.RateLimit.Min == nil {
+		result.RateLimit.Min = plLimits.RateLimit.Min
+	}
+	if result.RateLimit != nil && result.RateLimit.RampUpDuration == nil {
+		result.RateLimit.RampUpDuration = plLimits.RateLimit.RampUpDuration
+	}
+	if result.RateLimit != nil && result.RateLimit.RateLimiterStore == nil {
+		result.RateLimit.RateLimiterStore = plLimits.RateLimit.RateLimiterStore
 	}
 	return result
 }
@@ -860,6 +876,61 @@ func (r *pipelineReconciler) updateDesiredState(ctx context.Context, pl *dfv1.Pi
 	}
 }
 
+func (r *pipelineReconciler) vertexResumeHandler(ctx context.Context, pl *dfv1.Pipeline) error {
+	log := logging.FromContext(ctx)
+
+	newDesiredPhase := dfv1.VertexPhaseRunning
+	// Check if the pipeline's resume strategy is set to "slow"
+	// If so, we want to remove the `.spec.replicas` field during resume,
+	// which will let the vertex fall back to its minReplicas setting.
+	removeReplicas := pl.GetAnnotations()[dfv1.KeyResumeStrategy] == string(dfv1.ResumeStrategySlow)
+
+	// Get all existing vertices that belong to the pipeline
+	existingVertices, err := r.findExistingVertices(ctx, pl)
+	if err != nil {
+		return err
+	}
+
+	// Loop over each vertex and apply patches as needed
+	for _, vertex := range existingVertices {
+		// Determine whether the desired phase needs to be updated
+		currentPhase := vertex.Spec.Lifecycle.GetDesiredPhase()
+		needsPhasePatch := currentPhase != newDesiredPhase
+
+		// if phase condition is not true, skip patching this vertex
+		if !needsPhasePatch {
+			continue
+		}
+
+		var patchJson string
+
+		// Construct the patch JSON string based on what needs to change
+		if removeReplicas {
+			// Remove replicas and update the desired phase
+			patchJson = fmt.Sprintf(`{"spec":{"replicas":null,"lifecycle":{"desiredPhase":"%s"}}}`, newDesiredPhase)
+		} else {
+			// Only update the desired phase
+			patchJson = fmt.Sprintf(`{"spec":{"lifecycle":{"desiredPhase":"%s"}}}`, newDesiredPhase)
+		}
+
+		// Apply the patch using MergePatchType
+		if err := r.client.Patch(ctx, &vertex, client.RawPatch(types.MergePatchType, []byte(patchJson))); err != nil && !apierrors.IsNotFound(err) {
+			return fmt.Errorf("failed to patch vertex %q: %w", vertex.Name, err)
+		}
+
+		msg := fmt.Sprintf(
+			"Resumed vertex %q: desired phase changed from %q to %q, removeReplicas=%t",
+			vertex.Name,
+			currentPhase,
+			newDesiredPhase,
+			removeReplicas,
+		)
+		log.Infow(msg)
+		r.recorder.Eventf(pl, corev1.EventTypeNormal, "ResumeVertexLifecycle", msg)
+	}
+	return nil
+}
+
 func (r *pipelineReconciler) resumePipeline(ctx context.Context, pl *dfv1.Pipeline) (bool, error) {
 	// reset pause timestamp
 	if pl.GetAnnotations()[dfv1.KeyPauseTimestamp] != "" {
@@ -872,10 +943,16 @@ func (r *pipelineReconciler) resumePipeline(ctx context.Context, pl *dfv1.Pipeli
 			}
 		}
 	}
-	_, err := r.updateVerticeDesiredPhase(ctx, pl, allVertexFilter, dfv1.VertexPhaseRunning)
+
+	// Resume all vertices of the pipeline that match the given filter (e.g., allVertexFilter)
+	// by updating their desired phase to "Running" and optionally removing the replicas field
+	// if the pipeline is configured with the "slow" resume strategy.
+	err := r.vertexResumeHandler(ctx, pl)
 	if err != nil {
+		// If patching any vertex fails, return the error and stop further processing
 		return false, err
 	}
+
 	// mark the drained field as false to refresh the drained status as this will
 	// be a new lifecycle from running
 	pl.Status.MarkDrainedOnPauseFalse()
@@ -930,13 +1007,13 @@ func (r *pipelineReconciler) pausePipeline(ctx context.Context, pl *dfv1.Pipelin
 	if err != nil {
 		return false, err
 	}
-
 	// if drain is completed, or we have exceeded the pause deadline, mark pl as paused and scale down
 	if time.Now().After(pauseTimestamp.Add(time.Duration(pl.GetPauseGracePeriodSeconds())*time.Second)) || drainCompleted {
 		_, err = r.updateVerticeDesiredPhase(ctx, pl, allVertexFilter, dfv1.VertexPhasePaused)
 		if err != nil {
 			return true, err
 		}
+
 		if errWhileDrain != nil {
 			r.logger.Errorw("Errors encountered while pausing, moving to paused after timeout", zap.Error(errWhileDrain))
 		}

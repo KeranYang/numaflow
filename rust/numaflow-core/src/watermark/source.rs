@@ -18,17 +18,15 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-
-use std::sync::Mutex;
-use tokio::sync::mpsc::Receiver;
+use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
-use tracing::error;
+use tracing::warn;
 
-use crate::config::pipeline::ToVertexConfig;
 use crate::config::pipeline::isb::Stream;
 use crate::config::pipeline::watermark::SourceWatermarkConfig;
-use crate::error::{Error, Result};
-use crate::message::{Message, Offset};
+use crate::config::pipeline::{ToVertexConfig, VertexType};
+use crate::error::Result;
+use crate::message::{IntOffset, Message, Offset};
 use crate::watermark::idle::isb::ISBIdleDetector;
 use crate::watermark::idle::source::SourceIdleDetector;
 use crate::watermark::processor::manager::ProcessorManager;
@@ -42,97 +40,225 @@ pub(crate) mod source_wm_fetcher;
 /// publisher for publishing the source watermark
 pub(crate) mod source_wm_publisher;
 
-/// Messages that can be sent to the SourceWatermarkActor
-#[allow(clippy::enum_variant_names)]
-enum SourceActorMessage {
-    PublishSourceWatermark {
-        partition: u16,
-        event_time: i64,
-        is_idle: bool,
-    },
-    PublishISBWatermark {
-        input_partition: u16,
-        stream: Stream,
-        offset: i64,
-        watermark: i64,
-        is_idle: bool,
-    },
-    FetchSourceWatermark {
-        oneshot_tx: tokio::sync::oneshot::Sender<Result<Watermark>>,
-    },
-}
-
-/// SourceWatermarkActor comprises SourcePublisher and SourceFetcher.
-/// Only responsible for the actual fetch and publish operations.
-struct SourceWatermarkActor {
+/// Shared state for SourceWatermarkHandle.
+/// Contains all computation logic and data structures.
+struct SourceWatermarkState {
     publisher: SourceWatermarkPublisher,
     fetcher: SourceWatermarkFetcher,
+    isb_idle_manager: ISBIdleDetector,
+    source_idle_manager: Option<SourceIdleDetector>,
+    active_input_partitions: HashMap<u16, bool>,
 }
 
-impl SourceWatermarkActor {
-    /// Creates a new SourceWatermarkActor.
-    fn new(publisher: SourceWatermarkPublisher, fetcher: SourceWatermarkFetcher) -> Self {
-        Self { publisher, fetcher }
-    }
-
-    /// Runs the SourceWatermarkActor
-    async fn run(mut self, mut receiver: Receiver<SourceActorMessage>) {
-        while let Some(message) = receiver.recv().await {
-            if let Err(e) = self.handle_message(message).await {
-                error!("error handling message: {:?}", e);
-            }
+impl SourceWatermarkState {
+    /// Creates a new SourceWatermarkState.
+    fn new(
+        publisher: SourceWatermarkPublisher,
+        fetcher: SourceWatermarkFetcher,
+        isb_idle_manager: ISBIdleDetector,
+        source_idle_manager: Option<SourceIdleDetector>,
+    ) -> Self {
+        Self {
+            publisher,
+            fetcher,
+            isb_idle_manager,
+            source_idle_manager,
+            active_input_partitions: HashMap::new(),
         }
     }
 
-    /// Handles the SourceActorMessage.
-    async fn handle_message(&mut self, message: SourceActorMessage) -> Result<()> {
-        match message {
-            // publish the watermark for the messages read from the source to the source bucket
-            SourceActorMessage::PublishSourceWatermark {
-                partition,
-                event_time,
-                is_idle,
-            } => {
-                self.publisher
-                    .publish_source_watermark(partition, event_time, is_idle)
-                    .await;
-            }
+    /// Handles generating and publishing source watermark with computation
+    async fn generate_and_publish_source_watermark(
+        &mut self,
+        messages: Vec<Message>,
+    ) -> Result<()> {
+        // we need to build a hash-map of the lowest event time for each partition
+        let partition_to_lowest_event_time =
+            messages.iter().fold(HashMap::new(), |mut acc, message| {
+                let partition_id = match &message.offset {
+                    Offset::Int(offset) => offset.partition_idx,
+                    Offset::String(offset) => offset.partition_idx,
+                };
 
-            // publish the watermark for the messages written to ISB
-            SourceActorMessage::PublishISBWatermark {
+                let event_time = message.event_time.timestamp_millis();
+
+                let lowest_event_time = acc.entry(partition_id).or_insert(event_time);
+                if event_time < *lowest_event_time {
+                    *lowest_event_time = event_time;
+                }
+                acc
+            });
+
+        if partition_to_lowest_event_time.is_empty() {
+            return Ok(());
+        }
+
+        // Publish the watermark for each partition
+        for (partition, event_time) in partition_to_lowest_event_time {
+            self.publisher
+                .publish_source_watermark(partition, event_time, false)
+                .await;
+
+            // cache the active input partitions, we need it for publishing isb idle watermark
+            self.active_input_partitions.insert(partition, true);
+        }
+
+        // Reset the source idle manager
+        if let Some(source_idle_manager) = &mut self.source_idle_manager {
+            source_idle_manager.reset();
+        }
+
+        Ok(())
+    }
+
+    /// Handles publishing source ISB watermark with computation
+    async fn publish_source_isb_watermark(
+        &mut self,
+        stream: Stream,
+        offset: IntOffset,
+        input_partition: u16,
+    ) -> Result<()> {
+        // Fetch the source watermark
+        let watermark = self.fetcher.fetch_source_watermark();
+
+        // Publish the watermark
+        self.publisher
+            .publish_isb_watermark(
                 input_partition,
-                stream,
-                offset,
-                watermark,
-                is_idle,
-            } => {
+                &stream,
+                offset.offset,
+                watermark.timestamp_millis(),
+                false,
+            )
+            .await;
+
+        // Mark the vertex and partition as active since we published the watermark
+        self.isb_idle_manager.reset_idle(&stream).await;
+
+        Ok(())
+    }
+
+    /// Handles publishing source idle watermark with computation
+    async fn publish_source_idle_watermark(&mut self, partitions: Vec<u16>) -> Result<()> {
+        // First check if source idle manager exists and if source is idling
+        let is_source_idling = if let Some(source_idle_manager) = &self.source_idle_manager {
+            source_idle_manager.is_source_idling()
+        } else {
+            return Ok(());
+        };
+
+        if !is_source_idling {
+            return Ok(());
+        }
+
+        // Fetch the source watermark first
+        let compute_wm = self.fetcher.fetch_source_watermark();
+
+        // Now get the idle watermark
+        let idle_wm = if let Some(source_idle_manager) = &mut self.source_idle_manager {
+            source_idle_manager.update_and_fetch_idle_wm(compute_wm.timestamp_millis())
+        } else {
+            return Ok(());
+        };
+
+        // publish the idle watermark for the given partitions
+        for partition in partitions.iter() {
+            self.publisher
+                .publish_source_watermark(*partition, idle_wm, true)
+                .await;
+        }
+
+        // since isb will also be idling since we are not reading any data
+        // we need to propagate idle watermarks to ISB
+        let compute_wm = self.fetcher.fetch_source_watermark();
+        if compute_wm.timestamp_millis() == -1 {
+            return Ok(());
+        }
+
+        // all the isb partitions will be idling because the source is idling, fetch the idle offset
+        // for each vertex and partition and publish the idle watermark
+        let vertex_streams = self.isb_idle_manager.fetch_all_streams().await;
+        for stream in vertex_streams.iter() {
+            let offset = self
+                .isb_idle_manager
+                .fetch_idle_offset(stream)
+                .await
+                .unwrap_or(-1);
+            for idle_partition in partitions.iter() {
                 self.publisher
-                    .publish_isb_watermark(input_partition, &stream, offset, watermark, is_idle)
+                    .publish_isb_watermark(
+                        *idle_partition,
+                        stream,
+                        offset,
+                        compute_wm.timestamp_millis(),
+                        true,
+                    )
                     .await;
             }
 
-            // fetch the source watermark
-            SourceActorMessage::FetchSourceWatermark { oneshot_tx } => {
-                let watermark = self.fetcher.fetch_source_watermark();
-                oneshot_tx
-                    .send(Ok(watermark))
-                    .map_err(|_| Error::Watermark("failed to send response".to_string()))?;
-            }
+            // mark the vertex and partition as idle, since we published the idle watermark
+            self.isb_idle_manager
+                .update_idle_metadata(stream, offset)
+                .await;
         }
+
+        Ok(())
+    }
+
+    /// Handles publishing ISB idle watermark with computation
+    async fn publish_isb_idle_watermark(&mut self) -> Result<()> {
+        // if source is idling, we can avoid publishing the idle watermark since we publish
+        // the idle watermark for all the downstream partitions in the source idling control flow
+        if let Some(source_idle_manager) = &self.source_idle_manager
+            && source_idle_manager.is_source_idling()
+        {
+            return Ok(());
+        }
+
+        // fetch the source watermark, identify the idle partitions and publish the idle watermark
+        let compute_wm = self.fetcher.fetch_source_watermark();
+        if compute_wm.timestamp_millis() == -1 {
+            return Ok(());
+        }
+
+        // we should only publish to active input partitions, because we consider input-partitions as
+        // the processing entity while publishing watermark inside source
+        let idle_streams = self.isb_idle_manager.fetch_idle_streams().await;
+        for stream in idle_streams.iter() {
+            let offset = self
+                .isb_idle_manager
+                .fetch_idle_offset(stream)
+                .await
+                .unwrap_or(-1);
+            let active_input_partitions: Vec<u16> =
+                self.active_input_partitions.keys().cloned().collect();
+            for partition in active_input_partitions {
+                self.publisher
+                    .publish_isb_watermark(
+                        partition,
+                        stream,
+                        offset,
+                        compute_wm.timestamp_millis(),
+                        true,
+                    )
+                    .await;
+            }
+            self.isb_idle_manager
+                .update_idle_metadata(stream, offset)
+                .await;
+        }
+        // clear the cache since we published the idle watermarks
+        self.active_input_partitions.clear();
 
         Ok(())
     }
 }
 
-/// SourceWatermarkHandle is the handle for the SourceWatermarkActor.
-/// Exposes methods to publish the source watermark and edge watermark.
-/// Contains all the computation logic.
+/// SourceWatermarkHandle exposes methods to publish and fetch the source watermark.
+/// Contains shared state protected by Arc<Mutex<>> for thread-safe access.
 #[derive(Clone)]
 pub(crate) struct SourceWatermarkHandle {
-    sender: tokio::sync::mpsc::Sender<SourceActorMessage>,
-    isb_idle_manager: ISBIdleDetector,
-    source_idle_manager: Option<SourceIdleDetector>,
-    active_input_partitions: Arc<Mutex<HashMap<u16, bool>>>,
+    state: Arc<Mutex<SourceWatermarkState>>,
 }
 
 impl SourceWatermarkHandle {
@@ -144,9 +270,13 @@ impl SourceWatermarkHandle {
         config: &SourceWatermarkConfig,
         cln_token: CancellationToken,
     ) -> Result<Self> {
-        let (sender, receiver) = tokio::sync::mpsc::channel(100);
-        let processor_manager =
-            ProcessorManager::new(js_context.clone(), &config.source_bucket_config).await?;
+        let processor_manager = ProcessorManager::new(
+            js_context.clone(),
+            &config.source_bucket_config,
+            VertexType::Source,
+            *crate::config::get_vertex_replica(),
+        )
+        .await?;
 
         let fetcher = SourceWatermarkFetcher::new(processor_manager);
         let publisher = SourceWatermarkPublisher::new(
@@ -155,8 +285,7 @@ impl SourceWatermarkHandle {
             config.source_bucket_config.clone(),
             config.to_vertex_bucket_config.clone(),
         )
-        .await
-        .map_err(|e| Error::Watermark(e.to_string()))?;
+        .await?;
 
         let source_idle_manager = config
             .idle_config
@@ -166,19 +295,16 @@ impl SourceWatermarkHandle {
         let isb_idle_manager =
             ISBIdleDetector::new(idle_timeout, to_vertex_configs, js_context.clone()).await;
 
-        let actor = SourceWatermarkActor::new(publisher, fetcher);
-        tokio::spawn(async move { actor.run(receiver).await });
+        let state =
+            SourceWatermarkState::new(publisher, fetcher, isb_idle_manager, source_idle_manager);
 
         let source_watermark_handle = Self {
-            sender,
-            isb_idle_manager,
-            source_idle_manager,
-            active_input_partitions: Arc::new(Mutex::new(HashMap::new())),
+            state: Arc::new(Mutex::new(state)),
         };
 
-        // start a task to keep publishing idle watermarks every 100ms
+        // start a task to keep publishing idle watermarks every idle_timeout duration
         tokio::spawn({
-            let mut source_watermark_handle = source_watermark_handle.clone();
+            let source_watermark_handle = source_watermark_handle.clone();
             let mut interval_ticker = tokio::time::interval(idle_timeout);
             async move {
                 loop {
@@ -198,231 +324,94 @@ impl SourceWatermarkHandle {
     }
 
     /// Generates and Publishes the source watermark for the given messages.
-    pub(crate) async fn generate_and_publish_source_watermark(&mut self, messages: &[Message]) {
-        // we need to build a hash-map of the lowest event time for each partition
-        let partition_to_lowest_event_time =
-            messages.iter().fold(HashMap::new(), |mut acc, message| {
-                let partition_id = match &message.offset {
-                    Offset::Int(offset) => offset.partition_idx,
-                    Offset::String(offset) => offset.partition_idx,
-                };
-
-                let event_time = message.event_time.timestamp_millis();
-
-                let lowest_event_time = acc.entry(partition_id).or_insert(event_time);
-                if event_time < *lowest_event_time {
-                    *lowest_event_time = event_time;
-                }
-                acc
-            });
-
-        if partition_to_lowest_event_time.is_empty() {
-            return;
-        }
-
-        // Publish the watermark for each partition
-        for (partition, event_time) in partition_to_lowest_event_time {
-            self.sender
-                .send(SourceActorMessage::PublishSourceWatermark {
-                    partition,
-                    event_time,
-                    is_idle: false,
-                })
+    pub(crate) async fn generate_and_publish_source_watermark(&self, messages: &[Message]) {
+        // Acquire lock, perform operation, and release immediately
+        let result = {
+            let mut state = self.state.lock().await;
+            state
+                .generate_and_publish_source_watermark(messages.to_vec())
                 .await
-                .unwrap_or_else(|e| error!("failed to send message: {:?}", e));
+        };
 
-            // cache the active input partitions, we need it for publishing isb idle watermark
-            let mut active_input_partitions = self
-                .active_input_partitions
-                .lock()
-                .expect("failed to acquire lock");
-            active_input_partitions.insert(partition, true);
-        }
-
-        // Reset the source idle manager
-        if let Some(source_idle_manager) = &mut self.source_idle_manager {
-            source_idle_manager.reset();
+        if let Err(e) = result {
+            warn!(?e, "Failed to generate and publish source watermark");
         }
     }
 
     /// Publishes the watermark for the given input partition on to the ISB of the next vertex.
     pub(crate) async fn publish_source_isb_watermark(
-        &mut self,
+        &self,
         stream: Stream,
         offset: Offset,
         input_partition: u16,
     ) {
         let Offset::Int(offset) = offset else {
-            error!(?offset, "Invalid offset type, cannot publish watermark");
+            warn!(?offset, "Invalid offset type, cannot publish watermark");
             return;
         };
 
-        // Fetch the source watermark
-        let watermark = self.fetch_source_watermark().await;
+        // Acquire lock, perform operation, and release immediately
+        let result = {
+            let mut state = self.state.lock().await;
+            state
+                .publish_source_isb_watermark(stream, offset, input_partition)
+                .await
+        };
 
-        // Send the publish watermark message to the actor
-        self.sender
-            .send(SourceActorMessage::PublishISBWatermark {
-                input_partition,
-                stream: stream.clone(),
-                offset: offset.offset,
-                watermark: watermark.timestamp_millis(),
-                is_idle: false,
-            })
-            .await
-            .expect("failed to send message");
-
-        // Mark the vertex and partition as active since we published the watermark
-        self.isb_idle_manager.reset_idle(&stream).await;
+        if let Err(e) = result {
+            warn!(?e, "Failed to publish source ISB watermark");
+        }
     }
 
     /// Fetches the source watermark.
-    pub(crate) async fn fetch_source_watermark(&mut self) -> Watermark {
-        let (oneshot_tx, oneshot_rx) = tokio::sync::oneshot::channel();
-        if let Err(e) = self
-            .sender
-            .send(SourceActorMessage::FetchSourceWatermark { oneshot_tx })
-            .await
-        {
-            error!(?e, "Failed to send message");
-            return Watermark::from_timestamp_millis(-1).expect("failed to parse time");
-        }
+    pub(crate) async fn fetch_source_watermark(&self) -> Watermark {
+        // Acquire lock, fetch watermark, and release immediately
+        let mut state = self.state.lock().await;
+        state.fetcher.fetch_source_watermark()
+    }
 
-        match oneshot_rx.await {
-            Ok(watermark) => watermark.unwrap_or_else(|e| {
-                error!(?e, "Failed to fetch watermark");
-                Watermark::from_timestamp_millis(-1).expect("failed to parse time")
-            }),
-            Err(e) => {
-                error!(?e, "Failed to receive response");
-                Watermark::from_timestamp_millis(-1).expect("failed to parse time")
-            }
+    /// Fetches the head watermark using the source watermark fetcher. This returns the minimum
+    /// of the head watermarks across all active processors for the specified partition.
+    pub(crate) async fn fetch_head_watermark(&self, partition_idx: u16) -> Watermark {
+        // Acquire lock, fetch watermark, and release immediately
+        let mut state = self.state.lock().await;
+        state.fetcher.fetch_head_watermark(partition_idx)
+    }
+
+    /// Publishes the source idle watermark for the given partitions.
+    pub(crate) async fn publish_source_idle_watermark(&self, partitions: Vec<u16>) {
+        // Acquire lock, perform operation, and release immediately
+        let result = {
+            let mut state = self.state.lock().await;
+            state.publish_source_idle_watermark(partitions).await
+        };
+
+        if let Err(e) = result {
+            warn!(?e, "Failed to publish source idle watermark");
         }
     }
 
-    pub(crate) async fn publish_source_idle_watermark(&mut self, partitions: Vec<u16>) {
-        // First check if source idle manager exists and if source is idling
-        let is_source_idling = if let Some(source_idle_manager) = &self.source_idle_manager {
-            source_idle_manager.is_source_idling()
-        } else {
-            return;
+    /// Publishes the ISB idle watermark.
+    pub(crate) async fn publish_isb_idle_watermark(&self) {
+        // Acquire lock, perform operation, and release immediately
+        let result = {
+            let mut state = self.state.lock().await;
+            state.publish_isb_idle_watermark().await
         };
 
-        if !is_source_idling {
-            return;
-        }
-
-        // Fetch the source watermark first
-        let compute_wm = self.fetch_source_watermark().await;
-
-        // Now get the idle watermark
-        let idle_wm = if let Some(source_idle_manager) = &mut self.source_idle_manager {
-            source_idle_manager.update_and_fetch_idle_wm(compute_wm.timestamp_millis())
-        } else {
-            return;
-        };
-
-        // publish the idle watermark for the given partitions
-        for partition in partitions.iter() {
-            self.sender
-                .send(SourceActorMessage::PublishSourceWatermark {
-                    partition: *partition,
-                    event_time: idle_wm,
-                    is_idle: true,
-                })
-                .await
-                .unwrap_or_else(|e| error!("failed to send message: {:?}", e));
-        }
-
-        // since isb will also be idling since we are not reading any data
-        // we need to propagate idle watermarks to ISB
-        let compute_wm = self.fetch_source_watermark().await;
-        if compute_wm.timestamp_millis() == -1 {
-            return;
-        }
-
-        // all the isb partitions will be idling because the source is idling, fetch the idle offset
-        // for each vertex and partition and publish the idle watermark
-        let vertex_streams = self.isb_idle_manager.fetch_all_streams().await;
-        for stream in vertex_streams.iter() {
-            let offset = self
-                .isb_idle_manager
-                .fetch_idle_offset(stream)
-                .await
-                .unwrap_or(-1);
-            for idle_partition in partitions.iter() {
-                self.sender
-                    .send(SourceActorMessage::PublishISBWatermark {
-                        input_partition: *idle_partition,
-                        stream: stream.clone(),
-                        offset,
-                        watermark: compute_wm.timestamp_millis(),
-                        is_idle: true,
-                    })
-                    .await
-                    .unwrap_or_else(|e| error!("failed to send message: {:?}", e));
-            }
-
-            // mark the vertex and partition as idle, since we published the idle watermark
-            self.isb_idle_manager
-                .update_idle_metadata(stream, offset)
-                .await;
+        if let Err(e) = result {
+            warn!(?e, "Failed to publish ISB idle watermark");
         }
     }
 
-    pub(crate) async fn publish_isb_idle_watermark(&mut self) {
-        // if source is idling, we can avoid publishing the idle watermark since we publish
-        // the idle watermark for all the downstream partitions in the source idling control flow
-        if let Some(source_idle_manager) = &self.source_idle_manager {
-            if source_idle_manager.is_source_idling() {
-                return;
-            }
-        }
-
-        // fetch the source watermark, identify the idle partitions and publish the idle watermark
-        let compute_wm = self.fetch_source_watermark().await;
-        if compute_wm.timestamp_millis() == -1 {
-            return;
-        }
-
-        // we should only publish to active input partitions, because we consider input-partitions as
-        // the processing entity while publishing watermark inside source
-        let idle_streams = self.isb_idle_manager.fetch_idle_streams().await;
-        for stream in idle_streams.iter() {
-            let offset = self
-                .isb_idle_manager
-                .fetch_idle_offset(stream)
-                .await
-                .unwrap_or(-1);
-            let active_input_partitions = {
-                let active_input_partitions = self
-                    .active_input_partitions
-                    .lock()
-                    .expect("failed to acquire lock");
-                active_input_partitions.keys().cloned().collect::<Vec<_>>()
-            };
-            for partition in active_input_partitions {
-                self.sender
-                    .send(SourceActorMessage::PublishISBWatermark {
-                        input_partition: partition,
-                        stream: stream.clone(),
-                        offset,
-                        watermark: compute_wm.timestamp_millis(),
-                        is_idle: true,
-                    })
-                    .await
-                    .unwrap_or_else(|e| error!("failed to send message: {:?}", e));
-            }
-            self.isb_idle_manager
-                .update_idle_metadata(stream, offset)
-                .await;
-        }
-        // clear the cache since we published the idle watermarks
-        let mut active_input_partitions = self
-            .active_input_partitions
-            .lock()
-            .expect("failed to acquire lock");
-        active_input_partitions.clear();
+    /// Initializes the active partitions by creating a publisher for each partition.
+    pub(crate) async fn initialize_active_partitions(&self, partitions: Vec<u16>) {
+        // Acquire lock, perform operation, and release immediately
+        let mut state = self.state.lock().await;
+        state
+            .publisher
+            .initialize_active_partitions(partitions)
+            .await;
     }
 }
 
@@ -438,6 +427,7 @@ mod tests {
     use tokio::time::sleep;
 
     use super::*;
+    use crate::config::pipeline::VertexType;
     use crate::config::pipeline::isb::BufferWriterConfig;
     use crate::config::pipeline::watermark::{BucketConfig, IdleConfig};
     use crate::message::{IntOffset, Message};
@@ -456,9 +446,10 @@ mod tests {
             max_delay: Default::default(),
             source_bucket_config: BucketConfig {
                 vertex: "source_vertex",
-                partitions: 1, // partitions is always one for source
+                partitions: vec![0], // partitions is always vec![0] for source
                 ot_bucket: ot_bucket_name,
                 hb_bucket: hb_bucket_name,
+                delay: None,
             },
             to_vertex_bucket_config: vec![],
             idle_config: None,
@@ -483,7 +474,7 @@ mod tests {
             .await
             .unwrap();
 
-        let mut handle = SourceWatermarkHandle::new(
+        let handle = SourceWatermarkHandle::new(
             Duration::from_millis(100),
             js_context.clone(),
             Default::default(),
@@ -524,23 +515,25 @@ mod tests {
             .await
             .expect("Failed to get ot bucket");
 
-        let mut wmb_found = false;
-        for _ in 0..10 {
-            let wmb = ot_bucket
-                .get("source-source_vertex-0")
-                .await
-                .expect("Failed to get wmb");
-            if wmb.is_some() {
-                let wmb: WMB = wmb.unwrap().try_into().unwrap();
-                assert_eq!(wmb.watermark, 60000);
-                wmb_found = true;
-                break;
-            } else {
-                tokio::time::sleep(Duration::from_millis(100)).await;
+        let timeout_duration = Duration::from_secs(1);
+        let result = tokio::time::timeout(timeout_duration, async {
+            loop {
+                let wmb = ot_bucket
+                    .get("source-source_vertex-0")
+                    .await
+                    .expect("Failed to get wmb");
+                if let Some(wmb) = wmb {
+                    let wmb: WMB = wmb.try_into().unwrap();
+                    assert_eq!(wmb.watermark, 60000);
+                    break;
+                } else {
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                }
             }
-        }
+        })
+        .await;
 
-        if !wmb_found {
+        if result.is_err() {
             panic!("Failed to get watermark");
         }
 
@@ -566,19 +559,35 @@ mod tests {
         let edge_ot_bucket_name = "test_publish_source_edge_watermark_edge_OT";
         let edge_hb_bucket_name = "test_publish_source_edge_watermark_edge_PROCESSORS";
 
+        // delete the stores
+        let _ = js_context
+            .delete_key_value(source_ot_bucket_name.to_string())
+            .await;
+        let _ = js_context
+            .delete_key_value(source_hb_bucket_name.to_string())
+            .await;
+        let _ = js_context
+            .delete_key_value(edge_ot_bucket_name.to_string())
+            .await;
+        let _ = js_context
+            .delete_key_value(edge_hb_bucket_name.to_string())
+            .await;
+
         let source_config = SourceWatermarkConfig {
             max_delay: Default::default(),
             source_bucket_config: BucketConfig {
                 vertex: "source_vertex",
-                partitions: 2,
+                partitions: vec![0, 1],
                 ot_bucket: source_ot_bucket_name,
                 hb_bucket: source_hb_bucket_name,
+                delay: None,
             },
             to_vertex_bucket_config: vec![BucketConfig {
                 vertex: "edge_vertex",
-                partitions: 2,
+                partitions: vec![0, 1],
                 ot_bucket: edge_ot_bucket_name,
                 hb_bucket: edge_hb_bucket_name,
+                delay: None,
             }],
             idle_config: None,
         };
@@ -619,7 +628,7 @@ mod tests {
             .await
             .unwrap();
 
-        let mut handle = SourceWatermarkHandle::new(
+        let handle = SourceWatermarkHandle::new(
             Duration::from_millis(100),
             js_context.clone(),
             &[ToVertexConfig {
@@ -634,6 +643,7 @@ mod tests {
                 },
                 conditions: None,
                 partitions: 1,
+                to_vertex_type: VertexType::MapUDF,
             }],
             &source_config,
             CancellationToken::new(),
@@ -652,7 +662,6 @@ mod tests {
             partition: 0,
         };
 
-        let mut wmb_found = false;
         for i in 1..11 {
             // publish source watermarks before publishing edge watermarks
             let messages = vec![
@@ -685,43 +694,30 @@ mod tests {
             handle
                 .publish_source_isb_watermark(stream.clone(), offset, 0)
                 .await;
-
-            // check if the watermark is published
-            let wmb = ot_bucket
-                .get("source_vertex-0")
-                .await
-                .expect("Failed to get wmb");
-            if wmb.is_some() {
-                let wmb: WMB = wmb.unwrap().try_into().unwrap();
-                assert_ne!(wmb.watermark, -1);
-                wmb_found = true;
-                break;
-            } else {
-                tokio::time::sleep(Duration::from_millis(100)).await;
-            }
         }
 
-        if !wmb_found {
+        // check if the watermark is published
+        let timeout_duration = Duration::from_secs(1);
+        let result = tokio::time::timeout(timeout_duration, async {
+            loop {
+                let wmb = ot_bucket
+                    .get("source_vertex-0")
+                    .await
+                    .expect("Failed to get wmb");
+                if let Some(wmb) = wmb {
+                    let wmb: WMB = wmb.try_into().unwrap();
+                    assert_ne!(wmb.watermark, -1);
+                    break;
+                } else {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            }
+        })
+        .await;
+
+        if result.is_err() {
             panic!("Failed to get watermark");
         }
-
-        // delete the stores
-        js_context
-            .delete_key_value(source_hb_bucket_name.to_string())
-            .await
-            .unwrap();
-        js_context
-            .delete_key_value(source_ot_bucket_name.to_string())
-            .await
-            .unwrap();
-        js_context
-            .delete_key_value(edge_hb_bucket_name.to_string())
-            .await
-            .unwrap();
-        js_context
-            .delete_key_value(edge_ot_bucket_name.to_string())
-            .await
-            .unwrap();
     }
 
     #[cfg(feature = "nats-tests")]
@@ -748,6 +744,7 @@ mod tests {
             },
             conditions: None,
             partitions: 1,
+            to_vertex_type: VertexType::MapUDF,
         }];
 
         // create to vertex stream since we will be writing ctrl message to it
@@ -763,17 +760,33 @@ mod tests {
 
         let source_bucket_config = BucketConfig {
             vertex: "v1",
-            partitions: 1,
+            partitions: vec![0],
             ot_bucket: ot_bucket_name,
             hb_bucket: hb_bucket_name,
+            delay: None,
         };
 
         let to_vertex_bucket_config = BucketConfig {
             vertex: "edge_vertex",
-            partitions: 1,
+            partitions: vec![0],
             ot_bucket: to_vertex_ot_bucket_name,
             hb_bucket: to_vertex_hb_bucket_name,
+            delay: None,
         };
+
+        // delete stores if the exist
+        let _ = js_context
+            .delete_key_value(ot_bucket_name.to_string())
+            .await;
+        let _ = js_context
+            .delete_key_value(hb_bucket_name.to_string())
+            .await;
+        let _ = js_context
+            .delete_key_value(to_vertex_ot_bucket_name.to_string())
+            .await;
+        let _ = js_context
+            .delete_key_value(to_vertex_hb_bucket_name.to_string())
+            .await;
 
         // create key value stores
         js_context
@@ -813,9 +826,10 @@ mod tests {
             threshold: Duration::from_millis(10),
             step_interval: Duration::from_millis(5),
             increment_by: Duration::from_millis(1),
+            init_source_delay: None,
         };
 
-        let mut handle = SourceWatermarkHandle::new(
+        let handle = SourceWatermarkHandle::new(
             Duration::from_millis(10),
             js_context.clone(),
             &to_vertex_configs,
@@ -881,38 +895,23 @@ mod tests {
             .await
             .expect("Failed to get ot bucket");
 
-        let mut wmb_found = false;
-        for _ in 0..10 {
-            if let Some(wmb) = ot_bucket.get("v1-0").await.expect("Failed to get wmb") {
-                let wmb: WMB = wmb.try_into().unwrap();
-                // idle watermark should be published
-                if wmb.idle {
-                    wmb_found = true;
-                    break;
+        let timeout_duration = Duration::from_secs(1);
+        let result = tokio::time::timeout(timeout_duration, async {
+            loop {
+                if let Some(wmb) = ot_bucket.get("v1-0").await.expect("Failed to get wmb") {
+                    let wmb: WMB = wmb.try_into().expect("Failed to convert to WMB");
+                    // idle watermark should be published
+                    if wmb.idle {
+                        return true; // Found idle watermark
+                    }
                 }
+                tokio::time::sleep(Duration::from_millis(10)).await;
             }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
+        })
+        .await;
 
+        let wmb_found = result.unwrap_or(false); // false if timeout occurred
         assert!(wmb_found, "Idle watermark not found");
-
-        // delete the stores
-        js_context
-            .delete_key_value(ot_bucket_name.to_string())
-            .await
-            .unwrap();
-        js_context
-            .delete_key_value(hb_bucket_name.to_string())
-            .await
-            .unwrap();
-        js_context
-            .delete_key_value(to_vertex_ot_bucket_name.to_string())
-            .await
-            .unwrap();
-        js_context
-            .delete_key_value(to_vertex_hb_bucket_name.to_string())
-            .await
-            .unwrap();
     }
 
     #[cfg(feature = "nats-tests")]
@@ -939,6 +938,7 @@ mod tests {
             },
             conditions: None,
             partitions: 1,
+            to_vertex_type: VertexType::MapUDF,
         }];
 
         // create to vertex stream since we will be writing ctrl message to it
@@ -954,17 +954,32 @@ mod tests {
 
         let source_bucket_config = BucketConfig {
             vertex: "v1",
-            partitions: 1,
+            partitions: vec![0],
             ot_bucket: ot_bucket_name,
             hb_bucket: hb_bucket_name,
+            delay: None,
         };
 
         let to_vertex_bucket_config = BucketConfig {
             vertex: "edge_vertex",
-            partitions: 1,
+            partitions: vec![0],
             ot_bucket: to_vertex_ot_bucket_name,
             hb_bucket: to_vertex_hb_bucket_name,
+            delay: None,
         };
+
+        let _ = js_context
+            .delete_key_value(ot_bucket_name.to_string())
+            .await;
+        let _ = js_context
+            .delete_key_value(hb_bucket_name.to_string())
+            .await;
+        let _ = js_context
+            .delete_key_value(to_vertex_ot_bucket_name.to_string())
+            .await;
+        let _ = js_context
+            .delete_key_value(to_vertex_hb_bucket_name.to_string())
+            .await;
 
         // create key value stores
         js_context
@@ -1002,12 +1017,13 @@ mod tests {
 
         let source_idle_config = IdleConfig {
             threshold: Duration::from_millis(2000), // set higher value so that the source won't be idling
-            step_interval: Duration::from_millis(5),
+            step_interval: Duration::from_millis(3),
             increment_by: Duration::from_millis(1),
+            init_source_delay: None,
         };
 
-        let mut handle = SourceWatermarkHandle::new(
-            Duration::from_millis(5),
+        let handle = SourceWatermarkHandle::new(
+            Duration::from_millis(3),
             js_context.clone(),
             &to_vertex_configs,
             &SourceWatermarkConfig {
@@ -1080,36 +1096,152 @@ mod tests {
             .await
             .expect("Failed to get ot bucket");
 
-        let mut wmb_found = false;
-        for _ in 0..10 {
-            if let Some(wmb) = ot_bucket.get("v1-0").await.expect("Failed to get wmb") {
-                let wmb: WMB = wmb.try_into().expect("Failed to convert to WMB");
-                // idle watermark should be published
-                if wmb.idle {
-                    wmb_found = true;
-                    break;
+        let timeout_duration = Duration::from_secs(2);
+        let result = tokio::time::timeout(timeout_duration, async {
+            loop {
+                if let Some(wmb) = ot_bucket.get("v1-0").await.expect("Failed to get wmb") {
+                    let wmb: WMB = wmb.try_into().expect("Failed to convert to WMB");
+                    // idle watermark should be published
+                    if wmb.idle {
+                        return true; // Found idle watermark
+                    }
                 }
+                tokio::time::sleep(Duration::from_millis(50)).await;
             }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
+        })
+        .await;
 
+        let wmb_found = result.unwrap_or(false);
         assert!(wmb_found, "Idle watermark not found");
+    }
 
-        // delete the stores
-        js_context
+    #[cfg(feature = "nats-tests")]
+    #[tokio::test]
+    async fn test_fetch_head_watermark() {
+        let client = async_nats::connect("localhost:4222").await.unwrap();
+        let js_context = jetstream::new(client);
+
+        let ot_bucket_name = "test_fetch_head_watermark_source_OT";
+        let hb_bucket_name = "test_fetch_head_watermark_source_PROCESSORS";
+
+        let source_config = SourceWatermarkConfig {
+            max_delay: Default::default(),
+            source_bucket_config: BucketConfig {
+                vertex: "source_vertex",
+                partitions: vec![0],
+                ot_bucket: ot_bucket_name,
+                hb_bucket: hb_bucket_name,
+                delay: None,
+            },
+            to_vertex_bucket_config: vec![],
+            idle_config: None,
+        };
+
+        // delete the stores first
+        let _ = js_context
             .delete_key_value(ot_bucket_name.to_string())
+            .await;
+        let _ = js_context
+            .delete_key_value(hb_bucket_name.to_string())
+            .await;
+
+        // create key value stores
+        js_context
+            .create_key_value(Config {
+                bucket: ot_bucket_name.to_string(),
+                history: 1,
+                ..Default::default()
+            })
             .await
             .unwrap();
+
+        js_context
+            .create_key_value(Config {
+                bucket: hb_bucket_name.to_string(),
+                history: 1,
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+
+        // Publish some WMB entries to the source OT bucket to simulate source processors
+        let ot_bucket = js_context.get_key_value(ot_bucket_name).await.unwrap();
+
+        // Create WMB entries that will be read by the ProcessorManager
+        let wmb1 = WMB {
+            watermark: 60000,
+            offset: 1,
+            idle: false,
+            partition: 0,
+        };
+        let wmb2 = WMB {
+            watermark: 70000,
+            offset: 2,
+            idle: false,
+            partition: 0,
+        };
+
+        // Publish WMB entries to the OT bucket with a processor name
+        let processor_name = "source-processor-0";
+        let wmb1_bytes: bytes::BytesMut = wmb1.try_into().unwrap();
+        let wmb2_bytes: bytes::BytesMut = wmb2.try_into().unwrap();
+        ot_bucket
+            .put(processor_name, wmb1_bytes.freeze())
+            .await
+            .unwrap();
+        ot_bucket
+            .put(processor_name, wmb2_bytes.freeze())
+            .await
+            .unwrap();
+
+        // Also publish a heartbeat to the HB bucket to mark the processor as active
+        let hb_bucket = js_context.get_key_value(hb_bucket_name).await.unwrap();
+        let current_time = chrono::Utc::now().timestamp_millis();
+        hb_bucket
+            .put(processor_name, current_time.to_string().into())
+            .await
+            .unwrap();
+
+        let handle = SourceWatermarkHandle::new(
+            Duration::from_millis(100),
+            js_context.clone(),
+            Default::default(),
+            &source_config,
+            CancellationToken::new(),
+        )
+        .await
+        .expect("Failed to create source watermark handle");
+
+        // Poll for head watermark with timeout using tokio::time::timeout
+        let timeout_duration = Duration::from_millis(200);
+        let poll_interval = Duration::from_millis(10);
+
+        let head_watermark = tokio::time::timeout(timeout_duration, async {
+            loop {
+                let watermark = handle.fetch_head_watermark(0).await;
+
+                // Break if we got a valid watermark (not -1)
+                if watermark.timestamp_millis() != -1 {
+                    return watermark;
+                }
+
+                // Wait before next poll
+                tokio::time::sleep(poll_interval).await;
+            }
+        })
+        .await
+        .expect("Timeout: head watermark still -1 after 200ms");
+
+        // The head watermark should be a valid timestamp (not -1)
+        assert_ne!(head_watermark.timestamp_millis(), -1);
+
+        // delete the stores
         js_context
             .delete_key_value(hb_bucket_name.to_string())
             .await
             .unwrap();
         js_context
-            .delete_key_value(to_vertex_ot_bucket_name.to_string())
-            .await
-            .unwrap();
-        js_context
-            .delete_key_value(to_vertex_hb_bucket_name.to_string())
+            .delete_key_value(ot_bucket_name.to_string())
             .await
             .unwrap();
     }

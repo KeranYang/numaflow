@@ -18,6 +18,8 @@ limitations under the License.
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MonoVertexLimits {
+    #[serde(rename = "rateLimit", skip_serializing_if = "Option::is_none")]
+    pub rate_limit: Option<Box<crate::models::RateLimit>>,
     /// Read batch size from the source.
     #[serde(rename = "readBatchSize", skip_serializing_if = "Option::is_none")]
     pub read_batch_size: Option<i64>,
@@ -28,6 +30,7 @@ pub struct MonoVertexLimits {
 impl MonoVertexLimits {
     pub fn new() -> MonoVertexLimits {
         MonoVertexLimits {
+            rate_limit: None,
             read_batch_size: None,
             read_timeout: None,
         }

@@ -45,10 +45,10 @@ import (
 	"github.com/numaproj/numaflow/pkg/isbsvc"
 	"github.com/numaproj/numaflow/pkg/metrics"
 	jsclient "github.com/numaproj/numaflow/pkg/shared/clients/nats"
-	redisclient "github.com/numaproj/numaflow/pkg/shared/clients/redis"
 	"github.com/numaproj/numaflow/pkg/shared/logging"
+	"github.com/numaproj/numaflow/pkg/shared/telemetry"
 	sharedtls "github.com/numaproj/numaflow/pkg/shared/tls"
-	"github.com/numaproj/numaflow/pkg/watermark/fetch"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type daemonServer struct {
@@ -74,8 +74,6 @@ func (ds *daemonServer) Run(ctx context.Context) error {
 	)
 
 	switch ds.isbSvcType {
-	case v1alpha1.ISBSvcTypeRedis:
-		isbSvcClient = isbsvc.NewISBRedisSvc(redisclient.NewInClusterRedisClient())
 	case v1alpha1.ISBSvcTypeJetStream:
 		natsClientPool, err = jsclient.NewClientPool(ctx, jsclient.WithClientPoolSize(1))
 		if err != nil {
@@ -91,23 +89,6 @@ func (ds *daemonServer) Run(ctx context.Context) error {
 	default:
 		return fmt.Errorf("unsupported isbsvc buffer type %q", ds.isbSvcType)
 	}
-	wmStores, err := service.BuildWatermarkStores(ctx, ds.pipeline, isbSvcClient)
-	if err != nil {
-		return fmt.Errorf("failed to get watermark stores, %w", err)
-	}
-	wmFetchers, err := service.BuildUXEdgeWatermarkFetchers(ctx, ds.pipeline, wmStores)
-	if err != nil {
-		return fmt.Errorf("failed to get watermark fetchers, %w", err)
-	}
-
-	// Close all the watermark stores when the daemon server exits
-	defer func() {
-		for _, edgeStores := range wmStores {
-			for _, store := range edgeStores {
-				_ = store.Close()
-			}
-		}
-	}()
 
 	// rater is used to calculate the processing rate for each of the vertices
 	rater := server.NewRater(ctx, ds.pipeline)
@@ -129,10 +110,17 @@ func (ds *daemonServer) Run(ctx context.Context) error {
 	}
 
 	tlsConfig := &tls.Config{Certificates: []tls.Certificate{*cer}, MinVersion: tls.VersionTLS12, NextProtos: []string{"http/1.1", "h2"}}
-	grpcServer, err := ds.newGRPCServer(isbSvcClient, wmFetchers, rater, pipelineRuntimeCache)
+	grpcServer, err := ds.newGRPCServer(ctx, isbSvcClient, rater, pipelineRuntimeCache)
 	if err != nil {
 		return fmt.Errorf("failed to create grpc server: %w", err)
 	}
+
+	// Clean up watermark service when daemon server exits
+	defer func() {
+		if ds.metaDataQuery != nil {
+			ds.metaDataQuery.Stop()
+		}
+	}()
 	httpServer := ds.newHTTPServer(ctx, v1alpha1.DaemonServicePort, tlsConfig)
 
 	conn = tls.NewListener(conn, tlsConfig)
@@ -166,9 +154,17 @@ func (ds *daemonServer) Run(ctx context.Context) error {
 
 	go ds.exposeMetrics(ctx)
 
+	// Initialize OTLP exporter if OTEL_EXPORTER_OTLP_ENDPOINT is set
+	shutdown, err := telemetry.InitOTLPExporter(ctx, v1alpha1.ComponentDaemon, ds.pipeline.Name, prometheus.DefaultGatherer)
+	if err != nil {
+		log.Warnw("Failed to initialize OTLP exporter, continuing without OTLP", zap.Error(err))
+	} else {
+		defer func() {
+			_ = shutdown(context.Background())
+		}()
+	}
+
 	version := numaflow.GetVersion()
-	// TODO: clean it up in v1.6
-	deprecatedPipelineInfo.WithLabelValues(version.Version, version.Platform, ds.pipeline.Name).Set(1)
 	metrics.BuildInfo.WithLabelValues(v1alpha1.ComponentDaemon, ds.pipeline.Name, version.Version, version.Platform).Set(1)
 
 	log.Infof("Daemon server started successfully on %s", address)
@@ -177,8 +173,8 @@ func (ds *daemonServer) Run(ctx context.Context) error {
 }
 
 func (ds *daemonServer) newGRPCServer(
+	ctx context.Context,
 	isbSvcClient isbsvc.ISBService,
-	wmFetchers map[v1alpha1.Edge][]fetch.HeadFetcher,
 	rater server.Ratable,
 	pipelineRuntimeCache runtimeinfo.PipelineRuntimeCache) (*grpc.Server, error) {
 	// "Prometheus histograms are a great way to measure latency distributions of your RPCs.
@@ -194,7 +190,7 @@ func (ds *daemonServer) newGRPCServer(
 	}
 	grpcServer := grpc.NewServer(sOpts...)
 	grpc_prometheus.Register(grpcServer)
-	pipelineMetadataQuery, err := service.NewPipelineMetadataQuery(isbSvcClient, ds.pipeline, wmFetchers, rater, pipelineRuntimeCache)
+	pipelineMetadataQuery, err := service.NewPipelineMetadataQuery(ctx, isbSvcClient, ds.pipeline, rater, pipelineRuntimeCache)
 	if err != nil {
 		return nil, err
 	}
@@ -305,20 +301,20 @@ func (ds *daemonServer) exposeMetrics(ctx context.Context) {
 
 			//exposing pipeline processing lag metric.
 			if minWM < 0 {
-				pipelineProcessingLag.WithLabelValues(ds.pipeline.Name).Set(-1)
+				metrics.PipelineProcessingLag.WithLabelValues(ds.pipeline.Name).Set(-1)
 			} else {
 				if maxWM < minWM {
-					pipelineProcessingLag.WithLabelValues(ds.pipeline.Name).Set(-1)
+					metrics.PipelineProcessingLag.WithLabelValues(ds.pipeline.Name).Set(-1)
 				} else {
-					pipelineProcessingLag.WithLabelValues(ds.pipeline.Name).Set(float64(maxWM - minWM))
+					metrics.PipelineProcessingLag.WithLabelValues(ds.pipeline.Name).Set(float64(maxWM - minWM))
 				}
 			}
 
 			// exposing the watermark delay to current time metric.
 			if maxWM == math.MinInt64 {
-				watermarkCmpNow.WithLabelValues(ds.pipeline.Name).Set(-1)
+				metrics.WatermarkCmpNow.WithLabelValues(ds.pipeline.Name).Set(-1)
 			} else {
-				watermarkCmpNow.WithLabelValues(ds.pipeline.Name).Set(float64(time.Now().UnixMilli() - maxWM))
+				metrics.WatermarkCmpNow.WithLabelValues(ds.pipeline.Name).Set(float64(time.Now().UnixMilli() - maxWM))
 			}
 
 			//exposing Pipeline data processing health metric.
@@ -330,13 +326,13 @@ func (ds *daemonServer) exposeMetrics(ctx context.Context) {
 			}
 			switch pipelineDataHealth.Status.Status {
 			case v1alpha1.PipelineStatusHealthy:
-				dataProcessingHealth.WithLabelValues(ds.pipeline.Name).Set(1)
+				metrics.DataProcessingHealth.WithLabelValues(ds.pipeline.Name).Set(1)
 			case v1alpha1.PipelineStatusWarning:
-				dataProcessingHealth.WithLabelValues(ds.pipeline.Name).Set(-1)
+				metrics.DataProcessingHealth.WithLabelValues(ds.pipeline.Name).Set(-1)
 			case v1alpha1.PipelineStatusCritical:
-				dataProcessingHealth.WithLabelValues(ds.pipeline.Name).Set(-2)
+				metrics.DataProcessingHealth.WithLabelValues(ds.pipeline.Name).Set(-2)
 			default:
-				dataProcessingHealth.WithLabelValues(ds.pipeline.Name).Set(0)
+				metrics.DataProcessingHealth.WithLabelValues(ds.pipeline.Name).Set(0)
 			}
 
 		case <-ctx.Done():

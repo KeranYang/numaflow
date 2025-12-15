@@ -20,8 +20,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/numaproj/numaflow/pkg/isb"
-
+	"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	sharedqueue "github.com/numaproj/numaflow/pkg/shared/queue"
 )
 
@@ -32,24 +31,6 @@ const (
 	// available pod data, a negative min is returned to indicate this.
 	rateNotAvailable = float64(math.MinInt)
 )
-
-// UpdateCount updates the count for a given timestamp in the queue.
-func UpdateCount(q *sharedqueue.OverflowQueue[*TimestampedCounts], time int64, podReadCounts *PodMetricsCount) {
-	items := q.Items()
-
-	// find the element matching the input timestamp and update it
-	for _, i := range items {
-		if i.timestamp == time {
-			i.Update(podReadCounts)
-			return
-		}
-	}
-
-	// if we cannot find a matching element, it means we need to add a new timestamped count to the queue
-	tc := NewTimestampedCounts(time)
-	tc.Update(podReadCounts)
-	q.Append(tc)
-}
 
 // CalculateRate calculates the rate of a MonoVertex for a given lookback period.
 func CalculateRate(q *sharedqueue.OverflowQueue[*TimestampedCounts], lookbackSeconds int64) float64 {
@@ -85,13 +66,13 @@ func CalculateRate(q *sharedqueue.OverflowQueue[*TimestampedCounts], lookbackSec
 func CalculatePending(q *sharedqueue.OverflowQueue[*TimestampedCounts], lookbackSeconds int64) int64 {
 	counts := q.Items()
 	if len(counts) <= 1 {
-		return isb.PendingNotAvailable
+		return v1alpha1.PendingNotAvailable
 	}
 	startIndex := findStartIndex(lookbackSeconds, counts)
 	// we consider the last element as the end index
 	endIndex := len(counts) - 1
 	if startIndex == indexNotFound {
-		return isb.PendingNotAvailable
+		return v1alpha1.PendingNotAvailable
 	}
 	delta := int64(0)
 	num := int64(0)
@@ -103,7 +84,7 @@ func CalculatePending(q *sharedqueue.OverflowQueue[*TimestampedCounts], lookback
 		}
 	}
 	if num == 0 {
-		return isb.PendingNotAvailable
+		return v1alpha1.PendingNotAvailable
 	}
 	return delta / num
 }
@@ -111,7 +92,7 @@ func CalculatePending(q *sharedqueue.OverflowQueue[*TimestampedCounts], lookback
 // findStartIndex finds the index of the first element in the queue that is within the lookback seconds
 func findStartIndex(lookbackSeconds int64, counts []*TimestampedCounts) int {
 	n := len(counts)
-	now := time.Now().Truncate(CountWindow).Unix()
+	now := time.Now().Unix()
 	if n < 2 || now-counts[n-2].timestamp > lookbackSeconds {
 		// if the second last element is already outside the lookback window, we return indexNotFound
 		return indexNotFound
@@ -146,9 +127,11 @@ func calculatePodDelta(tc1, tc2 *TimestampedCounts) float64 {
 		currCount := readCount
 		prevCount := prevPodReadCount[podName]
 		// pod delta will be equal to current count in case of restart
+
 		podDelta := currCount
 		if currCount >= prevCount {
 			podDelta = currCount - prevCount
+
 		}
 		delta += podDelta
 	}

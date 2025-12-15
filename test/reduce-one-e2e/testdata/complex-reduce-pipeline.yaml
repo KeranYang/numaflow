@@ -4,11 +4,14 @@ metadata:
   name: complex-sum
 spec:
   watermark:
-      maxDelay: 30s
+    maxDelay: 30s
   limits:
-    readBatchSize: 50
+    readTimeout: 50ms
+    readBatchSize: 10
   vertices:
     - name: in
+      limits:
+        readBatchSize: 1
       scale:
         min: 1
       source:
@@ -18,16 +21,16 @@ spec:
         min: 1
       udf:
         container:
-          # Tell the input number is even or odd, see https://github.com/numaproj/numaflow-go/tree/main/pkg/mapper/examples/even_odd
+          # Tell the input number is even or odd, see https://github.com/numaproj/numaflow-go/tree/main/examples/mapper/even_odd
           image: quay.io/numaio/numaflow-go/map-even-odd:stable
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
     - name: keyed-fixed-sum
       partitions: 1
       udf:
         container:
-          # Compute the sum, see https://github.com/numaproj/numaflow-go/tree/main/pkg/reducer/examples/sum
+          # Compute the sum, see https://github.com/numaproj/numaflow-go/tree/main/examples/reducer/sum
           image: quay.io/numaio/numaflow-go/reduce-sum:stable
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
         groupBy:
           window:
             fixed:
@@ -38,9 +41,9 @@ spec:
     - name: non-keyed-fixed-sum
       udf:
         container:
-          # Compute the sum, see https://github.com/numaproj/numaflow-go/tree/main/pkg/reducer/examples/sum
+          # Compute the sum, see https://github.com/numaproj/numaflow-go/tree/main/examples/reducer/sum
           image: quay.io/numaio/numaflow-go/reduce-sum:stable
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
         groupBy:
           window:
             fixed:
@@ -54,9 +57,9 @@ spec:
       sink:
         udsink:
           container:
-            # A redis sink for e2e testing, see https://github.com/numaproj/numaflow-go/tree/main/pkg/sinker/examples/redis_sink
+            # A redis sink for e2e testing, see https://github.com/numaproj/numaflow-go/tree/main/examples/sinker/redis_sink
             image: quay.io/numaio/numaflow-go/redis-sink:stable
-            imagePullPolicy: Always
+            imagePullPolicy: IfNotPresent
             env:
               - name: SINK_HASH_KEY
                 # The key is set in the format of "pipeline_name-vertex_name"

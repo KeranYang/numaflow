@@ -18,11 +18,12 @@ package validator
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/util/intstr"
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 
-	"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 	dfv1 "github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
 )
 
@@ -135,10 +136,8 @@ func ValidatePipeline(pl *dfv1.Pipeline) error {
 		}
 
 		if e.Conditions != nil {
-			if e.Conditions.Tags != nil {
-				if len(e.Conditions.Tags.Values) == 0 {
-					return fmt.Errorf("invalid edge: conditional forwarding requires at least one tag value")
-				}
+			if len(e.Conditions.Tags.Values) == 0 {
+				return fmt.Errorf("invalid edge: conditional forwarding requires at least one tag value")
 			}
 		}
 	}
@@ -193,6 +192,12 @@ func validateIdleSource(pl dfv1.Pipeline) error {
 			return fmt.Errorf("invalid idle source watermark config, incrementBy should be greater than 0")
 		} else if pl.Spec.Watermark.IdleSource.Threshold.Duration < pl.Spec.Watermark.IdleSource.IncrementBy.Duration {
 			return fmt.Errorf("invalid idle source watermark config, threshold should be greater than or equal to incrementBy")
+		} else if pl.Spec.Watermark.IdleSource.InitSourceDelay != nil {
+			if pl.Spec.Watermark.IdleSource.InitSourceDelay.Duration <= 0 {
+				return fmt.Errorf("invalid idle source watermark config, initSourceDelay should be greater than 0")
+			} else if pl.Spec.Watermark.IdleSource.InitSourceDelay.Duration < pl.Spec.Watermark.IdleSource.Threshold.Duration {
+				return fmt.Errorf("invalid idle source watermark config, initSourceDelay should be greater than or equal to threshold")
+			}
 		}
 	}
 	return nil
@@ -278,24 +283,13 @@ func validateUDF(udf dfv1.UDF) error {
 }
 
 func validateMapUDF(udf dfv1.UDF) error {
-	if udf.Container != nil {
-		if udf.Container.Image == "" && udf.Builtin == nil {
-			return fmt.Errorf("invalid udf spec, either specify a builtin function, or a customized image")
-		}
-		if udf.Container.Image != "" && udf.Builtin != nil {
-			return fmt.Errorf("invalid udf, can not specify both builtin function, and a customized image")
-		}
-	} else if udf.Builtin == nil {
-		return fmt.Errorf("invalid udf, either specify a builtin function, or a customized image")
+	if udf.Container == nil || udf.Container.Image == "" {
+		return fmt.Errorf("invalid udf spec, a customized image is required")
 	}
 	return nil
 }
 
 func validateReduceUDF(udf dfv1.UDF) error {
-	if udf.Builtin != nil {
-		// No builtin function supported for reduce vertices.
-		return fmt.Errorf("invalid udf, there's no buildin function support in reduce vertices")
-	}
 	if udf.Container != nil {
 		if udf.Container.Image == "" {
 			return fmt.Errorf("invalid udf spec, a customized image is required")
@@ -403,7 +397,8 @@ func isReservedContainerName(name string) bool {
 		name == dfv1.CtrUdSideInput ||
 		name == dfv1.CtrInitSideInputs ||
 		name == dfv1.CtrSideInputsWatcher ||
-		name == dfv1.CtrFallbackUdsink
+		name == dfv1.CtrFallbackUdsink ||
+		name == dfv1.CtrOnSuccessUdsink
 }
 
 // validateCycles verifies that there are no invalid cycles in the pipeline.
@@ -586,15 +581,8 @@ func buildVisitedMap(vtxName string, visited map[string]struct{}, pl *dfv1.Pipel
 
 func validateSource(source dfv1.Source) error {
 	if transformer := source.UDTransformer; transformer != nil {
-		if transformer.Container != nil {
-			if transformer.Container.Image == "" && transformer.Builtin == nil {
-				return fmt.Errorf("invalid source transformer, either specify a builtin transformer, or a customized image")
-			}
-			if transformer.Container.Image != "" && transformer.Builtin != nil {
-				return fmt.Errorf("invalid source transformer, can not specify both builtin transformer, and a customized image")
-			}
-		} else if transformer.Builtin == nil {
-			return fmt.Errorf("invalid source transformer, either specify a builtin transformer, or a customized image")
+		if transformer.Container == nil || transformer.Container.Image == "" {
+			return fmt.Errorf("invalid source transformer, specify a customized image")
 		}
 	}
 	// TODO: add more validations for each source type
@@ -606,6 +594,14 @@ func validateSource(source dfv1.Source) error {
 			return fmt.Errorf("invalid user-defined source spec, only one of 'http', 'kafka', 'nats', 'generator' and 'udSource' can be specified")
 		}
 	}
+
+	// SQS source validation
+	if source.Sqs != nil {
+		if err := validateSQSSource(*source.Sqs); err != nil {
+			return fmt.Errorf("invalid SQS source: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -616,6 +612,14 @@ func validateSink(sink dfv1.Sink) error {
 		return err
 	}
 	// TODO: add more validations for each sink type
+
+	// SQS sink validation
+	if sink.Sqs != nil {
+		if err := validateSQSSink(*sink.Sqs); err != nil {
+			return fmt.Errorf("invalid SQS sink: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -647,7 +651,7 @@ func hasValidSinkRetryStrategy(s dfv1.Sink) error {
 
 		// If cap is provided but interval isn't, cap must be greater than or equal to default interval value
 		if s.RetryStrategy.BackOff.Cap != nil && s.RetryStrategy.BackOff.Interval == nil {
-			if s.RetryStrategy.BackOff.Cap.Duration < v1alpha1.DefaultRetryInterval {
+			if s.RetryStrategy.BackOff.Cap.Duration < dfv1.DefaultRetryInterval {
 				return fmt.Errorf("cap in backoff strategy cannot be less than default interval value, if interval is not provided")
 			}
 		}
@@ -666,4 +670,100 @@ func hasValidSinkRetryStrategy(s dfv1.Sink) error {
 // HasValidFallbackSink checks if the Sink vertex has a valid fallback sink configured
 func hasValidFallbackSink(s *dfv1.Sink) bool {
 	return s.Fallback != nil && s.Fallback.IsAnySinkSpecified()
+}
+
+// validateAWSAssumeRole validates AWS assume role configuration for any AWS service
+func validateAWSAssumeRole(assumeRole *dfv1.AWSAssumeRole) error {
+	if assumeRole == nil {
+		return nil // optional field
+	}
+
+	// RoleARN is required
+	if assumeRole.RoleARN == "" {
+		return fmt.Errorf("roleArn is required for assume role configuration")
+	}
+
+	// Basic ARN validation
+	if !strings.HasPrefix(assumeRole.RoleARN, "arn:aws:iam::") || !strings.Contains(assumeRole.RoleARN, ":role/") {
+		return fmt.Errorf("roleArn must be a valid AWS IAM role ARN")
+	}
+
+	// Validate duration if specified
+	if assumeRole.DurationSeconds != nil {
+		duration := *assumeRole.DurationSeconds
+		if duration < 900 || duration > 43200 { // 15 minutes to 12 hours
+			return fmt.Errorf("durationSeconds must be between 900 and 43200 seconds")
+		}
+	}
+
+	// Validate session name format if specified
+	if assumeRole.SessionName != nil {
+		sessionName := *assumeRole.SessionName
+		if len(sessionName) < 2 || len(sessionName) > 64 {
+			return fmt.Errorf("sessionName must be between 2 and 64 characters")
+		}
+		// AWS session names can contain: alphanumeric characters and =,.@-
+		validSessionName := regexp.MustCompile(`^[\w.,@=-]+$`)
+		if !validSessionName.MatchString(sessionName) {
+			return fmt.Errorf("sessionName contains invalid characters, only alphanumeric and =,.@- are allowed")
+		}
+	}
+
+	return nil
+}
+
+// validateSQSSource validates SQS source configuration
+func validateSQSSource(sqs dfv1.SqsSource) error {
+	// Basic required field validation
+	if sqs.AWSRegion == "" {
+		return fmt.Errorf("awsRegion is required")
+	}
+	if sqs.QueueName == "" {
+		return fmt.Errorf("queueName is required")
+	}
+	if sqs.QueueOwnerAWSAccountID == "" {
+		return fmt.Errorf("queueOwnerAWSAccountID is required")
+	} else {
+		// Basic AWS Account ID validation
+		// https://docs.aws.amazon.com/organizations/latest/APIReference/API_Account.html
+		validAccountID := regexp.MustCompile(`^\d{12}$`)
+		if !validAccountID.MatchString(sqs.QueueOwnerAWSAccountID) {
+			return fmt.Errorf("queueOwnerAWSAccountID must be a valid 12-digit AWS account ID")
+		}
+	}
+
+	// Validate assume role if present
+	if err := validateAWSAssumeRole(sqs.AssumeRole); err != nil {
+		return fmt.Errorf("invalid assume role configuration: %w", err)
+	}
+
+	return nil
+}
+
+// validateSQSSink validates SQS sink configuration
+func validateSQSSink(sqs dfv1.SqsSink) error {
+	// Basic required field validation
+	if sqs.AWSRegion == "" {
+		return fmt.Errorf("awsRegion is required")
+	}
+	if sqs.QueueName == "" {
+		return fmt.Errorf("queueName is required")
+	}
+	if sqs.QueueOwnerAWSAccountID == "" {
+		return fmt.Errorf("queueOwnerAWSAccountID is required")
+	} else {
+		// Basic AWS Account ID validation
+		// https://docs.aws.amazon.com/organizations/latest/APIReference/API_Account.html
+		validAccountID := regexp.MustCompile(`^\d{12}$`)
+		if !validAccountID.MatchString(sqs.QueueOwnerAWSAccountID) {
+			return fmt.Errorf("queueOwnerAWSAccountID must be a valid 12-digit AWS account ID")
+		}
+	}
+
+	// Validate assume role if present
+	if err := validateAWSAssumeRole(sqs.AssumeRole); err != nil {
+		return fmt.Errorf("invalid assume role configuration: %w", err)
+	}
+
+	return nil
 }

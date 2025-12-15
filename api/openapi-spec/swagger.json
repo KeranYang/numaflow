@@ -19483,6 +19483,43 @@
         }
       }
     },
+    "io.numaproj.numaflow.v1alpha1.AWSAssumeRole": {
+      "description": "AWSAssumeRole contains the configuration for AWS STS assume role authentication This can be used with any AWS service (SQS, S3, DynamoDB, etc.)",
+      "type": "object",
+      "required": [
+        "roleArn"
+      ],
+      "properties": {
+        "durationSeconds": {
+          "description": "DurationSeconds is the duration (in seconds) of the role session. Valid values: 900-43200 (15 minutes to 12 hours) Defaults to 3600 (1 hour) if not specified. The actual session duration is constrained by the maximum session duration setting of the IAM role being assumed.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "externalID": {
+          "description": "ExternalID is a unique identifier that might be required when you assume a role in another account. This is commonly used as an additional security measure for cross-account role access.",
+          "type": "string"
+        },
+        "policy": {
+          "description": "Policy is an IAM policy document (JSON string) that you want to use as an inline session policy. This parameter is optional. When specified, the session permissions are the intersection of the IAM role's identity-based policy and the session policies. This allows further restriction of permissions for the specific service operations.",
+          "type": "string"
+        },
+        "policyArns": {
+          "description": "PolicyARNs is a list of Amazon Resource Names (ARNs) of IAM managed policies that you want to use as managed session policies. The policies must exist in the same account as the role. This allows attaching existing managed policies to further restrict session permissions.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "roleArn": {
+          "description": "RoleARN is the Amazon Resource Name (ARN) of the role to assume. This is a required field when assume role is enabled. Example: \"arn:aws:iam::123456789012:role/CrossAccount-Service-Role\"",
+          "type": "string"
+        },
+        "sessionName": {
+          "description": "SessionName is an identifier for the assumed role session. This appears in AWS CloudTrail logs to help identify the source of API calls. If not specified, a default session name will be generated based on the service context.",
+          "type": "string"
+        }
+      }
+    },
     "io.numaproj.numaflow.v1alpha1.AbstractPodTemplate": {
       "description": "AbstractPodTemplate provides a template for pod customization in vertices, daemon deployments and so on.",
       "type": "object",
@@ -19524,12 +19561,12 @@
           }
         },
         "priority": {
-          "description": "The priority value. Various system components use this field to find the priority of the Redis pod. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
+          "description": "The priority value. Various system components use this field to find the priority of the pod. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
           "type": "integer",
           "format": "int32"
         },
         "priorityClassName": {
-          "description": "If specified, indicates the Redis pod's priority. \"system-node-critical\" and \"system-cluster-critical\" are two special keywords which indicate the highest priorities with the former being the highest priority. Any other name must be defined by creating a PriorityClass object with that name. If not specified, the pod priority will be default or zero if there is no default. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
+          "description": "If specified, indicates the pod's priority. \"system-node-critical\" and \"system-cluster-critical\" are two special keywords which indicate the highest priorities with the former being the highest priority. Any other name must be defined by creating a PriorityClass object with that name. If not specified, the pod priority will be default or zero if there is no default. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
           "type": "string"
         },
         "resourceClaims": {
@@ -19576,6 +19613,10 @@
         "log": {
           "description": "Log sink is used to write the data to the log.",
           "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.Log"
+        },
+        "pulsar": {
+          "description": "Pulsar sink is used to write the data to the Apache Pulsar.",
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.PulsarSink"
         },
         "serve": {
           "description": "Serve sink is used to return results when working with a ServingPipeline.",
@@ -19661,12 +19702,12 @@
           "format": "int32"
         },
         "priority": {
-          "description": "The priority value. Various system components use this field to find the priority of the Redis pod. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
+          "description": "The priority value. Various system components use this field to find the priority of the pod. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
           "type": "integer",
           "format": "int32"
         },
         "priorityClassName": {
-          "description": "If specified, indicates the Redis pod's priority. \"system-node-critical\" and \"system-cluster-critical\" are two special keywords which indicate the highest priorities with the former being the highest priority. Any other name must be defined by creating a PriorityClass object with that name. If not specified, the pod priority will be default or zero if there is no default. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
+          "description": "If specified, indicates the pod's priority. \"system-node-critical\" and \"system-cluster-critical\" are two special keywords which indicate the highest priorities with the former being the highest priority. Any other name must be defined by creating a PriorityClass object with that name. If not specified, the pod priority will be default or zero if there is no default. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
           "type": "string"
         },
         "resourceClaims": {
@@ -19813,9 +19854,6 @@
       "properties": {
         "jetstream": {
           "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.JetStreamConfig"
-        },
-        "redis": {
-          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.RedisConfig"
         }
       }
     },
@@ -20025,12 +20063,12 @@
           }
         },
         "priority": {
-          "description": "The priority value. Various system components use this field to find the priority of the Redis pod. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
+          "description": "The priority value. Various system components use this field to find the priority of the pod. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
           "type": "integer",
           "format": "int32"
         },
         "priorityClassName": {
-          "description": "If specified, indicates the Redis pod's priority. \"system-node-critical\" and \"system-cluster-critical\" are two special keywords which indicate the highest priorities with the former being the highest priority. Any other name must be defined by creating a PriorityClass object with that name. If not specified, the pod priority will be default or zero if there is no default. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
+          "description": "If specified, indicates the pod's priority. \"system-node-critical\" and \"system-cluster-critical\" are two special keywords which indicate the highest priorities with the former being the highest priority. Any other name must be defined by creating a PriorityClass object with that name. If not specified, the pod priority will be default or zero if there is no default. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
           "type": "string"
         },
         "replicas": {
@@ -20114,29 +20152,6 @@
         "tags": {
           "description": "Tags used to specify tags for conditional forwarding",
           "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.TagConditions"
-        }
-      }
-    },
-    "io.numaproj.numaflow.v1alpha1.Function": {
-      "type": "object",
-      "required": [
-        "name"
-      ],
-      "properties": {
-        "args": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "kwargs": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          }
-        },
-        "name": {
-          "type": "string"
         }
       }
     },
@@ -20407,107 +20422,6 @@
         }
       }
     },
-    "io.numaproj.numaflow.v1alpha1.GetRedisServiceSpecReq": {
-      "type": "object",
-      "required": [
-        "Labels",
-        "RedisContainerPort",
-        "SentinelContainerPort"
-      ],
-      "properties": {
-        "Labels": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          }
-        },
-        "RedisContainerPort": {
-          "type": "integer",
-          "format": "int32"
-        },
-        "SentinelContainerPort": {
-          "type": "integer",
-          "format": "int32"
-        }
-      }
-    },
-    "io.numaproj.numaflow.v1alpha1.GetRedisStatefulSetSpecReq": {
-      "type": "object",
-      "required": [
-        "ServiceName",
-        "Labels",
-        "RedisImage",
-        "SentinelImage",
-        "MetricsExporterImage",
-        "InitContainerImage",
-        "RedisContainerPort",
-        "SentinelContainerPort",
-        "RedisMetricsContainerPort",
-        "CredentialSecretName",
-        "TLSEnabled",
-        "PvcNameIfNeeded",
-        "ConfConfigMapName",
-        "ScriptsConfigMapName",
-        "HealthConfigMapName",
-        "DefaultResources"
-      ],
-      "properties": {
-        "ConfConfigMapName": {
-          "type": "string"
-        },
-        "CredentialSecretName": {
-          "type": "string"
-        },
-        "DefaultResources": {
-          "$ref": "#/definitions/io.k8s.api.core.v1.ResourceRequirements"
-        },
-        "HealthConfigMapName": {
-          "type": "string"
-        },
-        "InitContainerImage": {
-          "type": "string"
-        },
-        "Labels": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          }
-        },
-        "MetricsExporterImage": {
-          "type": "string"
-        },
-        "PvcNameIfNeeded": {
-          "type": "string"
-        },
-        "RedisContainerPort": {
-          "type": "integer",
-          "format": "int32"
-        },
-        "RedisImage": {
-          "type": "string"
-        },
-        "RedisMetricsContainerPort": {
-          "type": "integer",
-          "format": "int32"
-        },
-        "ScriptsConfigMapName": {
-          "type": "string"
-        },
-        "SentinelContainerPort": {
-          "type": "integer",
-          "format": "int32"
-        },
-        "SentinelImage": {
-          "type": "string"
-        },
-        "ServiceName": {
-          "type": "string"
-        },
-        "TLSEnabled": {
-          "type": "boolean"
-        }
-      }
-    },
     "io.numaproj.numaflow.v1alpha1.GetServingPipelineResourceReq": {
       "type": "object",
       "required": [
@@ -20653,6 +20567,10 @@
           "description": "IncrementBy is the duration to be added to the current watermark to progress the watermark when source is idling.",
           "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.Duration"
         },
+        "initSourceDelay": {
+          "description": "InitSourceDelay is the duration after which, if source doesn't produce any data, the watermark is initialized with the current wall clock time.",
+          "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.Duration"
+        },
         "stepInterval": {
           "description": "StepInterval is the duration between the subsequent increment of the watermark as long the source remains Idle. The default value is 0s which means that once we detect idle source, we will be incrementing the watermark by `IncrementBy` for time we detect that we source is empty (in other words, this will be a very frequent update).",
           "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.Duration"
@@ -20730,9 +20648,6 @@
       "properties": {
         "jetstream": {
           "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.JetStreamBufferService"
-        },
-        "redis": {
-          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.RedisBufferService"
         }
       }
     },
@@ -20825,12 +20740,12 @@
           "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.PersistenceStrategy"
         },
         "priority": {
-          "description": "The priority value. Various system components use this field to find the priority of the Redis pod. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
+          "description": "The priority value. Various system components use this field to find the priority of the pod. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
           "type": "integer",
           "format": "int32"
         },
         "priorityClassName": {
-          "description": "If specified, indicates the Redis pod's priority. \"system-node-critical\" and \"system-cluster-critical\" are two special keywords which indicate the highest priorities with the former being the highest priority. Any other name must be defined by creating a PriorityClass object with that name. If not specified, the pod priority will be default or zero if there is no default. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
+          "description": "If specified, indicates the pod's priority. \"system-node-critical\" and \"system-cluster-critical\" are two special keywords which indicate the highest priorities with the former being the highest priority. Any other name must be defined by creating a PriorityClass object with that name. If not specified, the pod priority will be default or zero if there is no default. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
           "type": "string"
         },
         "reloaderContainerTemplate": {
@@ -20921,6 +20836,21 @@
           "description": "Auth information",
           "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.NatsAuth"
         },
+        "consumer": {
+          "description": "Consumer represents the name of the consumer of the stream If not specified, a consumer with name `numaflow-pipeline_name-vertex_name-stream_name` will be created. If a consumer name is specified, a consumer with that name will be created if it doesn't exist on the stream.",
+          "type": "string"
+        },
+        "deliver_policy": {
+          "description": "The point in the stream from which to receive messages. https://docs.nats.io/nats-concepts/jetstream/consumers#deliverpolicy Valid options are: \"all\", \"new\", \"last\", \"last_per_subject\", \"by_start_sequence 42\", \"by_start_time 1753428483000\". The second value to \"by_start_time\" is unix epoch time in milliseconds.",
+          "type": "string"
+        },
+        "filter_subjects": {
+          "description": "A set of subjects that overlap with the subjects bound to the stream to filter delivery to subscribers. https://docs.nats.io/nats-concepts/jetstream/consumers#filtesubjects",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "stream": {
           "description": "Stream represents the name of the stream.",
           "type": "string"
@@ -20983,12 +20913,12 @@
           }
         },
         "priority": {
-          "description": "The priority value. Various system components use this field to find the priority of the Redis pod. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
+          "description": "The priority value. Various system components use this field to find the priority of the pod. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
           "type": "integer",
           "format": "int32"
         },
         "priorityClassName": {
-          "description": "If specified, indicates the Redis pod's priority. \"system-node-critical\" and \"system-cluster-critical\" are two special keywords which indicate the highest priorities with the former being the highest priority. Any other name must be defined by creating a PriorityClass object with that name. If not specified, the pod priority will be default or zero if there is no default. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
+          "description": "If specified, indicates the pod's priority. \"system-node-critical\" and \"system-cluster-critical\" are two special keywords which indicate the highest priorities with the former being the highest priority. Any other name must be defined by creating a PriorityClass object with that name. If not specified, the pod priority will be default or zero if there is no default. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
           "type": "string"
         },
         "resourceClaims": {
@@ -21173,13 +21103,17 @@
     "io.numaproj.numaflow.v1alpha1.MonoVertexLimits": {
       "type": "object",
       "properties": {
+        "rateLimit": {
+          "description": "RateLimit for MonoVertex defines how many messages can be read from Source. This is computed by number of `read` calls per second multiplied by the `readBatchSize`. This is how RateLimit is calculated for MonoVertex and for Source vertices.",
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.RateLimit"
+        },
         "readBatchSize": {
           "description": "Read batch size from the source.",
           "type": "integer",
           "format": "int64"
         },
         "readTimeout": {
-          "description": "Read timeout duration from the source.",
+          "description": "ReadTimeout is the read timeout duration from the source.",
           "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.Duration"
         }
       }
@@ -21272,12 +21206,12 @@
           }
         },
         "priority": {
-          "description": "The priority value. Various system components use this field to find the priority of the Redis pod. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
+          "description": "The priority value. Various system components use this field to find the priority of the pod. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
           "type": "integer",
           "format": "int32"
         },
         "priorityClassName": {
-          "description": "If specified, indicates the Redis pod's priority. \"system-node-critical\" and \"system-cluster-critical\" are two special keywords which indicate the highest priorities with the former being the highest priority. Any other name must be defined by creating a PriorityClass object with that name. If not specified, the pod priority will be default or zero if there is no default. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
+          "description": "If specified, indicates the pod's priority. \"system-node-critical\" and \"system-cluster-critical\" are two special keywords which indicate the highest priorities with the former being the highest priority. Any other name must be defined by creating a PriorityClass object with that name. If not specified, the pod priority will be default or zero if there is no default. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
           "type": "string"
         },
         "replicas": {
@@ -21328,6 +21262,9 @@
           "items": {
             "$ref": "#/definitions/io.k8s.api.core.v1.Toleration"
           }
+        },
+        "udf": {
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.UDF"
         },
         "updateStrategy": {
           "description": "The strategy to use to replace existing pods with new ones.",
@@ -21414,115 +21351,6 @@
         }
       }
     },
-    "io.numaproj.numaflow.v1alpha1.NativeRedis": {
-      "type": "object",
-      "properties": {
-        "affinity": {
-          "description": "The pod's scheduling constraints More info: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/",
-          "$ref": "#/definitions/io.k8s.api.core.v1.Affinity"
-        },
-        "automountServiceAccountToken": {
-          "description": "AutomountServiceAccountToken indicates whether a service account token should be automatically mounted.",
-          "type": "boolean"
-        },
-        "dnsConfig": {
-          "description": "Specifies the DNS parameters of a pod. Parameters specified here will be merged to the generated DNS configuration based on DNSPolicy.",
-          "$ref": "#/definitions/io.k8s.api.core.v1.PodDNSConfig"
-        },
-        "dnsPolicy": {
-          "description": "Set DNS policy for the pod. Defaults to \"ClusterFirst\". Valid values are 'ClusterFirstWithHostNet', 'ClusterFirst', 'Default' or 'None'. DNS parameters given in DNSConfig will be merged with the policy selected with DNSPolicy. To have DNS options set along with hostNetwork, you have to specify DNS policy explicitly to 'ClusterFirstWithHostNet'.",
-          "type": "string"
-        },
-        "imagePullSecrets": {
-          "description": "ImagePullSecrets is an optional list of references to secrets in the same namespace to use for pulling any of the images used by this PodSpec. If specified, these secrets will be passed to individual puller implementations for them to use. For example, in the case of docker, only DockerConfig type secrets are honored. More info: https://kubernetes.io/docs/concepts/containers/images#specifying-imagepullsecrets-on-a-pod",
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/io.k8s.api.core.v1.LocalObjectReference"
-          },
-          "x-kubernetes-patch-merge-key": "name",
-          "x-kubernetes-patch-strategy": "merge"
-        },
-        "initContainerTemplate": {
-          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.ContainerTemplate"
-        },
-        "metadata": {
-          "description": "Metadata sets the pods's metadata, i.e. annotations and labels",
-          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.Metadata"
-        },
-        "metricsContainerTemplate": {
-          "description": "MetricsContainerTemplate contains customized spec for metrics container",
-          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.ContainerTemplate"
-        },
-        "nodeSelector": {
-          "description": "NodeSelector is a selector which must be true for the pod to fit on a node. Selector which must match a node's labels for the pod to be scheduled on that node. More info: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/",
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          }
-        },
-        "persistence": {
-          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.PersistenceStrategy"
-        },
-        "priority": {
-          "description": "The priority value. Various system components use this field to find the priority of the Redis pod. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
-          "type": "integer",
-          "format": "int32"
-        },
-        "priorityClassName": {
-          "description": "If specified, indicates the Redis pod's priority. \"system-node-critical\" and \"system-cluster-critical\" are two special keywords which indicate the highest priorities with the former being the highest priority. Any other name must be defined by creating a PriorityClass object with that name. If not specified, the pod priority will be default or zero if there is no default. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
-          "type": "string"
-        },
-        "redisContainerTemplate": {
-          "description": "RedisContainerTemplate contains customized spec for Redis container",
-          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.ContainerTemplate"
-        },
-        "replicas": {
-          "description": "Redis StatefulSet size",
-          "type": "integer",
-          "format": "int32"
-        },
-        "resourceClaims": {
-          "description": "ResourceClaims defines which ResourceClaims must be allocated and reserved before the Pod is allowed to start. The resources will be made available to those containers which consume them by name.",
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/io.k8s.api.core.v1.PodResourceClaim"
-          },
-          "x-kubernetes-patch-merge-key": "name",
-          "x-kubernetes-patch-strategy": "merge,retainKeys"
-        },
-        "runtimeClassName": {
-          "description": "RuntimeClassName refers to a RuntimeClass object in the node.k8s.io group, which should be used to run this pod.  If no RuntimeClass resource matches the named class, the pod will not be run. If unset or empty, the \"legacy\" RuntimeClass will be used, which is an implicit class with an empty definition that uses the default runtime handler. More info: https://git.k8s.io/enhancements/keps/sig-node/585-runtime-class",
-          "type": "string"
-        },
-        "securityContext": {
-          "description": "SecurityContext holds pod-level security attributes and common container settings. Optional: Defaults to empty.  See type description for default values of each field.",
-          "$ref": "#/definitions/io.k8s.api.core.v1.PodSecurityContext"
-        },
-        "sentinelContainerTemplate": {
-          "description": "SentinelContainerTemplate contains customized spec for Redis container",
-          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.ContainerTemplate"
-        },
-        "serviceAccountName": {
-          "description": "ServiceAccountName applied to the pod",
-          "type": "string"
-        },
-        "settings": {
-          "description": "Redis configuration, if not specified, global settings in numaflow-controller-config will be used.",
-          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.RedisSettings"
-        },
-        "tolerations": {
-          "description": "If specified, the pod's tolerations.",
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/io.k8s.api.core.v1.Toleration"
-          }
-        },
-        "version": {
-          "description": "Redis version, such as \"6.0.16\"",
-          "type": "string"
-        }
-      }
-    },
     "io.numaproj.numaflow.v1alpha1.NatsAuth": {
       "description": "NatsAuth defines how to authenticate the nats access",
       "type": "object",
@@ -21595,7 +21423,7 @@
       "type": "object",
       "properties": {
         "accessMode": {
-          "description": "Available access modes such as ReadWriteOnce, ReadWriteMany https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes",
+          "description": "Available access modes such as ReadWriteOncePod, ReadWriteOnce, ReadWriteMany https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes",
           "type": "string"
         },
         "storageClassName": {
@@ -21645,6 +21473,10 @@
           "description": "BufferUsageLimit is used to define the percentage of the buffer usage limit, a valid value should be less than 100, for example, 85. Only applies to UDF and Source vertices as only they do buffer write. It will be overridden by the settings in vertex limits.",
           "type": "integer",
           "format": "int64"
+        },
+        "rateLimit": {
+          "description": "RateLimit is used to define the rate limit for all the vertices in the pipeline, it could be overridden by the vertex's limit settings. For source vertices, it will be set to rate divided by readBatchSize because for source vertices, the rate limit is defined by how many times the `Read` is called per second Reduce does not support RateLimit.",
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.RateLimit"
         },
         "readBatchSize": {
           "description": "Read batch size for all the vertices in the pipeline, can be overridden by the vertex's limit settings.",
@@ -21837,9 +21669,47 @@
       "description": "PulsarAuth defines how to authenticate with Pulsar",
       "type": "object",
       "properties": {
+        "basicAuth": {
+          "description": "Authentication using HTTP basic https://pulsar.apache.org/docs/4.0.x/security-basic-auth/",
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.PulsarBasicAuth"
+        },
         "token": {
           "description": "JWT Token auth",
           "$ref": "#/definitions/io.k8s.api.core.v1.SecretKeySelector"
+        }
+      }
+    },
+    "io.numaproj.numaflow.v1alpha1.PulsarBasicAuth": {
+      "type": "object",
+      "properties": {
+        "password": {
+          "$ref": "#/definitions/io.k8s.api.core.v1.SecretKeySelector"
+        },
+        "username": {
+          "$ref": "#/definitions/io.k8s.api.core.v1.SecretKeySelector"
+        }
+      }
+    },
+    "io.numaproj.numaflow.v1alpha1.PulsarSink": {
+      "type": "object",
+      "required": [
+        "serverAddr",
+        "topic",
+        "producerName"
+      ],
+      "properties": {
+        "auth": {
+          "description": "Auth information",
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.PulsarAuth"
+        },
+        "producerName": {
+          "type": "string"
+        },
+        "serverAddr": {
+          "type": "string"
+        },
+        "topic": {
+          "type": "string"
         }
       }
     },
@@ -21875,66 +21745,188 @@
         }
       }
     },
-    "io.numaproj.numaflow.v1alpha1.RedisBufferService": {
+    "io.numaproj.numaflow.v1alpha1.RateLimit": {
       "type": "object",
       "properties": {
-        "external": {
-          "description": "External holds an External Redis config",
-          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.RedisConfig"
+        "max": {
+          "description": "Max is the maximum TPS that this vertex can process give a distributed `Store` is configured. Otherwise, it will be the maximum TPS for a single replica.",
+          "type": "integer",
+          "format": "int64"
         },
-        "native": {
-          "description": "Native brings up a native Redis service",
-          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.NativeRedis"
+        "min": {
+          "description": "Minimum TPS allowed during initial bootup. This value will be distributed across all the replicas if a distributed `Store` is configured. Otherwise, it will be the minimum TPS for a single replica.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "modes": {
+          "description": "RateLimiterModes is used to define the modes for rate limiting.",
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.RateLimiterModes"
+        },
+        "rampUpDuration": {
+          "description": "RampUpDuration is the duration to reach the maximum TPS from the minimum TPS. The min unit of ramp up is 1 in 1 second.",
+          "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.Duration"
+        },
+        "resumedRampUp": {
+          "description": "ResumedRampUp is used to enable the resume mode for rate limiting.\n\nThis, if true, will allow the processor to resume the ramp-up process from the last known state of the rate limiter, i.e., if the processor was allowed X tokens before shutting down, it will be allowed X tokens again after the processor restarts.\n\nThe resumed ramp-up process will be allowed until TTL time after the processor first deregisters with the rate limiter.",
+          "type": "boolean"
+        },
+        "store": {
+          "description": "Store is used to define the Distributed Store for the rate limiting. We also support in-memory store if no store is configured. This means that every replica will have its own rate limit and the actual TPS will be the sum of all the replicas.",
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.RateLimiterStore"
+        },
+        "ttl": {
+          "description": "TTL is used to define the duration after which a pod is considered stale and removed from the pool of pods if it doesn't sync with the rate limiter.\n\nFurthermore, if the ResumedRampUp is true, then TTL also defines the amount of time within which, if a pod re-registers / registers with the same name, with the rate limiter, it will be assigned the same rate limit as the previous pod with that name.",
+          "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.Duration"
         }
       }
     },
-    "io.numaproj.numaflow.v1alpha1.RedisConfig": {
+    "io.numaproj.numaflow.v1alpha1.RateLimiterGoBackN": {
+      "description": "RateLimiterGoBackN is for the GoBackN mode. Releases additional tokens only when previously released tokens have been utilized above the configured threshold otherwise triggers a ramp-down. Ramp-down is also triggered when the request is made after quite a while.",
       "type": "object",
       "properties": {
-        "masterName": {
-          "description": "Only required when Sentinel is used",
-          "type": "string"
+        "coolDownPeriod": {
+          "description": "CoolDownPeriod is the duration after which the rate limiter will start ramping down if the request is made after the cool-down period.",
+          "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.Duration"
         },
-        "password": {
-          "description": "Redis password secret selector",
-          "$ref": "#/definitions/io.k8s.api.core.v1.SecretKeySelector"
+        "rampDownPercentage": {
+          "description": "RampDownStrength is the strength of the ramp-down. It is a value between 0 and 1. 0 means no ramp-down and 1 means token pool is ramped down at the rate of slope=(max - min)/duration.",
+          "type": "integer",
+          "format": "int64"
         },
-        "sentinelPassword": {
-          "description": "Sentinel password secret selector",
-          "$ref": "#/definitions/io.k8s.api.core.v1.SecretKeySelector"
-        },
-        "sentinelUrl": {
-          "description": "Sentinel URL, will be ignored if Redis URL is provided",
-          "type": "string"
-        },
-        "url": {
-          "description": "Redis URL",
-          "type": "string"
-        },
-        "user": {
-          "description": "Redis user",
-          "type": "string"
+        "thresholdPercentage": {
+          "description": "ThresholdPercentage specifies the minimum percentage of capacity, availed by the rate limiter, that should be consumed at any instance to allow the rate limiter to unlock additional capacity. For example, given the following configuration: - max = 100 - min = 10 - rampUpDuration = 10s i.e.--\u003e slope = 10 messages/second - thresholdPercentage = 50 at t = 0, the rate limiter will release 10 messages and at least 5 of those should be consumed to unlock additional capacity of 10 messages at t = 1 to make the total capacity of 20.",
+          "type": "integer",
+          "format": "int64"
         }
       }
     },
-    "io.numaproj.numaflow.v1alpha1.RedisSettings": {
+    "io.numaproj.numaflow.v1alpha1.RateLimiterInMemoryStore": {
+      "type": "object"
+    },
+    "io.numaproj.numaflow.v1alpha1.RateLimiterModes": {
+      "description": "RateLimiterModes defines the modes for rate limiting.",
       "type": "object",
       "properties": {
-        "master": {
-          "description": "Special settings for Redis master node, will override the global settings from controller config",
-          "type": "string"
+        "goBackN": {
+          "description": "Releases additional tokens only when previously released tokens have been utilized above the configured threshold otherwise triggers a ramp-down. Ramp-down is also triggered when the request is made after quite a while.",
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.RateLimiterGoBackN"
         },
-        "redis": {
-          "description": "Redis settings shared by both master and slaves, will override the global settings from controller config",
-          "type": "string"
+        "onlyIfUsed": {
+          "description": "Releases additional tokens only when previously released tokens have been utilized above the configured threshold",
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.RateLimiterOnlyIfUsed"
         },
-        "replica": {
-          "description": "Special settings for Redis replica nodes, will override the global settings from controller config",
+        "relaxed": {
+          "description": "If there is some traffic, then release the max possible tokens.",
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.RateLimiterRelaxed"
+        },
+        "scheduled": {
+          "description": "Irrespective of the traffic, the rate limiter releases max possible tokens based on ramp-up duration.",
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.RateLimiterScheduled"
+        }
+      }
+    },
+    "io.numaproj.numaflow.v1alpha1.RateLimiterOnlyIfUsed": {
+      "description": "RateLimiterOnlyIfUsed is for the OnlyIfUsed mode. Releases additional tokens only when previously released tokens have been utilized above the configured threshold",
+      "type": "object",
+      "properties": {
+        "thresholdPercentage": {
+          "description": "ThresholdPercentage specifies the minimum percentage of capacity, availed by the rate limiter, that should be consumed at any instance to allow the rate limiter to unlock additional capacity.\n\nDefaults to 50%\n\nFor example, given the following configuration: - max = 100 - min = 10 - rampUpDuration = 10s i.e.--\u003e slope = 10 messages/second - thresholdPercentage = 50 at t = 0, the rate limiter will release 10 messages and at least 5 of those should be consumed to unlock additional capacity of 10 messages at t = 1 to make the total capacity of 20.",
+          "type": "integer",
+          "format": "int64"
+        }
+      }
+    },
+    "io.numaproj.numaflow.v1alpha1.RateLimiterRedisStore": {
+      "type": "object",
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "db": {
+          "description": "COMMON: Optional DB index (default 0)",
+          "type": "integer",
+          "format": "int32"
+        },
+        "mode": {
+          "description": "Choose how to connect to Redis. - Single: use a single URL (redis://... or rediss://...) - Sentinel: discover the node via Redis Sentinel",
           "type": "string"
         },
         "sentinel": {
-          "description": "Sentinel settings, will override the global settings from controller config",
+          "description": "SENTINEL MODE: Settings to reach Sentinel and the selected Redis node Mutually exclusive with .url",
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.RedisSentinelConfig"
+        },
+        "url": {
+          "description": "SINGLE MODE: Full connection URL, e.g. redis://host:6379/0 or rediss://host:port/0 Mutually exclusive with .sentinel",
           "type": "string"
+        }
+      }
+    },
+    "io.numaproj.numaflow.v1alpha1.RateLimiterRelaxed": {
+      "description": "RateLimiterRelaxed is for the relaxed mode. It will release the max possible tokens if there is some traffic.",
+      "type": "object"
+    },
+    "io.numaproj.numaflow.v1alpha1.RateLimiterScheduled": {
+      "description": "RateLimiterScheduled is for the scheduled mode. It will release the max possible tokens based on ramp-up duration irrespective of traffic encountered.",
+      "type": "object"
+    },
+    "io.numaproj.numaflow.v1alpha1.RateLimiterStore": {
+      "type": "object",
+      "properties": {
+        "inMemoryStore": {
+          "description": "InMemoryStore is used to define the in-memory store for the rate limit.",
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.RateLimiterInMemoryStore"
+        },
+        "redisStore": {
+          "description": "RedisStore is used to define the redis store for the rate limit.",
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.RateLimiterRedisStore"
+        }
+      }
+    },
+    "io.numaproj.numaflow.v1alpha1.RedisAuth": {
+      "type": "object",
+      "properties": {
+        "password": {
+          "$ref": "#/definitions/io.k8s.api.core.v1.SecretKeySelector"
+        },
+        "username": {
+          "description": "For Redis 6+ ACLs. If Username omitted, password-only is also supported.",
+          "$ref": "#/definitions/io.k8s.api.core.v1.SecretKeySelector"
+        }
+      }
+    },
+    "io.numaproj.numaflow.v1alpha1.RedisSentinelConfig": {
+      "type": "object",
+      "required": [
+        "masterName",
+        "endpoints"
+      ],
+      "properties": {
+        "endpoints": {
+          "description": "At least one Sentinel endpoint; 2–3 recommended. Use host:port pairs. Example: [\"sentinel-0.redis.svc:26379\", \"sentinel-1.redis.svc:26379\"]",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "masterName": {
+          "description": "Required Sentinel \"service name\" (aka master name) from sentinel.conf",
+          "type": "string"
+        },
+        "redisAuth": {
+          "description": "Auth to talk to the Redis data nodes (data-plane). Optional.",
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.RedisAuth"
+        },
+        "redisTLS": {
+          "description": "TLS for Redis data nodes (redis). Often enabled even if Sentinel is plaintext.",
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.TLS"
+        },
+        "sentinelAuth": {
+          "description": "Auth to talk to the Sentinel daemons (control-plane). Optional.",
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.RedisAuth"
+        },
+        "sentinelTLS": {
+          "description": "TLS for Sentinel connections (if your Sentinels expose TLS).",
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.TLS"
         }
       }
     },
@@ -22255,12 +22247,12 @@
           "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.Ports"
         },
         "priority": {
-          "description": "The priority value. Various system components use this field to find the priority of the Redis pod. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
+          "description": "The priority value. Various system components use this field to find the priority of the pod. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
           "type": "integer",
           "format": "int32"
         },
         "priorityClassName": {
-          "description": "If specified, indicates the Redis pod's priority. \"system-node-critical\" and \"system-cluster-critical\" are two special keywords which indicate the highest priorities with the former being the highest priority. Any other name must be defined by creating a PriorityClass object with that name. If not specified, the pod priority will be default or zero if there is no default. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
+          "description": "If specified, indicates the pod's priority. \"system-node-critical\" and \"system-cluster-critical\" are two special keywords which indicate the highest priorities with the former being the highest priority. Any other name must be defined by creating a PriorityClass object with that name. If not specified, the pod priority will be default or zero if there is no default. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
           "type": "string"
         },
         "replicas": {
@@ -22423,12 +22415,12 @@
           }
         },
         "priority": {
-          "description": "The priority value. Various system components use this field to find the priority of the Redis pod. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
+          "description": "The priority value. Various system components use this field to find the priority of the pod. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
           "type": "integer",
           "format": "int32"
         },
         "priorityClassName": {
-          "description": "If specified, indicates the Redis pod's priority. \"system-node-critical\" and \"system-cluster-critical\" are two special keywords which indicate the highest priorities with the former being the highest priority. Any other name must be defined by creating a PriorityClass object with that name. If not specified, the pod priority will be default or zero if there is no default. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
+          "description": "If specified, indicates the pod's priority. \"system-node-critical\" and \"system-cluster-critical\" are two special keywords which indicate the highest priorities with the former being the highest priority. Any other name must be defined by creating a PriorityClass object with that name. If not specified, the pod priority will be default or zero if there is no default. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
           "type": "string"
         },
         "resourceClaims": {
@@ -22479,6 +22471,14 @@
         "log": {
           "description": "Log sink is used to write the data to the log.",
           "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.Log"
+        },
+        "onSuccess": {
+          "description": "OnSuccess sink allows triggering a secondary sink operation only after the primary sink completes successfully The writes to OnSuccess sink will only be initiated if the ud-sink response field sets it. A new Message crafted in the Primary sink can be written on the OnSuccess sink.",
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.AbstractSink"
+        },
+        "pulsar": {
+          "description": "Pulsar sink is used to write the data to the Apache Pulsar.",
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.PulsarSink"
         },
         "retryStrategy": {
           "description": "RetryStrategy struct encapsulates the settings for retrying operations in the event of failures.",
@@ -22559,6 +22559,10 @@
         "queueOwnerAWSAccountID"
       ],
       "properties": {
+        "assumeRole": {
+          "description": "AssumeRole contains the configuration for AWS STS assume role. When specified, the SQS client will assume the specified role for authentication.",
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.AWSAssumeRole"
+        },
         "awsRegion": {
           "description": "AWSRegion is the AWS Region where the SQS queue is located",
           "type": "string"
@@ -22582,6 +22586,10 @@
         "queueOwnerAWSAccountID"
       ],
       "properties": {
+        "assumeRole": {
+          "description": "AssumeRole contains the configuration for AWS STS assume role. When specified, the SQS client will assume the specified role for authentication.",
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.AWSAssumeRole"
+        },
         "attributeNames": {
           "description": "AttributeNames is a list of attributes that need to be returned along with each message. Valid values: All | Policy | VisibilityTimeout | MaximumMessageSize | MessageRetentionPeriod | ApproximateNumberOfMessages | ApproximateNumberOfMessagesNotVisible | CreatedTimestamp | LastModifiedTimestamp | QueueArn | ApproximateNumberOfMessagesDelayed | DelaySeconds | ReceiveMessageWaitTimeSeconds | RedrivePolicy | FifoQueue | ContentBasedDeduplication | KmsMasterKeyId | KmsDataKeyReusePeriodSeconds | DeduplicationScope | FifoThroughputLimit | RedriveAllowPolicy | SqsManagedSseEnabled",
           "type": "array",
@@ -22704,35 +22712,9 @@
         }
       }
     },
-    "io.numaproj.numaflow.v1alpha1.Transformer": {
-      "type": "object",
-      "required": [
-        "name"
-      ],
-      "properties": {
-        "args": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "kwargs": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          }
-        },
-        "name": {
-          "type": "string"
-        }
-      }
-    },
     "io.numaproj.numaflow.v1alpha1.UDF": {
       "type": "object",
       "properties": {
-        "builtin": {
-          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.Function"
-        },
         "container": {
           "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.Container"
         },
@@ -22766,9 +22748,6 @@
     "io.numaproj.numaflow.v1alpha1.UDTransformer": {
       "type": "object",
       "properties": {
-        "builtin": {
-          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.Transformer"
-        },
         "container": {
           "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.Container"
         }
@@ -22853,6 +22832,10 @@
           "description": "BufferUsageLimit is used to define the percentage of the buffer usage limit, a valid value should be less than 100, for example, 85. It overrides the settings from pipeline limits.",
           "type": "integer",
           "format": "int64"
+        },
+        "rateLimit": {
+          "description": "RateLimit is used to define the rate limit for the vertex, it overrides the settings from pipeline limits. For Source vertices, the rate limit is defined by how many times the `Read` is called per second multiplied by the `readBatchSize`. Pipeline level rate limit is not applied to Source vertices.",
+          "$ref": "#/definitions/io.numaproj.numaflow.v1alpha1.RateLimit"
         },
         "readBatchSize": {
           "description": "Read batch size from the source or buffer. It overrides the settings from pipeline limits.",
@@ -22981,12 +22964,12 @@
           "type": "string"
         },
         "priority": {
-          "description": "The priority value. Various system components use this field to find the priority of the Redis pod. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
+          "description": "The priority value. Various system components use this field to find the priority of the pod. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
           "type": "integer",
           "format": "int32"
         },
         "priorityClassName": {
-          "description": "If specified, indicates the Redis pod's priority. \"system-node-critical\" and \"system-cluster-critical\" are two special keywords which indicate the highest priorities with the former being the highest priority. Any other name must be defined by creating a PriorityClass object with that name. If not specified, the pod priority will be default or zero if there is no default. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
+          "description": "If specified, indicates the pod's priority. \"system-node-critical\" and \"system-cluster-critical\" are two special keywords which indicate the highest priorities with the former being the highest priority. Any other name must be defined by creating a PriorityClass object with that name. If not specified, the pod priority will be default or zero if there is no default. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
           "type": "string"
         },
         "replicas": {
@@ -23192,12 +23175,12 @@
           }
         },
         "priority": {
-          "description": "The priority value. Various system components use this field to find the priority of the Redis pod. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
+          "description": "The priority value. Various system components use this field to find the priority of the pod. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
           "type": "integer",
           "format": "int32"
         },
         "priorityClassName": {
-          "description": "If specified, indicates the Redis pod's priority. \"system-node-critical\" and \"system-cluster-critical\" are two special keywords which indicate the highest priorities with the former being the highest priority. Any other name must be defined by creating a PriorityClass object with that name. If not specified, the pod priority will be default or zero if there is no default. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
+          "description": "If specified, indicates the pod's priority. \"system-node-critical\" and \"system-cluster-critical\" are two special keywords which indicate the highest priorities with the former being the highest priority. Any other name must be defined by creating a PriorityClass object with that name. If not specified, the pod priority will be default or zero if there is no default. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/",
           "type": "string"
         },
         "resourceClaims": {

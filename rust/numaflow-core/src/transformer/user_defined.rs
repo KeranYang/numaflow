@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use numaflow_pb::clients::sourcetransformer::{
     self, SourceTransformRequest, SourceTransformResponse,
-    source_transform_client::SourceTransformClient,
+    source_transform_client::SourceTransformClient, source_transform_response,
 };
 use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
@@ -12,7 +12,8 @@ use tonic::{Request, Streaming};
 
 use crate::config::get_vertex_name;
 use crate::error::{Error, Result};
-use crate::message::{Message, MessageID, Offset};
+use crate::message::{AckHandle, Message, MessageID, Offset};
+use crate::metadata::Metadata;
 use crate::shared::grpc::{prost_timestamp_from_utc, utc_from_timestamp};
 
 type ResponseSenderMap =
@@ -22,7 +23,56 @@ type ResponseSenderMap =
 struct ParentMessageInfo {
     offset: Offset,
     is_late: bool,
-    headers: HashMap<String, String>,
+    headers: Arc<HashMap<String, String>>,
+    metadata: Option<Arc<Metadata>>,
+    ack_handle: Option<Arc<AckHandle>>,
+}
+
+// we are passing the reference for msg info because we can have more than 1 response for a single request and
+// each response will use the same parent message info.
+struct UserDefinedTransformerMessage<'a>(
+    source_transform_response::Result,
+    &'a ParentMessageInfo,
+    i32,
+);
+
+impl From<UserDefinedTransformerMessage<'_>> for Message {
+    fn from(value: UserDefinedTransformerMessage<'_>) -> Self {
+        Message {
+            typ: Default::default(),
+            id: MessageID {
+                vertex_name: get_vertex_name().to_string().into(),
+                index: value.2,
+                offset: value.1.offset.clone().to_string().into(),
+            },
+            keys: Arc::from(value.0.keys),
+            tags: Some(Arc::from(value.0.tags)),
+            value: value.0.value.into(),
+            offset: value.1.offset.clone(),
+            event_time: value
+                .0
+                .event_time
+                .map(utc_from_timestamp)
+                .expect("event time should be present"),
+            headers: Arc::clone(&value.1.headers),
+            watermark: None,
+            metadata: {
+                let mut metadata = Metadata::default();
+                // Get SystemMetadata from parent message info
+                if let Some(parent_metadata) = &value.1.metadata {
+                    metadata.sys_metadata = parent_metadata.sys_metadata.clone();
+                }
+                // Get UserMetadata from the response if present
+                if let Some(response_metadata) = &value.0.metadata {
+                    let response_meta: Metadata = response_metadata.clone().into();
+                    metadata.user_metadata = response_meta.user_metadata;
+                }
+                Some(Arc::new(metadata))
+            },
+            is_late: value.1.is_late,
+            ack_handle: value.1.ack_handle.clone(),
+        }
+    }
 }
 
 /// UserDefinedTransformer exposes methods to do user-defined transformations.
@@ -49,7 +99,8 @@ impl From<Message> for SourceTransformRequest {
                 value: message.value.to_vec(),
                 event_time: Some(prost_timestamp_from_utc(message.event_time)),
                 watermark: message.watermark.map(prost_timestamp_from_utc),
-                headers: message.headers,
+                headers: Arc::unwrap_or_clone(message.headers),
+                metadata: message.metadata.map(|m| Arc::unwrap_or_clone(m).into()),
             }),
             handshake: None,
         }
@@ -73,22 +124,21 @@ impl UserDefinedTransformer {
         read_tx
             .send(handshake_request)
             .await
-            .map_err(|e| Error::Transformer(format!("failed to send handshake request: {}", e)))?;
+            .map_err(|e| Error::Transformer(format!("failed to send handshake request: {e}")))?;
 
         let mut resp_stream = client
             .source_transform_fn(Request::new(read_stream))
             .await
-            .map_err(Error::Grpc)?
+            .map_err(|e| Error::Grpc(Box::new(e)))?
             .into_inner();
 
-        let handshake_response =
-            resp_stream
-                .message()
-                .await
-                .map_err(Error::Grpc)?
-                .ok_or(Error::Transformer(
-                    "failed to receive handshake response".to_string(),
-                ))?;
+        let handshake_response = resp_stream
+            .message()
+            .await
+            .map_err(|e| Error::Grpc(Box::new(e)))?
+            .ok_or(Error::Transformer(
+                "failed to receive handshake response".to_string(),
+            ))?;
 
         if handshake_response.handshake.is_none_or(|h| !h.sot) {
             return Err(Error::Transformer("invalid handshake response".to_string()));
@@ -124,7 +174,7 @@ impl UserDefinedTransformer {
             Err(e) => {
                 let mut senders = sender_map.lock().await;
                 for (_, (_, sender)) in senders.drain() {
-                    let _ = sender.send(Err(Error::Grpc(e.clone())));
+                    let _ = sender.send(Err(Error::Grpc(Box::new(e.clone()))));
                 }
                 None
             }
@@ -133,26 +183,7 @@ impl UserDefinedTransformer {
             if let Some((msg_info, sender)) = sender_map.lock().await.remove(&msg_id) {
                 let mut response_messages = vec![];
                 for (i, result) in resp.results.into_iter().enumerate() {
-                    let message = Message {
-                        typ: Default::default(),
-                        id: MessageID {
-                            vertex_name: get_vertex_name().to_string().into(),
-                            index: i as i32,
-                            offset: msg_info.offset.clone().to_string().into(),
-                        },
-                        keys: Arc::from(result.keys),
-                        tags: Some(Arc::from(result.tags)),
-                        value: result.value.into(),
-                        offset: msg_info.offset.clone(),
-                        event_time: result
-                            .event_time
-                            .map(utc_from_timestamp)
-                            .expect("event time should be present"),
-                        headers: msg_info.headers.clone(),
-                        watermark: None,
-                        metadata: None,
-                        is_late: msg_info.is_late,
-                    };
+                    let message = UserDefinedTransformerMessage(result, &msg_info, i as i32).into();
                     response_messages.push(message);
                 }
                 sender
@@ -172,8 +203,10 @@ impl UserDefinedTransformer {
 
         let msg_info = ParentMessageInfo {
             offset: message.offset.clone(),
-            headers: message.headers.clone(),
+            headers: Arc::clone(&message.headers),
             is_late: message.is_late,
+            metadata: message.metadata.clone(),
+            ack_handle: message.ack_handle.clone(),
         };
 
         self.senders
@@ -192,6 +225,7 @@ mod tests {
     use std::time::Duration;
 
     use chrono::{TimeZone, Utc};
+    use numaflow::shared::ServerExtras;
     use numaflow::sourcetransform;
     use tempfile::TempDir;
 
@@ -306,4 +340,6 @@ mod tests {
         let request: SourceTransformRequest = message.into();
         assert!(request.request.is_some());
     }
+
+    // TODO(ajain60): add unit test for metadata once rust sdk supports it
 }

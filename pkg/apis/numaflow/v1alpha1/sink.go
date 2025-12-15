@@ -27,9 +27,14 @@ type Sink struct {
 	// initiated if the ud-sink response field sets it.
 	// +optional
 	Fallback *AbstractSink `json:"fallback,omitempty" protobuf:"bytes,2,opt,name=fallback"`
+	// OnSuccess sink allows triggering a secondary sink operation only after the primary sink completes successfully
+	// The writes to OnSuccess sink will only be initiated if the ud-sink response field sets it.
+	// A new Message crafted in the Primary sink can be written on the OnSuccess sink.
+	// +optional
+	OnSuccess *AbstractSink `json:"onSuccess,omitempty" protobuf:"bytes,3,opt,name=onSuccess"`
 	// RetryStrategy struct encapsulates the settings for retrying operations in the event of failures.
 	// +optional
-	RetryStrategy RetryStrategy `json:"retryStrategy,omitempty" protobuf:"bytes,3,opt,name=retryStrategy"`
+	RetryStrategy RetryStrategy `json:"retryStrategy,omitempty" protobuf:"bytes,4,opt,name=retryStrategy"`
 }
 
 type AbstractSink struct {
@@ -52,6 +57,9 @@ type AbstractSink struct {
 	// SQS sink is used to write the data to the AWS SQS.
 	// +optional
 	Sqs *SqsSink `json:"sqs,omitempty" protobuf:"bytes,6,opt,name=sqs"`
+	// Pulsar sink is used to write the data to the Apache Pulsar.
+	// +optional
+	Pulsar *PulsarSink `json:"pulsar,omitempty" protobuf:"bytes,7,opt,name=pulsar"`
 }
 
 func (s Sink) getContainers(req getContainerReq) ([]corev1.Container, []corev1.Container, error) {
@@ -66,10 +74,15 @@ func (s Sink) getContainers(req getContainerReq) ([]corev1.Container, []corev1.C
 	if s.Fallback != nil && s.Fallback.UDSink != nil {
 		sidecarContainers = append(sidecarContainers, s.getFallbackUDSinkContainer(req))
 	}
+	if s.OnSuccess != nil && s.OnSuccess.UDSink != nil {
+		sidecarContainers = append(sidecarContainers, s.getOnSuccessUDSinkContainer(req))
+	}
 	return sidecarContainers, containers, nil
 }
 
 func (s Sink) getMainContainer(req getContainerReq) corev1.Container {
+	// TODO: Default runtime is rust in 1.6, we will remove this env in 1.7
+	req.env = append(req.env, corev1.EnvVar{Name: EnvNumaflowRuntime, Value: "rust"})
 	return containerBuilder{}.init(req).args("processor", "--type="+string(VertexTypeSink), "--isbsvc-type="+string(req.isbSvcType)).build()
 }
 
@@ -143,7 +156,42 @@ func (s Sink) getFallbackUDSinkContainer(mainContainerReq getContainerReq) corev
 	return container
 }
 
+func (s Sink) getOnSuccessUDSinkContainer(mainContainerReq getContainerReq) corev1.Container {
+	c := containerBuilder{}.
+		name(CtrOnSuccessUdsink).
+		imagePullPolicy(mainContainerReq.imagePullPolicy). // Use the same image pull policy as the main container
+		appendVolumeMounts(mainContainerReq.volumeMounts...).asSidecar()
+	x := s.OnSuccess.UDSink.Container
+	c = c.image(x.Image)
+	if len(x.Command) > 0 {
+		c = c.command(x.Command...)
+	}
+	if len(x.Args) > 0 {
+		c = c.args(x.Args...)
+	}
+	c = c.appendEnv(corev1.EnvVar{Name: EnvUDContainerType, Value: UDContainerOnSuccessSink})
+	c = c.appendEnv(x.Env...).appendVolumeMounts(x.VolumeMounts...).resources(x.Resources).securityContext(x.SecurityContext).appendEnvFrom(x.EnvFrom...).appendPorts(x.Ports...)
+	if x.ImagePullPolicy != nil {
+		c = c.imagePullPolicy(*x.ImagePullPolicy)
+	}
+	container := c.build()
+	container.LivenessProbe = &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Path:   "/sidecar-livez",
+				Port:   intstr.FromInt32(VertexMetricsPort),
+				Scheme: corev1.URISchemeHTTPS,
+			},
+		},
+		InitialDelaySeconds: GetProbeInitialDelaySecondsOr(x.LivenessProbe, UDContainerLivezInitialDelaySeconds),
+		PeriodSeconds:       GetProbePeriodSecondsOr(x.LivenessProbe, UDContainerLivezPeriodSeconds),
+		TimeoutSeconds:      GetProbeTimeoutSecondsOr(x.LivenessProbe, UDContainerLivezTimeoutSeconds),
+		FailureThreshold:    GetProbeFailureThresholdOr(x.LivenessProbe, UDContainerLivezFailureThreshold),
+	}
+	return container
+}
+
 // IsAnySinkSpecified returns true if any sink is specified.
 func (a *AbstractSink) IsAnySinkSpecified() bool {
-	return a.Log != nil || a.Kafka != nil || a.Blackhole != nil || a.UDSink != nil
+	return a.Log != nil || a.Kafka != nil || a.Blackhole != nil || a.UDSink != nil || a.Sqs != nil || a.Pulsar != nil
 }

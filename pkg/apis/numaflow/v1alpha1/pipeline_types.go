@@ -20,7 +20,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -32,6 +31,8 @@ import (
 
 // +kubebuilder:validation:Enum="";Running;Failed;Pausing;Paused;Deleting
 type PipelinePhase string
+
+type PipelineResumeStrategy string
 
 const (
 	PipelinePhaseUnknown  PipelinePhase = ""
@@ -52,6 +53,9 @@ const (
 	PipelineConditionDaemonServiceHealthy      ConditionType = "DaemonServiceHealthy"
 	PipelineConditionSideInputsManagersHealthy ConditionType = "SideInputsManagersHealthy"
 	PipelineConditionVerticesHealthy           ConditionType = "VerticesHealthy"
+
+	ResumeStrategySlow PipelineResumeStrategy = "slow"
+	ResumeStrategyFast PipelineResumeStrategy = "fast"
 )
 
 func (pp PipelinePhase) Code() int {
@@ -246,8 +250,7 @@ func (p Pipeline) GetSideInputsManagerDeployments(req GetSideInputDeploymentReq)
 		for i := 0; i < len(deployment.Spec.Template.Spec.Containers); i++ {
 			deployment.Spec.Template.Spec.Containers[i].Env = append(deployment.Spec.Template.Spec.Containers[i].Env, commonEnvVars...)
 		}
-		deployment.Spec.Template.Spec.InitContainers[0].Env = append(deployment.Spec.Template.Spec.InitContainers[0].Env, corev1.EnvVar{Name: EnvGoDebug, Value: os.Getenv(EnvGoDebug)})
-		deployment.Spec.Template.Spec.Containers[0].Env = append(deployment.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{Name: EnvGoDebug, Value: os.Getenv(EnvGoDebug)})
+		deployment.Spec.Template.Spec.Containers[0].Env = append(deployment.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{Name: EnvNumaflowRuntime, Value: "rust"})
 		deployments = append(deployments, deployment)
 	}
 	return deployments, nil
@@ -271,7 +274,6 @@ func (p Pipeline) GetDaemonDeploymentObj(req GetDaemonDeploymentReq) (*appv1.Dep
 		{Name: EnvNamespace, ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"}}},
 		{Name: EnvPod, ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"}}},
 		{Name: EnvPipelineObject, Value: encodedPipeline},
-		{Name: EnvGoDebug, Value: os.Getenv(EnvGoDebug)},
 	}
 	envVars = append(envVars, req.Env...)
 	c := corev1.Container{
@@ -353,9 +355,7 @@ func (p Pipeline) GetDaemonDeploymentObj(req GetDaemonDeploymentReq) (*appv1.Dep
 }
 
 func (p Pipeline) getDaemonPodInitContainer(req GetDaemonDeploymentReq) corev1.Container {
-	envVars := []corev1.EnvVar{
-		{Name: EnvGoDebug, Value: os.Getenv(EnvGoDebug)},
-	}
+	var envVars []corev1.EnvVar
 	envVars = append(envVars, req.Env...)
 	c := corev1.Container{
 		Name:            CtrInit,
@@ -422,6 +422,9 @@ func (p Pipeline) GetPipelineLimits() PipelineLimits {
 		}
 		if x.ReadTimeout != nil {
 			limits.ReadTimeout = x.ReadTimeout
+		}
+		if x.RateLimit != nil {
+			limits.RateLimit = x.RateLimit
 		}
 	}
 	return limits
@@ -603,6 +606,10 @@ type IdleSource struct {
 	StepInterval *metav1.Duration `json:"stepInterval,omitempty" protobuf:"bytes,2,opt,name=stepInterval"`
 	// IncrementBy is the duration to be added to the current watermark to progress the watermark when source is idling.
 	IncrementBy *metav1.Duration `json:"incrementBy,omitempty" protobuf:"bytes,3,opt,name=incrementBy"`
+	// InitSourceDelay is the duration after which, if source doesn't produce any data, the watermark is initialized
+	// with the current wall clock time.
+	// +optional
+	InitSourceDelay *metav1.Duration `json:"initSourceDelay,omitempty" protobuf:"bytes,4,opt,name=initSourceDelay"`
 }
 
 func (is IdleSource) GetThreshold() time.Duration {
@@ -664,6 +671,12 @@ type PipelineLimits struct {
 	// +kubebuilder:default= "1s"
 	// +optional
 	ReadTimeout *metav1.Duration `json:"readTimeout,omitempty" protobuf:"bytes,4,opt,name=readTimeout"`
+	// RateLimit is used to define the rate limit for all the vertices in the pipeline, it could be overridden by the
+	// vertex's limit settings. For source vertices, it will be set to rate divided by readBatchSize because for source
+	// vertices, the rate limit is defined by how many times the `Read` is called per second
+	// Reduce does not support RateLimit.
+	// +optional
+	RateLimit *RateLimit `json:"rateLimit,omitempty" protobuf:"bytes,5,opt,name=rateLimit"`
 }
 
 type PipelineStatus struct {

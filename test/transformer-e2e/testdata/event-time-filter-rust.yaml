@@ -5,12 +5,14 @@ metadata:
 spec:
   vertices:
     - name: in
+      limits:
+        readBatchSize: 1
       source:
         http: {}
         transformer:
           container:
             image: quay.io/numaio/numaflow-rs/mapt-event-time-filter:stable
-            imagePullPolicy: Always
+            imagePullPolicy: IfNotPresent
     - name: sink-within-2022
       partitions: 2
       scale:

@@ -17,27 +17,27 @@ limitations under the License.
 package rater
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
+	"sync"
 	"time"
 
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
-	"golang.org/x/net/context"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/numaproj/numaflow/pkg/apis/numaflow/v1alpha1"
-	"github.com/numaproj/numaflow/pkg/isb"
 	"github.com/numaproj/numaflow/pkg/metrics"
 	"github.com/numaproj/numaflow/pkg/shared/logging"
 	sharedqueue "github.com/numaproj/numaflow/pkg/shared/queue"
 )
 
-const CountWindow = time.Second * 10
 const monoVtxReadMetricName = "monovtx_read_total"
 const monoVtxPendingRawMetric = "monovtx_pending_raw"
 
@@ -80,6 +80,7 @@ type Rater struct {
 	// lookBackSeconds is the lookback time window used for scaling calculations
 	// this can be updated dynamically, defaults to user-specified value in the spec
 	lookBackSeconds *atomic.Float64
+	mu              sync.Mutex
 	options         *options
 }
 
@@ -117,9 +118,9 @@ func NewRater(ctx context.Context, mv *v1alpha1.MonoVertex, opts ...Option) *Rat
 	}
 	rater.podTracker = NewPodTracker(ctx, mv)
 	// maintain the total counts of the last 30 minutes(1800 seconds) since we support 1m, 5m, 15m lookback seconds.
-	rater.timestampedPodCounts = sharedqueue.New[*TimestampedCounts](int(1800 / CountWindow.Seconds()))
+	rater.timestampedPodCounts = sharedqueue.New[*TimestampedCounts](360)
 	// maintain the total pending counts of the last 30 minutes(1800 seconds) since we support 1m, 5m, 15m lookback seconds.
-	rater.timestampedPendingCount = sharedqueue.New[*TimestampedCounts](int(1800 / CountWindow.Seconds()))
+	rater.timestampedPendingCount = sharedqueue.New[*TimestampedCounts](360)
 	for _, opt := range opts {
 		if opt != nil {
 			opt(rater.options)
@@ -130,25 +131,31 @@ func NewRater(ctx context.Context, mv *v1alpha1.MonoVertex, opts ...Option) *Rat
 	return &rater
 }
 
+// podTask represents a monitoring task for a pod with a common timestamp
+type podTask struct {
+	key       string
+	timestamp int64
+}
+
 // Function monitor() defines each of the worker's jobs.
-// It waits for keys in the channel, and starts a monitoring job
-func (r *Rater) monitor(ctx context.Context, id int, keyCh <-chan string) {
+// It waits for pod monitoring tasks in the channel, and starts them
+func (r *Rater) monitor(ctx context.Context, id int, taskCh <-chan *podTask) {
 	r.log.Infof("Started monitoring worker %v", id)
 	for {
 		select {
 		case <-ctx.Done():
 			r.log.Infof("Stopped monitoring worker %v", id)
 			return
-		case key := <-keyCh:
-			if err := r.monitorOnePod(ctx, key, id); err != nil {
-				r.log.Errorw("Failed to monitor a pod", zap.String("pod", key), zap.Error(err))
+		case task := <-taskCh:
+			if err := r.monitorOnePod(ctx, task.key, id, task.timestamp); err != nil {
+				r.log.Errorw("Failed to monitor a pod", zap.String("pod", task.key), zap.Error(err))
 			}
 		}
 	}
 }
 
 // monitorOnePod monitors a single pod and updates the rate metrics for the given pod.
-func (r *Rater) monitorOnePod(ctx context.Context, key string, worker int) error {
+func (r *Rater) monitorOnePod(ctx context.Context, key string, worker int, timestamp int64) error {
 	log := logging.FromContext(ctx).With("worker", fmt.Sprint(worker)).With("podKey", key)
 	log.Debugf("Working on key: %s", key)
 	pInfo, err := r.podTracker.GetPodInfo(key)
@@ -156,7 +163,6 @@ func (r *Rater) monitorOnePod(ctx context.Context, key string, worker int) error
 		return err
 	}
 	var podReadCount, podPendingCount *PodMetricsCount
-	now := time.Now().Add(CountWindow).Truncate(CountWindow).Unix()
 
 	if !r.podTracker.IsActive(key) {
 		log.Debugf("Pod %s does not exist, updating it with nil...", pInfo.podName)
@@ -175,12 +181,62 @@ func (r *Rater) monitorOnePod(ctx context.Context, key string, worker int) error
 				if podPendingCount == nil {
 					log.Debugf("Failed retrieving pending counts for pod %s", pInfo.podName)
 				}
-				UpdateCount(r.timestampedPendingCount, now, podPendingCount)
+				r.updatePendingCount(timestamp, podPendingCount)
 			}
+			r.updateCount(timestamp, podReadCount)
 		}
 	}
-	UpdateCount(r.timestampedPodCounts, now, podReadCount)
 	return nil
+}
+
+func (r *Rater) updateCount(timestamp int64, podReadCount *PodMetricsCount) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if podReadCount == nil {
+		return
+	}
+	q := r.timestampedPodCounts
+
+	// Peek the last element
+	items := q.Items()
+	if len(items) > 0 {
+		last := items[len(items)-1]
+		// Merge if same timestamp
+		if last.timestamp == timestamp {
+			last.Update(podReadCount)
+			return
+		}
+	}
+
+	tc := NewTimestampedCounts(timestamp)
+	tc.Update(podReadCount)
+	q.Append(tc)
+}
+
+func (r *Rater) updatePendingCount(timestamp int64, podPendingCounts *PodMetricsCount) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if podPendingCounts == nil {
+		return
+	}
+	q := r.timestampedPendingCount
+
+	items := q.Items()
+	if len(items) > 0 {
+		last := items[len(items)-1]
+		// Merge if same timestamp
+		if last.timestamp == timestamp {
+			last.Update(podPendingCounts)
+			return
+		}
+	}
+
+	// if we cannot find a matching element, it means we need to add a new timestamped count to the queue
+	tc := NewTimestampedCounts(timestamp)
+	tc.Update(podPendingCounts)
+	q.Append(tc)
 }
 
 // getPodMetrics Fetches the metrics for a given pod from the Prometheus metrics endpoint.
@@ -194,12 +250,17 @@ func (r *Rater) getPodMetrics(podName string) map[string]*dto.MetricFamily {
 		r.log.Warnf("[Pod name %s]: failed reading the metrics endpoint, the pod might have been scaled down: %v", podName, err.Error())
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			r.log.Errorf("Failed to close response body for pod %s: %v", podName, err)
+		}
+	}(resp.Body)
 
 	textParser := expfmt.TextParser{}
 	result, err := textParser.TextToMetricFamilies(resp.Body)
 	if err != nil {
-		r.log.Errorf("[Pod name %s]:  failed parsing to prometheus metric families, %v", podName, err.Error())
+		r.log.Errorf("[Pod name %s]: failed parsing to prometheus metric families, %v", podName, err)
 		return nil
 	}
 	return result
@@ -236,15 +297,15 @@ func (r *Rater) getPodPendingCounts(podName string, result map[string]*dto.Metri
 
 // GetPending returns the pending count for the mono vertex
 func (r *Rater) GetPending() map[string]*wrapperspb.Int64Value {
-	r.log.Debugf("Current timestampedPodCounts for MonoVertex %s is: %v", r.monoVertex.Name, r.timestampedPendingCount)
+	r.log.Debugf("Current timestampedPendingCount for MonoVertex %s is: %v", r.monoVertex.Name, r.timestampedPendingCount)
 	var result = make(map[string]*wrapperspb.Int64Value)
 	// calculate pending for each lookback seconds
-	for n, i := range r.buildLookbackSecondsMap() {
-		pending := CalculatePending(r.timestampedPendingCount, i)
-		result[n] = wrapperspb.Int64(pending)
+	for windowLabel, lookbackSeconds := range r.buildLookbackSecondsMap() {
+		pending := CalculatePending(r.timestampedPendingCount, lookbackSeconds)
+		result[windowLabel] = wrapperspb.Int64(pending)
 		// Expose the metric for pending
-		if pending != isb.PendingNotAvailable {
-			metrics.MonoVertexPendingMessages.WithLabelValues(r.monoVertex.Name, n).Set(float64(pending))
+		if pending != v1alpha1.PendingNotAvailable {
+			metrics.MonoVertexPendingMessages.WithLabelValues(r.monoVertex.Name, windowLabel).Set(float64(pending))
 		}
 	}
 	r.log.Debugf("Got Pending for MonoVertex %s: %v", r.monoVertex.Name, result)
@@ -257,9 +318,9 @@ func (r *Rater) GetRates() map[string]*wrapperspb.DoubleValue {
 	r.log.Debugf("Current timestampedPodCounts for MonoVertex %s is: %v", r.monoVertex.Name, r.timestampedPodCounts)
 	var result = make(map[string]*wrapperspb.DoubleValue)
 	// calculate rates for each lookback seconds
-	for n, i := range r.buildLookbackSecondsMap() {
-		rate := CalculateRate(r.timestampedPodCounts, i)
-		result[n] = wrapperspb.Double(rate)
+	for windowLabel, lookbackSeconds := range r.buildLookbackSecondsMap() {
+		rate := CalculateRate(r.timestampedPodCounts, lookbackSeconds)
+		result[windowLabel] = wrapperspb.Double(rate)
 	}
 	r.log.Debugf("Got rates for MonoVertex %s: %v", r.monoVertex.Name, result)
 	return result
@@ -278,7 +339,7 @@ func (r *Rater) buildLookbackSecondsMap() map[string]int64 {
 
 func (r *Rater) Start(ctx context.Context) error {
 	r.log.Infof("Starting rater...")
-	keyCh := make(chan string)
+	taskCh := make(chan *podTask)
 	ctx, cancel := context.WithCancel(logging.WithLogger(ctx, r.log))
 	defer cancel()
 
@@ -295,17 +356,20 @@ func (r *Rater) Start(ctx context.Context) error {
 
 	// Worker group
 	for i := 1; i <= r.options.workers; i++ {
-		go r.monitor(ctx, i, keyCh)
+		go r.monitor(ctx, i, taskCh)
 	}
 
 	// Function assign() sends the least recently used podKey to the channel so that it can be picked up by a worker.
-	assign := func() {
+	assign := func(timestamp int64) {
 		if e := r.podTracker.LeastRecentlyUsed(); e != "" {
-			keyCh <- e
-			return
+			select {
+			case taskCh <- &podTask{key: e, timestamp: timestamp}:
+			case <-ctx.Done():
+			}
 		}
 	}
 
+	ticker := time.NewTicker(r.options.taskInterval)
 	// Following for loop keeps calling assign() function to assign monitoring tasks to the workers.
 	// It makes sure each element in the list will be assigned every N milliseconds.
 	for {
@@ -313,30 +377,13 @@ func (r *Rater) Start(ctx context.Context) error {
 		case <-ctx.Done():
 			r.log.Info("Shutting down monitoring job assigner")
 			return nil
-		default:
-			assign()
-			// Make sure each of the key will be assigned at least every taskInterval milliseconds.
-			sleep(ctx, time.Millisecond*time.Duration(func() int {
-				l := r.podTracker.GetActivePodsCount()
-				if l == 0 {
-					return r.options.taskInterval
-				}
-				result := r.options.taskInterval / l
-				if result > 0 {
-					return result
-				}
-				return 1
-			}()))
+		case <-ticker.C:
+			// Generate a common timestamp for all pods in this tick
+			now := time.Now().Unix()
+			for range r.podTracker.GetActivePodsCount() {
+				assign(now)
+			}
 		}
-	}
-}
-
-// sleep function uses a select statement to check if the context is canceled before sleeping for the given duration
-// it helps ensure the sleep will be released when the context is canceled, allowing the goroutine to exit gracefully
-func sleep(ctx context.Context, duration time.Duration) {
-	select {
-	case <-ctx.Done():
-	case <-time.After(duration):
 	}
 }
 
@@ -396,7 +443,7 @@ func (r *Rater) updateDynamicLookbackSecs() {
 	// If the value has changed, update it
 	if roundedMaxLookback != currentLookback {
 		r.lookBackSeconds.Store(roundedMaxLookback)
-		r.log.Infof("Lookback updated for mvtx %s, Current: %f Updated %f", r.monoVertex.Name, currentLookback, roundedMaxLookback)
+		r.log.Debugf("Lookback updated for mvtx: %s, Current: %f Updated: %f", r.monoVertex.Name, currentLookback, roundedMaxLookback)
 		// update the metric value for the lookback window
 		metrics.MonoVertexLookBackSecs.WithLabelValues(r.monoVertex.Name).Set(roundedMaxLookback)
 	}

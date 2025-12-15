@@ -26,6 +26,185 @@ Resource Types:
 
 </ul>
 
+<h3 id="numaflow.numaproj.io/v1alpha1.AWSAssumeRole">
+
+AWSAssumeRole
+</h3>
+
+<p>
+
+(<em>Appears on:</em>
+<a href="#numaflow.numaproj.io/v1alpha1.SqsSink">SqsSink</a>,
+<a href="#numaflow.numaproj.io/v1alpha1.SqsSource">SqsSource</a>)
+</p>
+
+<p>
+
+<p>
+
+AWSAssumeRole contains the configuration for AWS STS assume role
+authentication This can be used with any AWS service (SQS, S3, DynamoDB,
+etc.)
+</p>
+
+</p>
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>
+
+Field
+</th>
+
+<th>
+
+Description
+</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+<tr>
+
+<td>
+
+<code>roleArn</code></br> <em> string </em>
+</td>
+
+<td>
+
+<p>
+
+RoleARN is the Amazon Resource Name (ARN) of the role to assume. This is
+a required field when assume role is enabled. Example:
+“arn:aws:iam::123456789012:role/CrossAccount-Service-Role”
+</p>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>sessionName</code></br> <em> string </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+SessionName is an identifier for the assumed role session. This appears
+in AWS CloudTrail logs to help identify the source of API calls. If not
+specified, a default session name will be generated based on the service
+context.
+</p>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>durationSeconds</code></br> <em> int32 </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+DurationSeconds is the duration (in seconds) of the role session. Valid
+values: 900-43200 (15 minutes to 12 hours) Defaults to 3600 (1 hour) if
+not specified. The actual session duration is constrained by the maximum
+session duration setting of the IAM role being assumed.
+</p>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>externalID</code></br> <em> string </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+ExternalID is a unique identifier that might be required when you assume
+a role in another account. This is commonly used as an additional
+security measure for cross-account role access.
+</p>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>policy</code></br> <em> string </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+Policy is an IAM policy document (JSON string) that you want to use as
+an inline session policy. This parameter is optional. When specified,
+the session permissions are the intersection of the IAM role’s
+identity-based policy and the session policies. This allows further
+restriction of permissions for the specific service operations.
+</p>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>policyArns</code></br> <em> \[\]string </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+PolicyARNs is a list of Amazon Resource Names (ARNs) of IAM managed
+policies that you want to use as managed session policies. The policies
+must exist in the same account as the role. This allows attaching
+existing managed policies to further restrict session permissions.
+</p>
+
+</td>
+
+</tr>
+
+</tbody>
+
+</table>
+
 <h3 id="numaflow.numaproj.io/v1alpha1.AbstractPodTemplate">
 
 AbstractPodTemplate
@@ -39,7 +218,6 @@ AbstractPodTemplate
 <a href="#numaflow.numaproj.io/v1alpha1.JetStreamBufferService">JetStreamBufferService</a>,
 <a href="#numaflow.numaproj.io/v1alpha1.JobTemplate">JobTemplate</a>,
 <a href="#numaflow.numaproj.io/v1alpha1.MonoVertexSpec">MonoVertexSpec</a>,
-<a href="#numaflow.numaproj.io/v1alpha1.NativeRedis">NativeRedis</a>,
 <a href="#numaflow.numaproj.io/v1alpha1.ServingSpec">ServingSpec</a>,
 <a href="#numaflow.numaproj.io/v1alpha1.SideInputsManagerTemplate">SideInputsManagerTemplate</a>,
 <a href="#numaflow.numaproj.io/v1alpha1.VertexTemplate">VertexTemplate</a>)
@@ -201,12 +379,12 @@ only DockerConfig type secrets are honored. More info:
 <em>(Optional)</em>
 <p>
 
-If specified, indicates the Redis pod’s priority. “system-node-critical”
-and “system-cluster-critical” are two special keywords which indicate
-the highest priorities with the former being the highest priority. Any
-other name must be defined by creating a PriorityClass object with that
-name. If not specified, the pod priority will be default or zero if
-there is no default. More info:
+If specified, indicates the pod’s priority. “system-node-critical” and
+“system-cluster-critical” are two special keywords which indicate the
+highest priorities with the former being the highest priority. Any other
+name must be defined by creating a PriorityClass object with that name.
+If not specified, the pod priority will be default or zero if there is
+no default. More info:
 <a href="https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/">https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/</a>
 </p>
 
@@ -227,10 +405,10 @@ there is no default. More info:
 <p>
 
 The priority value. Various system components use this field to find the
-priority of the Redis pod. When Priority Admission Controller is
-enabled, it prevents users from setting this field. The admission
-controller populates this field from PriorityClassName. The higher the
-value, the higher the priority. More info:
+priority of the pod. When Priority Admission Controller is enabled, it
+prevents users from setting this field. The admission controller
+populates this field from PriorityClassName. The higher the value, the
+higher the priority. More info:
 <a href="https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/">https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/</a>
 </p>
 
@@ -550,6 +728,27 @@ ServingPipeline.
 <p>
 
 SQS sink is used to write the data to the AWS SQS.
+</p>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>pulsar</code></br> <em>
+<a href="#numaflow.numaproj.io/v1alpha1.PulsarSink"> PulsarSink </a>
+</em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+Pulsar sink is used to write the data to the Apache Pulsar.
 </p>
 
 </td>
@@ -1361,21 +1560,6 @@ Description
 
 <td>
 
-<code>redis</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.RedisConfig"> RedisConfig </a>
-</em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
 <code>jetstream</code></br> <em>
 <a href="#numaflow.numaproj.io/v1alpha1.JetStreamConfig">
 JetStreamConfig </a> </em>
@@ -1929,7 +2113,6 @@ ContainerTemplate
 <a href="#numaflow.numaproj.io/v1alpha1.JetStreamBufferService">JetStreamBufferService</a>,
 <a href="#numaflow.numaproj.io/v1alpha1.JobTemplate">JobTemplate</a>,
 <a href="#numaflow.numaproj.io/v1alpha1.MonoVertexSpec">MonoVertexSpec</a>,
-<a href="#numaflow.numaproj.io/v1alpha1.NativeRedis">NativeRedis</a>,
 <a href="#numaflow.numaproj.io/v1alpha1.ServingSpec">ServingSpec</a>,
 <a href="#numaflow.numaproj.io/v1alpha1.SideInputsManagerTemplate">SideInputsManagerTemplate</a>,
 <a href="#numaflow.numaproj.io/v1alpha1.VertexTemplate">VertexTemplate</a>)
@@ -2449,88 +2632,6 @@ Description
 Tags used to specify tags for conditional forwarding
 </p>
 
-</td>
-
-</tr>
-
-</tbody>
-
-</table>
-
-<h3 id="numaflow.numaproj.io/v1alpha1.Function">
-
-Function
-</h3>
-
-<p>
-
-(<em>Appears on:</em>
-<a href="#numaflow.numaproj.io/v1alpha1.UDF">UDF</a>)
-</p>
-
-<p>
-
-</p>
-
-<table>
-
-<thead>
-
-<tr>
-
-<th>
-
-Field
-</th>
-
-<th>
-
-Description
-</th>
-
-</tr>
-
-</thead>
-
-<tbody>
-
-<tr>
-
-<td>
-
-<code>name</code></br> <em> string </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>args</code></br> <em> \[\]string </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>kwargs</code></br> <em> map\[string\]string </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
 </td>
 
 </tr>
@@ -3516,325 +3617,6 @@ Kubernetes core/v1.ResourceRequirements </a> </em>
 
 </table>
 
-<h3 id="numaflow.numaproj.io/v1alpha1.GetRedisServiceSpecReq">
-
-GetRedisServiceSpecReq
-</h3>
-
-<p>
-
-</p>
-
-<table>
-
-<thead>
-
-<tr>
-
-<th>
-
-Field
-</th>
-
-<th>
-
-Description
-</th>
-
-</tr>
-
-</thead>
-
-<tbody>
-
-<tr>
-
-<td>
-
-<code>Labels</code></br> <em> map\[string\]string </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>RedisContainerPort</code></br> <em> int32 </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>SentinelContainerPort</code></br> <em> int32 </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-</tbody>
-
-</table>
-
-<h3 id="numaflow.numaproj.io/v1alpha1.GetRedisStatefulSetSpecReq">
-
-GetRedisStatefulSetSpecReq
-</h3>
-
-<p>
-
-</p>
-
-<table>
-
-<thead>
-
-<tr>
-
-<th>
-
-Field
-</th>
-
-<th>
-
-Description
-</th>
-
-</tr>
-
-</thead>
-
-<tbody>
-
-<tr>
-
-<td>
-
-<code>ServiceName</code></br> <em> string </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>Labels</code></br> <em> map\[string\]string </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>RedisImage</code></br> <em> string </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>SentinelImage</code></br> <em> string </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>MetricsExporterImage</code></br> <em> string </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>InitContainerImage</code></br> <em> string </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>RedisContainerPort</code></br> <em> int32 </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>SentinelContainerPort</code></br> <em> int32 </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>RedisMetricsContainerPort</code></br> <em> int32 </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>CredentialSecretName</code></br> <em> string </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>TLSEnabled</code></br> <em> bool </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>PvcNameIfNeeded</code></br> <em> string </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>ConfConfigMapName</code></br> <em> string </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>ScriptsConfigMapName</code></br> <em> string </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>HealthConfigMapName</code></br> <em> string </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>DefaultResources</code></br> <em>
-<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#resourcerequirements-v1-core">
-Kubernetes core/v1.ResourceRequirements </a> </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-</tbody>
-
-</table>
-
 <h3 id="numaflow.numaproj.io/v1alpha1.GetServingPipelineResourceReq">
 
 GetServingPipelineResourceReq
@@ -4540,6 +4322,28 @@ progress the watermark when source is idling.
 
 </tr>
 
+<tr>
+
+<td>
+
+<code>initSourceDelay</code></br> <em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration </a> </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+InitSourceDelay is the duration after which, if source doesn’t produce
+any data, the watermark is initialized with the current wall clock time.
+</p>
+
+</td>
+
+</tr>
+
 </tbody>
 
 </table>
@@ -4678,21 +4482,6 @@ InterStepBufferServiceSpec </a> </em>
 
 <td>
 
-<code>redis</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.RedisBufferService">
-RedisBufferService </a> </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
 <code>jetstream</code></br> <em>
 <a href="#numaflow.numaproj.io/v1alpha1.JetStreamBufferService">
 JetStreamBufferService </a> </em>
@@ -4766,21 +4555,6 @@ Description
 </thead>
 
 <tbody>
-
-<tr>
-
-<td>
-
-<code>redis</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.RedisBufferService">
-RedisBufferService </a> </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
 
 <tr>
 
@@ -5407,6 +5181,73 @@ comma.
 <p>
 
 Stream represents the name of the stream.
+</p>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>consumer</code></br> <em> string </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+Consumer represents the name of the consumer of the stream If not
+specified, a consumer with name
+<code>numaflow-pipeline_name-vertex_name-stream_name</code> will be
+created. If a consumer name is specified, a consumer with that name will
+be created if it doesn’t exist on the stream.
+</p>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>deliver_policy</code></br> <em> string </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+The point in the stream from which to receive messages.
+<a href="https://docs.nats.io/nats-concepts/jetstream/consumers#deliverpolicy">https://docs.nats.io/nats-concepts/jetstream/consumers#deliverpolicy</a>
+Valid options are: “all”, “new”, “last”, “last_per_subject”,
+“by_start_sequence 42”, “by_start_time 1753428483000”. The second value
+to “by_start_time” is unix epoch time in milliseconds.
+</p>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>filter_subjects</code></br> <em> \[\]string </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+A set of subjects that overlap with the subjects bound to the stream to
+filter delivery to subscribers.
+<a href="https://docs.nats.io/nats-concepts/jetstream/consumers#filtesubjects">https://docs.nats.io/nats-concepts/jetstream/consumers#filtesubjects</a>
 </p>
 
 </td>
@@ -6230,6 +6071,21 @@ Refer to the Kubernetes API documentation for the fields of the
 
 <td>
 
+<code>udf</code></br> <em> <a href="#numaflow.numaproj.io/v1alpha1.UDF">
+UDF </a> </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
 <code>AbstractPodTemplate</code></br> <em>
 <a href="#numaflow.numaproj.io/v1alpha1.AbstractPodTemplate">
 AbstractPodTemplate </a> </em>
@@ -6592,7 +6448,30 @@ Kubernetes meta/v1.Duration </a> </em>
 <em>(Optional)</em>
 <p>
 
-Read timeout duration from the source.
+ReadTimeout is the read timeout duration from the source.
+</p>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>rateLimit</code></br> <em>
+<a href="#numaflow.numaproj.io/v1alpha1.RateLimit"> RateLimit </a> </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+RateLimit for MonoVertex defines how many messages can be read from
+Source. This is computed by number of <code>read</code> calls per second
+multiplied by the <code>readBatchSize</code>. This is how RateLimit is
+calculated for MonoVertex and for Source vertices.
 </p>
 
 </td>
@@ -6696,6 +6575,21 @@ Description
 
 <td>
 
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>udf</code></br> <em> <a href="#numaflow.numaproj.io/v1alpha1.UDF">
+UDF </a> </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
 </td>
 
 </tr>
@@ -7219,222 +7113,6 @@ generate Pods.
 
 </table>
 
-<h3 id="numaflow.numaproj.io/v1alpha1.NativeRedis">
-
-NativeRedis
-</h3>
-
-<p>
-
-(<em>Appears on:</em>
-<a href="#numaflow.numaproj.io/v1alpha1.RedisBufferService">RedisBufferService</a>)
-</p>
-
-<p>
-
-</p>
-
-<table>
-
-<thead>
-
-<tr>
-
-<th>
-
-Field
-</th>
-
-<th>
-
-Description
-</th>
-
-</tr>
-
-</thead>
-
-<tbody>
-
-<tr>
-
-<td>
-
-<code>version</code></br> <em> string </em>
-</td>
-
-<td>
-
-<p>
-
-Redis version, such as “6.0.16”
-</p>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>replicas</code></br> <em> int32 </em>
-</td>
-
-<td>
-
-<p>
-
-Redis StatefulSet size
-</p>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>redisContainerTemplate</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.ContainerTemplate">
-ContainerTemplate </a> </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-<p>
-
-RedisContainerTemplate contains customized spec for Redis container
-</p>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>sentinelContainerTemplate</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.ContainerTemplate">
-ContainerTemplate </a> </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-<p>
-
-SentinelContainerTemplate contains customized spec for Redis container
-</p>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>metricsContainerTemplate</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.ContainerTemplate">
-ContainerTemplate </a> </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-<p>
-
-MetricsContainerTemplate contains customized spec for metrics container
-</p>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>initContainerTemplate</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.ContainerTemplate">
-ContainerTemplate </a> </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>persistence</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.PersistenceStrategy">
-PersistenceStrategy </a> </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>AbstractPodTemplate</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.AbstractPodTemplate">
-AbstractPodTemplate </a> </em>
-</td>
-
-<td>
-
-<p>
-
-(Members of <code>AbstractPodTemplate</code> are embedded into this
-type.)
-</p>
-
-<em>(Optional)</em>
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>settings</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.RedisSettings"> RedisSettings
-</a> </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-<p>
-
-Redis configuration, if not specified, global settings in
-numaflow-controller-config will be used.
-</p>
-
-</td>
-
-</tr>
-
-</tbody>
-
-</table>
-
 <h3 id="numaflow.numaproj.io/v1alpha1.NatsAuth">
 
 NatsAuth
@@ -7823,7 +7501,6 @@ PersistenceStrategy
 
 (<em>Appears on:</em>
 <a href="#numaflow.numaproj.io/v1alpha1.JetStreamBufferService">JetStreamBufferService</a>,
-<a href="#numaflow.numaproj.io/v1alpha1.NativeRedis">NativeRedis</a>,
 <a href="#numaflow.numaproj.io/v1alpha1.PBQStorage">PBQStorage</a>)
 </p>
 
@@ -7892,7 +7569,8 @@ Kubernetes core/v1.PersistentVolumeAccessMode </a> </em>
 <em>(Optional)</em>
 <p>
 
-Available access modes such as ReadWriteOnce, ReadWriteMany
+Available access modes such as ReadWriteOncePod, ReadWriteOnce,
+ReadWriteMany
 <a href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes">https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes</a>
 </p>
 
@@ -8313,6 +7991,31 @@ the vertex’s limit settings
 
 </tr>
 
+<tr>
+
+<td>
+
+<code>rateLimit</code></br> <em>
+<a href="#numaflow.numaproj.io/v1alpha1.RateLimit"> RateLimit </a> </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+RateLimit is used to define the rate limit for all the vertices in the
+pipeline, it could be overridden by the vertex’s limit settings. For
+source vertices, it will be set to rate divided by readBatchSize because
+for source vertices, the rate limit is defined by how many times the
+<code>Read</code> is called per second Reduce does not support
+RateLimit.
+</p>
+
+</td>
+
+</tr>
+
 </tbody>
 
 </table>
@@ -8330,6 +8033,17 @@ PipelinePhase (<code>string</code> alias)
 <a href="#numaflow.numaproj.io/v1alpha1.Lifecycle">Lifecycle</a>,
 <a href="#numaflow.numaproj.io/v1alpha1.PipelineStatus">PipelineStatus</a>)
 </p>
+
+<p>
+
+</p>
+
+<h3 id="numaflow.numaproj.io/v1alpha1.PipelineResumeStrategy">
+
+PipelineResumeStrategy (<code>string</code> alias)
+</p>
+
+</h3>
 
 <p>
 
@@ -9014,6 +8728,7 @@ PulsarAuth
 <p>
 
 (<em>Appears on:</em>
+<a href="#numaflow.numaproj.io/v1alpha1.PulsarSink">PulsarSink</a>,
 <a href="#numaflow.numaproj.io/v1alpha1.PulsarSource">PulsarSource</a>)
 </p>
 
@@ -9063,6 +8778,202 @@ Kubernetes core/v1.SecretKeySelector </a> </em>
 <p>
 
 JWT Token auth
+</p>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>basicAuth</code></br> <em>
+<a href="#numaflow.numaproj.io/v1alpha1.PulsarBasicAuth">
+PulsarBasicAuth </a> </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+Authentication using HTTP basic
+<a href="https://pulsar.apache.org/docs/4.0.x/security-basic-auth/">https://pulsar.apache.org/docs/4.0.x/security-basic-auth/</a>
+</p>
+
+</td>
+
+</tr>
+
+</tbody>
+
+</table>
+
+<h3 id="numaflow.numaproj.io/v1alpha1.PulsarBasicAuth">
+
+PulsarBasicAuth
+</h3>
+
+<p>
+
+(<em>Appears on:</em>
+<a href="#numaflow.numaproj.io/v1alpha1.PulsarAuth">PulsarAuth</a>)
+</p>
+
+<p>
+
+</p>
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>
+
+Field
+</th>
+
+<th>
+
+Description
+</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+<tr>
+
+<td>
+
+<code>username</code></br> <em>
+<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#secretkeyselector-v1-core">
+Kubernetes core/v1.SecretKeySelector </a> </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>password</code></br> <em>
+<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#secretkeyselector-v1-core">
+Kubernetes core/v1.SecretKeySelector </a> </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+</td>
+
+</tr>
+
+</tbody>
+
+</table>
+
+<h3 id="numaflow.numaproj.io/v1alpha1.PulsarSink">
+
+PulsarSink
+</h3>
+
+<p>
+
+(<em>Appears on:</em>
+<a href="#numaflow.numaproj.io/v1alpha1.AbstractSink">AbstractSink</a>)
+</p>
+
+<p>
+
+</p>
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>
+
+Field
+</th>
+
+<th>
+
+Description
+</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+<tr>
+
+<td>
+
+<code>serverAddr</code></br> <em> string </em>
+</td>
+
+<td>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>topic</code></br> <em> string </em>
+</td>
+
+<td>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>producerName</code></br> <em> string </em>
+</td>
+
+<td>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>auth</code></br> <em>
+<a href="#numaflow.numaproj.io/v1alpha1.PulsarAuth"> PulsarAuth </a>
+</em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+Auth information
 </p>
 
 </td>
@@ -9206,15 +9117,17 @@ Auth information
 
 </table>
 
-<h3 id="numaflow.numaproj.io/v1alpha1.RedisBufferService">
+<h3 id="numaflow.numaproj.io/v1alpha1.RateLimit">
 
-RedisBufferService
+RateLimit
 </h3>
 
 <p>
 
 (<em>Appears on:</em>
-<a href="#numaflow.numaproj.io/v1alpha1.InterStepBufferServiceSpec">InterStepBufferServiceSpec</a>)
+<a href="#numaflow.numaproj.io/v1alpha1.MonoVertexLimits">MonoVertexLimits</a>,
+<a href="#numaflow.numaproj.io/v1alpha1.PipelineLimits">PipelineLimits</a>,
+<a href="#numaflow.numaproj.io/v1alpha1.VertexLimits">VertexLimits</a>)
 </p>
 
 <p>
@@ -9247,16 +9160,16 @@ Description
 
 <td>
 
-<code>native</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.NativeRedis"> NativeRedis </a>
-</em>
+<code>max</code></br> <em> uint64 </em>
 </td>
 
 <td>
 
 <p>
 
-Native brings up a native Redis service
+Max is the maximum TPS that this vertex can process give a distributed
+<code>Store</code> is configured. Otherwise, it will be the maximum TPS
+for a single replica.
 </p>
 
 </td>
@@ -9267,16 +9180,147 @@ Native brings up a native Redis service
 
 <td>
 
-<code>external</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.RedisConfig"> RedisConfig </a>
-</em>
+<code>min</code></br> <em> uint64 </em>
 </td>
 
 <td>
 
 <p>
 
-External holds an External Redis config
+Minimum TPS allowed during initial bootup. This value will be
+distributed across all the replicas if a distributed <code>Store</code>
+is configured. Otherwise, it will be the minimum TPS for a single
+replica.
+</p>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>rampUpDuration</code></br> <em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration </a> </em>
+</td>
+
+<td>
+
+<p>
+
+RampUpDuration is the duration to reach the maximum TPS from the minimum
+TPS. The min unit of ramp up is 1 in 1 second.
+</p>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>store</code></br> <em>
+<a href="#numaflow.numaproj.io/v1alpha1.RateLimiterStore">
+RateLimiterStore </a> </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+Store is used to define the Distributed Store for the rate limiting. We
+also support in-memory store if no store is configured. This means that
+every replica will have its own rate limit and the actual TPS will be
+the sum of all the replicas.
+</p>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>modes</code></br> <em>
+<a href="#numaflow.numaproj.io/v1alpha1.RateLimiterModes">
+RateLimiterModes </a> </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+RateLimiterModes is used to define the modes for rate limiting.
+</p>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>resumedRampUp</code></br> <em> bool </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+ResumedRampUp is used to enable the resume mode for rate limiting.
+</p>
+
+<p>
+
+This, if true, will allow the processor to resume the ramp-up process
+from the last known state of the rate limiter, i.e., if the processor
+was allowed X tokens before shutting down, it will be allowed X tokens
+again after the processor restarts.
+</p>
+
+<p>
+
+The resumed ramp-up process will be allowed until TTL time after the
+processor first deregisters with the rate limiter.
+</p>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>ttl</code></br> <em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration </a> </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+TTL is used to define the duration after which a pod is considered stale
+and removed from the pool of pods if it doesn’t sync with the rate
+limiter.
+</p>
+
+<p>
+
+Furthermore, if the ResumedRampUp is true, then TTL also defines the
+amount of time within which, if a pod re-registers / registers with the
+same name, with the rate limiter, it will be assigned the same rate
+limit as the previous pod with that name.
 </p>
 
 </td>
@@ -9287,16 +9331,366 @@ External holds an External Redis config
 
 </table>
 
-<h3 id="numaflow.numaproj.io/v1alpha1.RedisConfig">
+<h3 id="numaflow.numaproj.io/v1alpha1.RateLimiterGoBackN">
 
-RedisConfig
+RateLimiterGoBackN
 </h3>
 
 <p>
 
 (<em>Appears on:</em>
-<a href="#numaflow.numaproj.io/v1alpha1.BufferServiceConfig">BufferServiceConfig</a>,
-<a href="#numaflow.numaproj.io/v1alpha1.RedisBufferService">RedisBufferService</a>)
+<a href="#numaflow.numaproj.io/v1alpha1.RateLimiterModes">RateLimiterModes</a>)
+</p>
+
+<p>
+
+<p>
+
+RateLimiterGoBackN is for the GoBackN mode. Releases additional tokens
+only when previously released tokens have been utilized above the
+configured threshold otherwise triggers a ramp-down. Ramp-down is also
+triggered when the request is made after quite a while.
+</p>
+
+</p>
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>
+
+Field
+</th>
+
+<th>
+
+Description
+</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+<tr>
+
+<td>
+
+<code>coolDownPeriod</code></br> <em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration </a> </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+CoolDownPeriod is the duration after which the rate limiter will start
+ramping down if the request is made after the cool-down period.
+</p>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>rampDownPercentage</code></br> <em> uint32 </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+RampDownStrength is the strength of the ramp-down. It is a value between
+0 and 1. 0 means no ramp-down and 1 means token pool is ramped down at
+the rate of slope=(max - min)/duration.
+</p>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>thresholdPercentage</code></br> <em> uint32 </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+ThresholdPercentage specifies the minimum percentage of capacity,
+availed by the rate limiter, that should be consumed at any instance to
+allow the rate limiter to unlock additional capacity. For example, given
+the following configuration: - max = 100 - min = 10 - rampUpDuration =
+10s i.e.–\> slope = 10 messages/second - thresholdPercentage = 50 at t =
+0, the rate limiter will release 10 messages and at least 5 of those
+should be consumed to unlock additional capacity of 10 messages at t = 1
+to make the total capacity of 20.
+</p>
+
+</td>
+
+</tr>
+
+</tbody>
+
+</table>
+
+<h3 id="numaflow.numaproj.io/v1alpha1.RateLimiterInMemoryStore">
+
+RateLimiterInMemoryStore
+</h3>
+
+<p>
+
+(<em>Appears on:</em>
+<a href="#numaflow.numaproj.io/v1alpha1.RateLimiterStore">RateLimiterStore</a>)
+</p>
+
+<p>
+
+</p>
+
+<h3 id="numaflow.numaproj.io/v1alpha1.RateLimiterModes">
+
+RateLimiterModes
+</h3>
+
+<p>
+
+(<em>Appears on:</em>
+<a href="#numaflow.numaproj.io/v1alpha1.RateLimit">RateLimit</a>)
+</p>
+
+<p>
+
+<p>
+
+RateLimiterModes defines the modes for rate limiting.
+</p>
+
+</p>
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>
+
+Field
+</th>
+
+<th>
+
+Description
+</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+<tr>
+
+<td>
+
+<code>scheduled</code></br> <em>
+<a href="#numaflow.numaproj.io/v1alpha1.RateLimiterScheduled">
+RateLimiterScheduled </a> </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+Irrespective of the traffic, the rate limiter releases max possible
+tokens based on ramp-up duration.
+</p>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>relaxed</code></br> <em>
+<a href="#numaflow.numaproj.io/v1alpha1.RateLimiterRelaxed">
+RateLimiterRelaxed </a> </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+If there is some traffic, then release the max possible tokens.
+</p>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>onlyIfUsed</code></br> <em>
+<a href="#numaflow.numaproj.io/v1alpha1.RateLimiterOnlyIfUsed">
+RateLimiterOnlyIfUsed </a> </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+Releases additional tokens only when previously released tokens have
+been utilized above the configured threshold
+</p>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>goBackN</code></br> <em>
+<a href="#numaflow.numaproj.io/v1alpha1.RateLimiterGoBackN">
+RateLimiterGoBackN </a> </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+Releases additional tokens only when previously released tokens have
+been utilized above the configured threshold otherwise triggers a
+ramp-down. Ramp-down is also triggered when the request is made after
+quite a while.
+</p>
+
+</td>
+
+</tr>
+
+</tbody>
+
+</table>
+
+<h3 id="numaflow.numaproj.io/v1alpha1.RateLimiterOnlyIfUsed">
+
+RateLimiterOnlyIfUsed
+</h3>
+
+<p>
+
+(<em>Appears on:</em>
+<a href="#numaflow.numaproj.io/v1alpha1.RateLimiterModes">RateLimiterModes</a>)
+</p>
+
+<p>
+
+<p>
+
+RateLimiterOnlyIfUsed is for the OnlyIfUsed mode. Releases additional
+tokens only when previously released tokens have been utilized above the
+configured threshold
+</p>
+
+</p>
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>
+
+Field
+</th>
+
+<th>
+
+Description
+</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+<tr>
+
+<td>
+
+<code>thresholdPercentage</code></br> <em> uint32 </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+ThresholdPercentage specifies the minimum percentage of capacity,
+availed by the rate limiter, that should be consumed at any instance to
+allow the rate limiter to unlock additional capacity.
+</p>
+
+<p>
+
+Defaults to 50%
+</p>
+
+<p>
+
+For example, given the following configuration: - max = 100 - min = 10 -
+rampUpDuration = 10s i.e.–\> slope = 10 messages/second -
+thresholdPercentage = 50 at t = 0, the rate limiter will release 10
+messages and at least 5 of those should be consumed to unlock additional
+capacity of 10 messages at t = 1 to make the total capacity of 20.
+</p>
+
+</td>
+
+</tr>
+
+</tbody>
+
+</table>
+
+<h3 id="numaflow.numaproj.io/v1alpha1.RateLimiterRedisStore">
+
+RateLimiterRedisStore
+</h3>
+
+<p>
+
+(<em>Appears on:</em>
+<a href="#numaflow.numaproj.io/v1alpha1.RateLimiterStore">RateLimiterStore</a>)
 </p>
 
 <p>
@@ -9324,6 +9718,25 @@ Description
 </thead>
 
 <tbody>
+
+<tr>
+
+<td>
+
+<code>mode</code></br> <em> string </em>
+</td>
+
+<td>
+
+<p>
+
+Choose how to connect to Redis. - Single: use a single URL (redis://… or
+rediss://…) - Sentinel: discover the node via Redis Sentinel
+</p>
+
+</td>
+
+</tr>
 
 <tr>
 
@@ -9337,7 +9750,9 @@ Description
 <em>(Optional)</em>
 <p>
 
-Redis URL
+SINGLE MODE: Full connection URL,
+e.g. redis://host:<sup>6379</sup>⁄<sub>0</sub> or rediss://host:port/0
+Mutually exclusive with .sentinel
 </p>
 
 </td>
@@ -9348,7 +9763,9 @@ Redis URL
 
 <td>
 
-<code>sentinelUrl</code></br> <em> string </em>
+<code>sentinel</code></br> <em>
+<a href="#numaflow.numaproj.io/v1alpha1.RedisSentinelConfig">
+RedisSentinelConfig </a> </em>
 </td>
 
 <td>
@@ -9356,7 +9773,8 @@ Redis URL
 <em>(Optional)</em>
 <p>
 
-Sentinel URL, will be ignored if Redis URL is provided
+SENTINEL MODE: Settings to reach Sentinel and the selected Redis node
+Mutually exclusive with .url
 </p>
 
 </td>
@@ -9367,7 +9785,7 @@ Sentinel URL, will be ignored if Redis URL is provided
 
 <td>
 
-<code>masterName</code></br> <em> string </em>
+<code>db</code></br> <em> int32 </em>
 </td>
 
 <td>
@@ -9375,7 +9793,112 @@ Sentinel URL, will be ignored if Redis URL is provided
 <em>(Optional)</em>
 <p>
 
-Only required when Sentinel is used
+COMMON: Optional DB index (default 0)
+</p>
+
+</td>
+
+</tr>
+
+</tbody>
+
+</table>
+
+<h3 id="numaflow.numaproj.io/v1alpha1.RateLimiterRelaxed">
+
+RateLimiterRelaxed
+</h3>
+
+<p>
+
+(<em>Appears on:</em>
+<a href="#numaflow.numaproj.io/v1alpha1.RateLimiterModes">RateLimiterModes</a>)
+</p>
+
+<p>
+
+<p>
+
+RateLimiterRelaxed is for the relaxed mode. It will release the max
+possible tokens if there is some traffic.
+</p>
+
+</p>
+
+<h3 id="numaflow.numaproj.io/v1alpha1.RateLimiterScheduled">
+
+RateLimiterScheduled
+</h3>
+
+<p>
+
+(<em>Appears on:</em>
+<a href="#numaflow.numaproj.io/v1alpha1.RateLimiterModes">RateLimiterModes</a>)
+</p>
+
+<p>
+
+<p>
+
+RateLimiterScheduled is for the scheduled mode. It will release the max
+possible tokens based on ramp-up duration irrespective of traffic
+encountered.
+</p>
+
+</p>
+
+<h3 id="numaflow.numaproj.io/v1alpha1.RateLimiterStore">
+
+RateLimiterStore
+</h3>
+
+<p>
+
+(<em>Appears on:</em>
+<a href="#numaflow.numaproj.io/v1alpha1.RateLimit">RateLimit</a>)
+</p>
+
+<p>
+
+</p>
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>
+
+Field
+</th>
+
+<th>
+
+Description
+</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+<tr>
+
+<td>
+
+<code>redisStore</code></br> <em>
+<a href="#numaflow.numaproj.io/v1alpha1.RateLimiterRedisStore">
+RateLimiterRedisStore </a> </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+RedisStore is used to define the redis store for the rate limit.
 </p>
 
 </td>
@@ -9386,7 +9909,9 @@ Only required when Sentinel is used
 
 <td>
 
-<code>user</code></br> <em> string </em>
+<code>inMemoryStore</code></br> <em>
+<a href="#numaflow.numaproj.io/v1alpha1.RateLimiterInMemoryStore">
+RateLimiterInMemoryStore </a> </em>
 </td>
 
 <td>
@@ -9394,7 +9919,69 @@ Only required when Sentinel is used
 <em>(Optional)</em>
 <p>
 
-Redis user
+InMemoryStore is used to define the in-memory store for the rate limit.
+</p>
+
+</td>
+
+</tr>
+
+</tbody>
+
+</table>
+
+<h3 id="numaflow.numaproj.io/v1alpha1.RedisAuth">
+
+RedisAuth
+</h3>
+
+<p>
+
+(<em>Appears on:</em>
+<a href="#numaflow.numaproj.io/v1alpha1.RedisSentinelConfig">RedisSentinelConfig</a>)
+</p>
+
+<p>
+
+</p>
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>
+
+Field
+</th>
+
+<th>
+
+Description
+</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+<tr>
+
+<td>
+
+<code>username</code></br> <em>
+<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#secretkeyselector-v1-core">
+Kubernetes core/v1.SecretKeySelector </a> </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+For Redis 6+ ACLs. If Username omitted, password-only is also supported.
 </p>
 
 </td>
@@ -9413,32 +10000,6 @@ Kubernetes core/v1.SecretKeySelector </a> </em>
 <td>
 
 <em>(Optional)</em>
-<p>
-
-Redis password secret selector
-</p>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>sentinelPassword</code></br> <em>
-<a href="https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#secretkeyselector-v1-core">
-Kubernetes core/v1.SecretKeySelector </a> </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-<p>
-
-Sentinel password secret selector
-</p>
-
 </td>
 
 </tr>
@@ -9447,15 +10008,15 @@ Sentinel password secret selector
 
 </table>
 
-<h3 id="numaflow.numaproj.io/v1alpha1.RedisSettings">
+<h3 id="numaflow.numaproj.io/v1alpha1.RedisSentinelConfig">
 
-RedisSettings
+RedisSentinelConfig
 </h3>
 
 <p>
 
 (<em>Appears on:</em>
-<a href="#numaflow.numaproj.io/v1alpha1.NativeRedis">NativeRedis</a>)
+<a href="#numaflow.numaproj.io/v1alpha1.RateLimiterRedisStore">RateLimiterRedisStore</a>)
 </p>
 
 <p>
@@ -9488,16 +10049,14 @@ Description
 
 <td>
 
-<code>redis</code></br> <em> string </em>
+<code>masterName</code></br> <em> string </em>
 </td>
 
 <td>
 
-<em>(Optional)</em>
 <p>
 
-Redis settings shared by both master and slaves, will override the
-global settings from controller config
+Required Sentinel “service name” (aka master name) from sentinel.conf
 </p>
 
 </td>
@@ -9508,16 +10067,15 @@ global settings from controller config
 
 <td>
 
-<code>master</code></br> <em> string </em>
+<code>endpoints</code></br> <em> \[\]string </em>
 </td>
 
 <td>
 
-<em>(Optional)</em>
 <p>
 
-Special settings for Redis master node, will override the global
-settings from controller config
+At least one Sentinel endpoint; 2–3 recommended. Use host:port pairs.
+Example: \[“sentinel-0.redis.svc:26379”, “sentinel-1.redis.svc:26379”\]
 </p>
 
 </td>
@@ -9528,7 +10086,8 @@ settings from controller config
 
 <td>
 
-<code>replica</code></br> <em> string </em>
+<code>sentinelAuth</code></br> <em>
+<a href="#numaflow.numaproj.io/v1alpha1.RedisAuth"> RedisAuth </a> </em>
 </td>
 
 <td>
@@ -9536,8 +10095,7 @@ settings from controller config
 <em>(Optional)</em>
 <p>
 
-Special settings for Redis replica nodes, will override the global
-settings from controller config
+Auth to talk to the Sentinel daemons (control-plane). Optional.
 </p>
 
 </td>
@@ -9548,7 +10106,8 @@ settings from controller config
 
 <td>
 
-<code>sentinel</code></br> <em> string </em>
+<code>redisAuth</code></br> <em>
+<a href="#numaflow.numaproj.io/v1alpha1.RedisAuth"> RedisAuth </a> </em>
 </td>
 
 <td>
@@ -9556,8 +10115,48 @@ settings from controller config
 <em>(Optional)</em>
 <p>
 
-Sentinel settings, will override the global settings from controller
-config
+Auth to talk to the Redis data nodes (data-plane). Optional.
+</p>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>sentinelTLS</code></br> <em>
+<a href="#numaflow.numaproj.io/v1alpha1.TLS"> TLS </a> </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+TLS for Sentinel connections (if your Sentinels expose TLS).
+</p>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>redisTLS</code></br> <em>
+<a href="#numaflow.numaproj.io/v1alpha1.TLS"> TLS </a> </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+TLS for Redis data nodes (redis). Often enabled even if Sentinel is
+plaintext.
 </p>
 
 </td>
@@ -11487,6 +12086,31 @@ it.
 
 <td>
 
+<code>onSuccess</code></br> <em>
+<a href="#numaflow.numaproj.io/v1alpha1.AbstractSink"> AbstractSink </a>
+</em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+OnSuccess sink allows triggering a secondary sink operation only after
+the primary sink completes successfully The writes to OnSuccess sink
+will only be initiated if the ud-sink response field sets it. A new
+Message crafted in the Primary sink can be written on the OnSuccess
+sink.
+</p>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
 <code>retryStrategy</code></br> <em>
 <a href="#numaflow.numaproj.io/v1alpha1.RetryStrategy"> RetryStrategy
 </a> </em>
@@ -11906,6 +12530,29 @@ QueueOwnerAWSAccountID is the queue owner aws account id
 
 </tr>
 
+<tr>
+
+<td>
+
+<code>assumeRole</code></br> <em>
+<a href="#numaflow.numaproj.io/v1alpha1.AWSAssumeRole"> AWSAssumeRole
+</a> </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+AssumeRole contains the configuration for AWS STS assume role. When
+specified, the SQS client will assume the specified role for
+authentication.
+</p>
+
+</td>
+
+</tr>
+
 </tbody>
 
 </table>
@@ -12137,6 +12784,29 @@ returned along with each message.
 
 </tr>
 
+<tr>
+
+<td>
+
+<code>assumeRole</code></br> <em>
+<a href="#numaflow.numaproj.io/v1alpha1.AWSAssumeRole"> AWSAssumeRole
+</a> </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+AssumeRole contains the configuration for AWS STS assume role. When
+specified, the SQS client will assume the specified role for
+authentication.
+</p>
+
+</td>
+
+</tr>
+
 </tbody>
 
 </table>
@@ -12224,7 +12894,8 @@ TLS
 <a href="#numaflow.numaproj.io/v1alpha1.JetStreamSource">JetStreamSource</a>,
 <a href="#numaflow.numaproj.io/v1alpha1.KafkaSink">KafkaSink</a>,
 <a href="#numaflow.numaproj.io/v1alpha1.KafkaSource">KafkaSource</a>,
-<a href="#numaflow.numaproj.io/v1alpha1.NatsSource">NatsSource</a>)
+<a href="#numaflow.numaproj.io/v1alpha1.NatsSource">NatsSource</a>,
+<a href="#numaflow.numaproj.io/v1alpha1.RedisSentinelConfig">RedisSentinelConfig</a>)
 </p>
 
 <p>
@@ -12540,88 +13211,6 @@ VertexTemplate is used to customize the vertices of the pipeline.
 
 </table>
 
-<h3 id="numaflow.numaproj.io/v1alpha1.Transformer">
-
-Transformer
-</h3>
-
-<p>
-
-(<em>Appears on:</em>
-<a href="#numaflow.numaproj.io/v1alpha1.UDTransformer">UDTransformer</a>)
-</p>
-
-<p>
-
-</p>
-
-<table>
-
-<thead>
-
-<tr>
-
-<th>
-
-Field
-</th>
-
-<th>
-
-Description
-</th>
-
-</tr>
-
-</thead>
-
-<tbody>
-
-<tr>
-
-<td>
-
-<code>name</code></br> <em> string </em>
-</td>
-
-<td>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>args</code></br> <em> \[\]string </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>kwargs</code></br> <em> map\[string\]string </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-</td>
-
-</tr>
-
-</tbody>
-
-</table>
-
 <h3 id="numaflow.numaproj.io/v1alpha1.UDF">
 
 UDF
@@ -12630,7 +13219,8 @@ UDF
 <p>
 
 (<em>Appears on:</em>
-<a href="#numaflow.numaproj.io/v1alpha1.AbstractVertex">AbstractVertex</a>)
+<a href="#numaflow.numaproj.io/v1alpha1.AbstractVertex">AbstractVertex</a>,
+<a href="#numaflow.numaproj.io/v1alpha1.MonoVertexSpec">MonoVertexSpec</a>)
 </p>
 
 <p>
@@ -12665,21 +13255,6 @@ Description
 
 <code>container</code></br> <em>
 <a href="#numaflow.numaproj.io/v1alpha1.Container"> Container </a> </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>builtin</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.Function"> Function </a> </em>
 </td>
 
 <td>
@@ -12861,22 +13436,6 @@ Description
 
 <code>container</code></br> <em>
 <a href="#numaflow.numaproj.io/v1alpha1.Container"> Container </a> </em>
-</td>
-
-<td>
-
-<em>(Optional)</em>
-</td>
-
-</tr>
-
-<tr>
-
-<td>
-
-<code>builtin</code></br> <em>
-<a href="#numaflow.numaproj.io/v1alpha1.Transformer"> Transformer </a>
-</em>
 </td>
 
 <td>
@@ -13515,6 +14074,30 @@ overrides the settings from pipeline limits.
 BufferUsageLimit is used to define the percentage of the buffer usage
 limit, a valid value should be less than 100, for example, 85. It
 overrides the settings from pipeline limits.
+</p>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+
+<code>rateLimit</code></br> <em>
+<a href="#numaflow.numaproj.io/v1alpha1.RateLimit"> RateLimit </a> </em>
+</td>
+
+<td>
+
+<em>(Optional)</em>
+<p>
+
+RateLimit is used to define the rate limit for the vertex, it overrides
+the settings from pipeline limits. For Source vertices, the rate limit
+is defined by how many times the <code>Read</code> is called per second
+multiplied by the <code>readBatchSize</code>. Pipeline level rate limit
+is not applied to Source vertices.
 </p>
 
 </td>

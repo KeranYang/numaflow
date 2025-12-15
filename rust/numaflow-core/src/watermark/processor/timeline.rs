@@ -5,18 +5,22 @@
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::fmt;
-use std::sync::Arc;
-use std::sync::RwLock;
 
 use tracing::{debug, error};
 
 use crate::watermark::wmb::WMB;
 
-/// OffsetTimeline is to store the watermark to the offset records.
-/// Our list is sorted by event time from highest to lowest.
-#[derive(Clone)]
+/// OffsetTimeline is to store the watermark to the offset records. Our list is sorted by event time
+/// from highest to lowest.
 pub(crate) struct OffsetTimeline {
-    watermarks: Arc<RwLock<VecDeque<WMB>>>,
+    /// A fixed-len queue of [WMB]s stored from highest to lowest for fetching the appropriate WM based
+    /// on the input offset. This queue is fixed-len because the consumer should be able to keep up
+    /// with the producer, otherwise the auto-scaler will bring in a new pod. In extreme cases, we can
+    /// see "offset jumping out of the timeline" problem, but we still need not require dynamic length.
+    /// The only other place where we would see the above problem is when we have stopped auto-scaling
+    /// for benchmarking. During benchmarking, we might have const amount of data buffered in the queue
+    /// causing watermark to slow down indefinitely.
+    watermarks: VecDeque<WMB>, // no need to use BTreeSet since it is already sorted
     capacity: usize,
 }
 
@@ -28,16 +32,15 @@ impl OffsetTimeline {
         }
 
         OffsetTimeline {
-            watermarks: Arc::new(RwLock::new(watermarks)),
+            watermarks,
             capacity,
         }
     }
 
     /// Put inserts the WMB into list. It ensures that the list will remain sorted after the insert.
-    pub(crate) fn put(&self, node: WMB) {
-        let mut watermarks = self.watermarks.write().expect("failed to acquire lock");
-
-        let element_node = watermarks
+    pub(crate) fn put(&mut self, node: WMB) {
+        let element_node = self
+            .watermarks
             .front_mut()
             .expect("timeline should never be empty");
 
@@ -61,7 +64,7 @@ impl OffsetTimeline {
                 );
             }
             (Ordering::Greater, Ordering::Greater) => {
-                watermarks.push_front(node);
+                self.watermarks.push_front(node);
             }
             (Ordering::Greater, Ordering::Less) => {
                 error!("The new input offset should never be smaller than the existing offset");
@@ -79,33 +82,29 @@ impl OffsetTimeline {
         }
 
         // trim the timeline
-        if watermarks.len() > self.capacity {
-            watermarks.pop_back();
+        if self.watermarks.len() > self.capacity {
+            self.watermarks.pop_back();
         }
     }
 
     /// GetHeadOffset returns the offset of the head WMB.
     pub(crate) fn get_head_offset(&self) -> i64 {
-        let watermarks = self.watermarks.read().expect("failed to acquire lock");
-        watermarks.front().map_or(-1, |w| w.offset)
+        self.watermarks.front().map_or(-1, |w| w.offset)
     }
 
     /// GetHeadWatermark returns the watermark of the head WMB.
     pub(crate) fn get_head_watermark(&self) -> i64 {
-        let watermarks = self.watermarks.read().expect("failed to acquire lock");
-        watermarks.front().map_or(-1, |w| w.watermark)
+        self.watermarks.front().map_or(-1, |w| w.watermark)
     }
 
     /// GetHeadWMB returns the head WMB.
     pub(crate) fn get_head_wmb(&self) -> Option<WMB> {
-        let watermarks = self.watermarks.read().expect("failed to acquire lock");
-        watermarks.front().copied()
+        self.watermarks.front().copied()
     }
 
     /// GetEventTime returns the event time of the nearest WMB that has an offset less than the input offset.
     pub(crate) fn get_event_time(&self, input_offset: i64) -> i64 {
-        let watermarks = self.watermarks.read().expect("failed to acquire lock");
-        watermarks
+        self.watermarks
             .iter()
             .find(|w| w.offset < input_offset)
             .map_or(-1, |w| w.watermark)
@@ -129,7 +128,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_offsets_in_order() {
-        let timeline = OffsetTimeline::new(10);
+        let mut timeline = OffsetTimeline::new(10);
         let wmb1 = WMB {
             watermark: 100,
             offset: 1,
@@ -183,7 +182,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_out_of_order_offsets() {
-        let timeline = OffsetTimeline::new(10);
+        let mut timeline = OffsetTimeline::new(10);
         let wmb1 = WMB {
             watermark: 50,
             offset: 62,
@@ -244,7 +243,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_same_watermark_different_offset() {
-        let timeline = OffsetTimeline::new(10);
+        let mut timeline = OffsetTimeline::new(10);
         let wmb1 = WMB {
             watermark: 100,
             offset: 1,
@@ -300,7 +299,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_idle_cases() {
-        let timeline = OffsetTimeline::new(10);
+        let mut timeline = OffsetTimeline::new(10);
         let wmb1 = WMB {
             watermark: 100,
             offset: 1,

@@ -4,12 +4,12 @@
 //! appropriate OT bucket based on stream information provided. It makes sure we always publish m
 //! increasing watermark.
 use std::collections::HashMap;
-use std::time::UNIX_EPOCH;
 use std::time::{Duration, SystemTime};
+use std::time::{Instant, UNIX_EPOCH};
 
 use bytes::BytesMut;
 use prost::Message;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use crate::config::pipeline::isb::Stream;
 use crate::config::pipeline::watermark::BucketConfig;
@@ -25,6 +25,8 @@ const DEFAULT_POD_HEARTBEAT_INTERVAL: u16 = 5;
 struct LastPublishedState {
     offset: i64,
     watermark: i64,
+    last_published_time: Instant,
+    delay: Option<Duration>,
 }
 
 impl Default for LastPublishedState {
@@ -32,7 +34,20 @@ impl Default for LastPublishedState {
         LastPublishedState {
             offset: -1,
             watermark: -1,
+            last_published_time: Instant::now(),
+            delay: None,
         }
+    }
+}
+
+impl LastPublishedState {
+    fn should_publish(&self) -> bool {
+        if let Some(delay) = self.delay
+            && self.last_published_time.elapsed() < delay
+        {
+            return false;
+        }
+        true
     }
 }
 
@@ -43,7 +58,7 @@ pub(crate) struct ISBWatermarkPublisher {
     /// handle to the heartbeat publishing task.
     hb_handle: tokio::task::JoinHandle<()>,
     /// last published watermark for each vertex and partition.
-    last_published_wm: HashMap<&'static str, Vec<LastPublishedState>>,
+    last_published_wm: HashMap<&'static str, HashMap<u16, LastPublishedState>>,
     /// map of vertex to its ot bucket.
     ot_buckets: HashMap<&'static str, async_nats::jetstream::kv::Store>,
 }
@@ -80,10 +95,18 @@ impl ISBWatermarkPublisher {
 
             ot_buckets.insert(config.vertex, ot_bucket);
             hb_buckets.push(hb_bucket);
-            last_published_wm.insert(
-                config.vertex,
-                vec![LastPublishedState::default(); config.partitions as usize],
-            );
+
+            let partition_state = HashMap::from_iter(config.partitions.iter().map(|partition| {
+                (
+                    *partition,
+                    LastPublishedState {
+                        delay: config.delay,
+                        ..Default::default()
+                    },
+                )
+            }));
+
+            last_published_wm.insert(config.vertex, partition_state);
         }
 
         // start publishing heartbeats
@@ -140,18 +163,54 @@ impl ISBWatermarkPublisher {
         watermark: i64,
         idle: bool,
     ) {
-        let last_published_wm_state = self
+        let last_state = self
             .last_published_wm
             .get_mut(stream.vertex)
-            .expect("Invalid vertex, no last published watermark state found");
+            .expect("Invalid vertex, no last published watermark state found")
+            .get_mut(&stream.partition)
+            .expect("should have partition");
 
-        let last_state = &last_published_wm_state[stream.partition as usize];
-        if offset < last_state.offset || watermark <= last_state.watermark {
+        // we can avoid publishing the watermark if the offset is smaller than the last published offset
+        // since we do unordered writes to ISB, the offsets can be out of order even though the watermark
+        // is monotonically increasing.
+        // NOTE: in idling case since we reuse the control message offset, we can have the same offset
+        // with larger watermark (we should publish it).
+        if offset < last_state.offset {
+            last_state.watermark = last_state.watermark.max(watermark);
             return;
         }
 
-        let ot_bucket = self.ot_buckets.get(stream.vertex).expect("Invalid vertex");
+        // If the watermark is same as the last published watermark update the last published offset
+        // to the largest offset otherwise the watermark will regress between the offsets.
+        //
+        // Example of the bug:
+        // Supposed publish watermark offset=3605646 watermark=1750758997480 last_published_offset=3605147 last_published_watermark=1750758997480
+        // Supposed publish watermark offset=3605637 watermark=1750758998480 last_published_offset=3605147 last_published_watermark=1750758997480
+        // Actual published watermark offset=3605637 watermark=1750758998480
+        // We should've published watermark for offset 3605646 and skipped publishing for offset 3605637
+        // if watermark cannot be computed, still we should publish the last known valid WM for the latest offset
+        if watermark == last_state.watermark || watermark == -1 {
+            last_state.offset = last_state.offset.max(offset);
+            return;
+        }
 
+        if watermark < last_state.watermark {
+            warn!(?watermark, ?last_state.watermark, "Watermark regression detected, skipping publish");
+            return;
+        }
+
+        // valid offset and watermark, we can update the state
+        last_state.offset = offset;
+        last_state.watermark = watermark;
+
+        // Update state but skip publishing if delay hasn't passed
+        // (users can configure delay to reduce the number of writes to the ot bucket)
+        if !last_state.should_publish() {
+            return;
+        }
+
+        // Publish the watermark to the OT bucket
+        let ot_bucket = self.ot_buckets.get(stream.vertex).expect("Invalid vertex");
         let wmb_bytes: BytesMut = WMB {
             idle,
             offset,
@@ -161,17 +220,16 @@ impl ISBWatermarkPublisher {
         .try_into()
         .expect("Failed to convert WMB to bytes");
 
-        // ot writes can fail when isb is not healthy, we can ignore since subsequent writes will
-        // go through
+        // ot writes can fail when isb is not healthy, we can ignore failures
+        // since subsequent writes will go through
         ot_bucket
             .put(self.processor_name.clone(), wmb_bytes.freeze())
             .await
-            .map_err(|e| error!("Failed to write wmb to ot bucket: {}", e))
+            .map_err(|e| warn!(?e, "Failed to write wmb to ot bucket (ignoring)"))
             .ok();
 
-        // update the last published watermark state
-        last_published_wm_state[stream.partition as usize] =
-            LastPublishedState { offset, watermark };
+        // reset the last published time
+        last_state.last_published_time = Instant::now();
     }
 }
 
@@ -196,9 +254,10 @@ mod tests {
 
         let bucket_configs = vec![BucketConfig {
             vertex: "v1",
-            partitions: 2,
+            partitions: vec![0, 1],
             ot_bucket: ot_bucket_name,
             hb_bucket: hb_bucket_name,
+            delay: None,
         }];
 
         // create key value stores
@@ -314,15 +373,17 @@ mod tests {
         let bucket_configs = vec![
             BucketConfig {
                 vertex: "v1",
-                partitions: 1,
+                partitions: vec![0],
                 ot_bucket: ot_bucket_name_v1,
                 hb_bucket: hb_bucket_name_v1,
+                delay: None,
             },
             BucketConfig {
                 vertex: "v2",
-                partitions: 1,
+                partitions: vec![0],
                 ot_bucket: ot_bucket_name_v2,
                 hb_bucket: hb_bucket_name_v2,
+                delay: None,
             },
         ];
 
@@ -446,9 +507,10 @@ mod tests {
 
         let bucket_configs = vec![BucketConfig {
             vertex: "v1",
-            partitions: 1,
+            partitions: vec![0],
             ot_bucket: ot_bucket_name,
             hb_bucket: hb_bucket_name,
+            delay: None,
         }];
 
         // create key value stores

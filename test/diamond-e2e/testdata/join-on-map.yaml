@@ -7,11 +7,15 @@ spec:
     readBatchSize: 50
   vertices:
     - name: in-0
+      limits:
+        readBatchSize: 1
       scale:
         min: 1
       source:
         http: {}
     - name: in-1
+      limits:
+        readBatchSize: 1
       scale:
         min: 1
       source:
@@ -21,17 +25,18 @@ spec:
       scale:
         min: 1
       udf:
-        builtin:
-          name: cat
+        container:
+          image: quay.io/numaio/numaflow-go/map-cat:stable # A UDF which simply cats the message
+          imagePullPolicy: IfNotPresent
     - name: sink
       scale:
         min: 1
       sink:
         udsink:
           container:
-            # A redis sink for e2e testing, see https://github.com/numaproj/numaflow-go/tree/main/pkg/sinker/examples/redis_sink
+            # A redis sink for e2e testing, see https://github.com/numaproj/numaflow-go/tree/main/examples/sinker/redis_sink
             image: quay.io/numaio/numaflow-go/redis-sink:stable
-            imagePullPolicy: Always
+            imagePullPolicy: IfNotPresent
             env:
               - name: SINK_HASH_KEY
                 # The key is set in the format of "pipeline_name-vertex_name"

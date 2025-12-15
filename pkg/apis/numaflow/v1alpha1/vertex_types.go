@@ -19,8 +19,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"sort"
+	"strconv"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -87,6 +87,10 @@ func (v Vertex) HasUDTransformer() bool {
 
 func (v Vertex) HasFallbackUDSink() bool {
 	return v.Spec.HasFallbackUDSink()
+}
+
+func (v Vertex) HasOnSuccessUDSink() bool {
+	return v.Spec.HasOnSuccessUDSink()
 }
 
 func (v Vertex) IsUDSource() bool {
@@ -202,12 +206,6 @@ func (v Vertex) commonEnvs() []corev1.EnvVar {
 		{Name: EnvReplica, ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.annotations['" + KeyReplica + "']"}}},
 		{Name: EnvPipelineName, Value: v.Spec.PipelineName},
 		{Name: EnvVertexName, Value: v.Spec.Name},
-	}
-}
-
-// SidecarEnvs returns the envs for sidecar containers.
-func (v Vertex) sidecarEnvs() []corev1.EnvVar {
-	return []corev1.EnvVar{
 		{Name: EnvCPULimit, ValueFrom: &corev1.EnvVarSource{
 			ResourceFieldRef: &corev1.ResourceFieldSelector{Resource: "limits.cpu"}}},
 		{Name: EnvCPURequest, ValueFrom: &corev1.EnvVarSource{
@@ -339,7 +337,23 @@ func (v Vertex) GetPodSpec(req GetVertexPodSpecReq) (*corev1.PodSpec, error) {
 
 	for i := 0; i < len(sidecarContainers); i++ { // udf, udsink, udsource, or source vertex specifies a udtransformer
 		sidecarContainers[i].Env = append(sidecarContainers[i].Env, v.commonEnvs()...)
-		sidecarContainers[i].Env = append(sidecarContainers[i].Env, v.sidecarEnvs()...)
+
+		// pass read limits as envs into UDSource container
+		if sidecarContainers[i].Name == CtrUdsource {
+			var bs uint64 = DefaultReadBatchSize
+			if v.Spec.Limits != nil && v.Spec.Limits.ReadBatchSize != nil {
+				bs = *v.Spec.Limits.ReadBatchSize
+			}
+			toDur := DefaultReadTimeout
+			if v.Spec.Limits != nil && v.Spec.Limits.ReadTimeout != nil {
+				toDur = v.Spec.Limits.ReadTimeout.Duration
+			}
+			sidecarContainers[i].Env = append(sidecarContainers[i].Env,
+				corev1.EnvVar{Name: EnvReadBatchSize, Value: strconv.FormatUint(bs, 10)},
+				corev1.EnvVar{Name: EnvReadTimeoutMs, Value: strconv.FormatInt(toDur.Milliseconds(), 10)},
+			)
+		}
+
 	}
 
 	initContainers := v.getInitContainers(req)
@@ -357,9 +371,11 @@ func (v Vertex) GetPodSpec(req GetVertexPodSpecReq) (*corev1.PodSpec, error) {
 			Image:           req.Image,
 			ImagePullPolicy: req.PullPolicy,
 			Resources:       req.DefaultResources,
-			Args:            []string{"side-inputs-synchronizer", "--isbsvc-type=" + string(req.ISBSvcType), "--side-inputs-store=" + req.SideInputsStoreName, "--side-inputs=" + strings.Join(v.Spec.SideInputs, ",")},
+			Args:            []string{"side-input", "side-inputs-synchronizer", "--isbsvc-type=" + string(req.ISBSvcType), "--side-inputs-store=" + req.SideInputsStoreName, "--side-inputs=" + strings.Join(v.Spec.SideInputs, ",")},
 		}
 		sideInputsWatcher.Env = append(sideInputsWatcher.Env, v.commonEnvs()...)
+		sideInputsWatcher.Env = append(sideInputsWatcher.Env, corev1.EnvVar{Name: EnvNumaflowRuntime, Value: "rust"})
+
 		if x := v.Spec.SideInputsContainerTemplate; x != nil {
 			x.ApplyToContainer(&sideInputsWatcher)
 		}
@@ -401,7 +417,6 @@ func (v Vertex) GetPodSpec(req GetVertexPodSpecReq) (*corev1.PodSpec, error) {
 func (v Vertex) getInitContainers(req GetVertexPodSpecReq) []corev1.Container {
 	envVars := []corev1.EnvVar{
 		{Name: EnvPipelineName, Value: v.Spec.PipelineName},
-		{Name: EnvGoDebug, Value: os.Getenv(EnvGoDebug)},
 	}
 	envVars = append(envVars, req.Env...)
 	initContainers := []corev1.Container{
@@ -415,13 +430,14 @@ func (v Vertex) getInitContainers(req GetVertexPodSpecReq) []corev1.Container {
 		},
 	}
 	if v.HasSideInputs() {
+		envVars = append(envVars, corev1.EnvVar{Name: EnvNumaflowRuntime, Value: "rust"})
 		initContainers = append(initContainers, corev1.Container{
 			Name:            CtrInitSideInputs,
 			Env:             envVars,
 			Image:           req.Image,
 			ImagePullPolicy: req.PullPolicy,
 			Resources:       req.DefaultResources,
-			Args:            []string{"side-inputs-init", "--isbsvc-type=" + string(req.ISBSvcType), "--side-inputs-store=" + req.SideInputsStoreName, "--side-inputs=" + strings.Join(v.Spec.SideInputs, ",")},
+			Args:            []string{"side-input", "side-inputs-init", "--isbsvc-type=" + string(req.ISBSvcType), "--side-inputs-store=" + req.SideInputsStoreName, "--side-inputs=" + strings.Join(v.Spec.SideInputs, ",")},
 		})
 	}
 
@@ -480,6 +496,13 @@ func (v Vertex) GetToBuffers() []string {
 		}
 	}
 	return r
+}
+
+func (v VertexLimits) GetReadBatchSize() uint64 {
+	if v.ReadBatchSize != nil {
+		return *v.ReadBatchSize
+	}
+	return DefaultReadBatchSize
 }
 
 func (v Vertex) getReplicas() int {
@@ -638,6 +661,10 @@ func (av AbstractVertex) HasFallbackUDSink() bool {
 	return av.IsASink() && av.Sink.Fallback != nil && av.Sink.Fallback.UDSink != nil
 }
 
+func (av AbstractVertex) HasOnSuccessUDSink() bool {
+	return av.IsASink() && av.Sink.OnSuccess != nil && av.Sink.OnSuccess.UDSink != nil
+}
+
 func (av AbstractVertex) IsUDSource() bool {
 	return av.IsASource() && av.Source.UDSource != nil
 }
@@ -686,6 +713,11 @@ type VertexLimits struct {
 	// It overrides the settings from pipeline limits.
 	// +optional
 	BufferUsageLimit *uint32 `json:"bufferUsageLimit,omitempty" protobuf:"varint,4,opt,name=bufferUsageLimit"`
+	// RateLimit is used to define the rate limit for the vertex, it overrides the settings from pipeline limits.
+	// For Source vertices, the rate limit is defined by how many times the `Read` is called per second multiplied by
+	// the `readBatchSize`. Pipeline level rate limit is not applied to Source vertices.
+	// +optional
+	RateLimit *RateLimit `json:"rateLimit,omitempty" protobuf:"bytes,5,opt,name=rateLimit"`
 }
 
 func (v VertexSpec) getType() containerSupplier {

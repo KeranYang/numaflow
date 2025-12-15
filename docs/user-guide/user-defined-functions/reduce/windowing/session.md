@@ -32,6 +32,13 @@ and a unit suffix, such as "300ms", "1.5h" or "2h45m". Valid time units are "ns"
 The `timeout` is the duration of inactivity (no data flowing in for the particular key) after which the session is
 considered to be closed.
 
+Note: The determination of whether a key is inactive, or has timed out, is based on the watermark progressing.
+In order to close the session window, we compare this timeout against the watermark.
+If the watermark progression for the vertex has stalled for some reason, eg: due to one of the sources idling in a multi-source setup,
+the timeout may not be triggered without configuring [idle watermark detection](https://numaflow.numaproj.io/core-concepts/watermarks/#idle-detection).
+Currently, in such cases, the session window may not close as it continues to hold on to the state for the key while ingesting
+more data, hoping to progress watermark with the next datum. This might lead to OOM situations.
+
 ## Example
 
 To create a session window of timeout 1 minute, we can use the following snippet.
@@ -78,7 +85,7 @@ Note: Streaming mode is by default enabled for session windows.
 
 Check the links below to see the UDF examples for different languages. Currently, we have the SDK support for Golang and Java.
 
-- [Golang](https://github.com/numaproj/numaflow-go/tree/main/pkg/sessionreducer)
+- [Golang](https://github.com/numaproj/numaflow-go/tree/main/examples/sessionreducer)
 - [Java](https://github.com/numaproj/numaflow-java/tree/main/examples/src/main/java/io/numaproj/numaflow/examples/reducesession/counter)
 
 

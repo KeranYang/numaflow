@@ -26,6 +26,10 @@ pub struct Sink {
     pub kafka: Option<Box<crate::models::KafkaSink>>,
     #[serde(rename = "log", skip_serializing_if = "Option::is_none")]
     pub log: Option<Box<crate::models::Log>>,
+    #[serde(rename = "onSuccess", skip_serializing_if = "Option::is_none")]
+    pub on_success: Option<Box<crate::models::AbstractSink>>,
+    #[serde(rename = "pulsar", skip_serializing_if = "Option::is_none")]
+    pub pulsar: Option<Box<crate::models::PulsarSink>>,
     #[serde(rename = "retryStrategy", skip_serializing_if = "Option::is_none")]
     pub retry_strategy: Option<Box<crate::models::RetryStrategy>>,
     #[serde(rename = "serve", skip_serializing_if = "Option::is_none")]
@@ -43,6 +47,8 @@ impl Sink {
             fallback: None,
             kafka: None,
             log: None,
+            on_success: None,
+            pulsar: None,
             retry_strategy: None,
             serve: None,
             sqs: None,

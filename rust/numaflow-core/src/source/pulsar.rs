@@ -6,6 +6,7 @@ use numaflow_pulsar::source::{PulsarMessage, PulsarSource, PulsarSourceConfig};
 use crate::config::{get_vertex_name, get_vertex_replica};
 use crate::error::Error;
 use crate::message::{IntOffset, Message, MessageID, Offset};
+use crate::metadata::Metadata;
 use crate::source;
 
 impl TryFrom<PulsarMessage> for Message {
@@ -27,9 +28,11 @@ impl TryFrom<PulsarMessage> for Message {
                 offset: offset.to_string().into(),
                 index: 0,
             },
-            headers: message.headers,
-            metadata: None,
+            headers: Arc::new(message.headers),
+            // Set default metadata so that metadata is always present.
+            metadata: Some(Arc::new(Metadata::default())),
             is_late: false,
+            ack_handle: None,
         })
     }
 }
@@ -55,8 +58,9 @@ pub(crate) async fn new_pulsar_source(
     batch_size: usize,
     timeout: Duration,
     vertex_replica: u16,
+    cancel_token: tokio_util::sync::CancellationToken,
 ) -> crate::Result<PulsarSource> {
-    Ok(PulsarSource::new(cfg, batch_size, timeout, vertex_replica).await?)
+    Ok(PulsarSource::new(cfg, batch_size, timeout, vertex_replica, cancel_token).await?)
 }
 
 impl source::SourceReader for PulsarSource {
@@ -64,12 +68,16 @@ impl source::SourceReader for PulsarSource {
         "Pulsar"
     }
 
-    async fn read(&mut self) -> crate::Result<Vec<Message>> {
-        self.read_messages()
-            .await?
-            .into_iter()
-            .map(|msg| msg.try_into())
-            .collect()
+    async fn read(&mut self) -> Option<crate::Result<Vec<Message>>> {
+        match self.read_messages().await {
+            Some(Ok(messages)) => {
+                let result: crate::Result<Vec<Message>> =
+                    messages.into_iter().map(|msg| msg.try_into()).collect();
+                Some(result)
+            }
+            Some(Err(e)) => Some(Err(e.into())),
+            None => None,
+        }
     }
 
     async fn partitions(&mut self) -> crate::error::Result<Vec<u16>> {
@@ -89,6 +97,19 @@ impl source::SourceAcker for PulsarSource {
             pulsar_offsets.push(int_offset.offset as u64);
         }
         self.ack_offsets(pulsar_offsets).await.map_err(Into::into)
+    }
+
+    async fn nack(&mut self, offsets: Vec<Offset>) -> crate::error::Result<()> {
+        let mut pulsar_offsets = Vec::with_capacity(offsets.len());
+        for offset in offsets {
+            let Offset::Int(int_offset) = offset else {
+                return Err(Error::Source(format!(
+                    "Expected Offset::Int type for Pulsar. offset={offset:?}"
+                )));
+            };
+            pulsar_offsets.push(int_offset.offset as u64);
+        }
+        self.nack_offsets(pulsar_offsets).await.map_err(Into::into)
     }
 }
 
@@ -118,7 +139,14 @@ mod tests {
             max_unack: 100,
             auth: None,
         };
-        let mut pulsar = new_pulsar_source(cfg, 10, Duration::from_millis(200), 0).await?;
+        let mut pulsar = new_pulsar_source(
+            cfg,
+            10,
+            Duration::from_millis(200),
+            0,
+            tokio_util::sync::CancellationToken::new(),
+        )
+        .await?;
         assert_eq!(pulsar.name(), "Pulsar");
 
         // Read should return before the timeout
@@ -155,7 +183,7 @@ mod tests {
             fut.await?;
         }
 
-        let messages = pulsar.read().await?;
+        let messages = pulsar.read().await.unwrap()?;
         assert_eq!(messages.len(), 10);
 
         let offsets: Vec<Offset> = messages.into_iter().map(|m| m.offset).collect();

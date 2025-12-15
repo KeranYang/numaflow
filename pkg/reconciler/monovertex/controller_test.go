@@ -116,6 +116,29 @@ func fakeReconciler(t *testing.T, cl client.WithWatch) *monoVertexReconciler {
 	}
 }
 
+func Test_pauseAndResumeMvtx(t *testing.T) {
+
+	t.Run("test pause mvtx", func(t *testing.T) {
+		cl := fake.NewClientBuilder().Build()
+		r := fakeReconciler(t, cl)
+		testObj := testMonoVtx.DeepCopy()
+		testObj.Spec.Replicas = ptr.To[int32](2)
+		err := cl.Create(context.TODO(), testObj)
+		assert.NoError(t, err)
+
+		_, err = r.reconcile(context.TODO(), testObj)
+		assert.NoError(t, err)
+		mvtx := &dfv1.MonoVertex{}
+		err = r.client.Get(context.TODO(), client.ObjectKey{Namespace: testNamespace, Name: testObj.Name}, mvtx)
+		assert.NoError(t, err)
+		assert.Equal(t, *mvtx.Spec.Replicas, int32(2))
+
+		testObj.Spec.Lifecycle.DesiredPhase = dfv1.MonoVertexPhasePaused
+		_, err = r.reconcile(context.TODO(), testObj)
+		assert.NoError(t, err)
+	})
+}
+
 func TestReconcile(t *testing.T) {
 	t.Run("test not found", func(t *testing.T) {
 		cl := fake.NewClientBuilder().Build()
@@ -389,5 +412,60 @@ func Test_reconcile(t *testing.T) {
 		assert.Equal(t, 5, len(pods.Items))
 		assert.Equal(t, uint32(20), testObj.Status.Replicas)
 		assert.Equal(t, uint32(5), testObj.Status.UpdatedReplicas)
+	})
+
+	t.Run("test isTerminatingPod", func(t *testing.T) {
+		cl := fake.NewClientBuilder().Build()
+		r := fakeReconciler(t, cl)
+
+		now := metav1.Now()
+		// Pod with DeletionTimestamp set
+		pod1 := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "pod1",
+				Namespace:         testNamespace,
+				DeletionTimestamp: &now,
+			},
+			Status: corev1.PodStatus{
+				Phase: corev1.PodRunning,
+			},
+		}
+		assert.True(t, r.isTerminatingPod(pod1), "Pod with DeletionTimestamp should be terminating")
+
+		// Pod in Failed phase
+		pod2 := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "pod2",
+				Namespace: testNamespace,
+			},
+			Status: corev1.PodStatus{
+				Phase: corev1.PodFailed,
+			},
+		}
+		assert.True(t, r.isTerminatingPod(pod2), "Pod in Failed phase should be terminating")
+
+		// Pod in Succeeded phase
+		pod3 := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "pod3",
+				Namespace: testNamespace,
+			},
+			Status: corev1.PodStatus{
+				Phase: corev1.PodSucceeded,
+			},
+		}
+		assert.True(t, r.isTerminatingPod(pod3), "Pod in Succeeded phase should be terminating")
+
+		// Pod in Running phase, no DeletionTimestamp
+		pod4 := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "pod4",
+				Namespace: testNamespace,
+			},
+			Status: corev1.PodStatus{
+				Phase: corev1.PodRunning,
+			},
+		}
+		assert.False(t, r.isTerminatingPod(pod4), "Pod in Running phase with no DeletionTimestamp should not be terminating")
 	})
 }
